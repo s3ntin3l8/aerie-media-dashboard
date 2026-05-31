@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Kbd, Eyebrow, catColor } from "@/components/primitives";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { SERVICES } from "@/lib/mock/data";
+import { useData } from "@/components/portal/DataProvider";
 
 function PaletteRow({
   icon,
@@ -48,6 +48,7 @@ function PaletteRow({
 export function CommandPalette() {
   const router = useRouter();
   const { paletteOpen, setPaletteOpen, role } = usePortal();
+  const { services } = useData();
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -71,7 +72,7 @@ export function CommandPalette() {
 
   const ql = q.toLowerCase();
   const navMatches = nav.filter((n) => n[0].toLowerCase().includes(ql));
-  const visibleServices = role === "admin" ? SERVICES : SERVICES.filter((s) => s.cat !== "infra" && s.id !== "prometheus");
+  const visibleServices = role === "admin" ? services : services.filter((s) => s.cat !== "infra" && s.id !== "prometheus");
   const svcMatches = visibleServices.filter((s) => s.name.toLowerCase().includes(ql) || s.host.includes(ql));
 
   return (

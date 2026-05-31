@@ -6,7 +6,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { SERVICES, NOW_PLAYING, PLAYS_24H } from "@/lib/mock/data";
+import { useData } from "@/components/portal/DataProvider";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
 import {
   CentralServices,
@@ -21,13 +21,13 @@ import {
 
 // 40px aggregate health ticker
 function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
-  const list = SERVICES;
+  const { services: list, nowPlaying, plays24h } = useData();
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
   const allGood = deg === 0 && down === 0;
-  const active = NOW_PLAYING.length;
-  const totalBitrate = NOW_PLAYING.reduce((a, s) => a + parseFloat(s.bitrate), 0).toFixed(1);
+  const active = nowPlaying.length;
+  const totalBitrate = nowPlaying.reduce((a, s) => a + parseFloat(s.bitrate), 0).toFixed(1);
   return (
     <div
       style={{
@@ -58,7 +58,7 @@ function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
           {active} streams · {totalBitrate} Mbps
         </span>
         <div style={{ marginLeft: 6 }}>
-          <Sparkline data={PLAYS_24H} w={92} h={20} color="var(--primary)" />
+          <Sparkline data={plays24h} w={92} h={20} color="var(--primary)" />
         </div>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>24h</span>
       </div>

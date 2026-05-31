@@ -6,7 +6,7 @@ import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Icon, Avatar, RailTip } from "@/components/primitives";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { SERVICES, REQUESTS } from "@/lib/mock/data";
+import { useData } from "@/components/portal/DataProvider";
 
 export function BrandBadge({ size = 28 }: { size?: number }) {
   return (
@@ -33,10 +33,11 @@ export function Rail() {
   const router = useRouter();
   const pathname = usePathname();
   const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut } = usePortal();
+  const { services, requests } = useData();
 
   const me = user;
-  const downCount = SERVICES.filter((s) => s.status === "down").length;
-  const pendingCount = REQUESTS.filter((r) => r.status === "pending").length;
+  const downCount = services.filter((s) => s.status === "down").length;
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
 
   const isActive = (id: string) => {
     if (id === "home") return pathname === "/";

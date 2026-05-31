@@ -6,7 +6,7 @@
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
 import type { Role, Service, ServiceStatus } from "@/lib/types";
-import { SERVICES, NOW_PLAYING, REQUESTS, USERS, LIBRARY, RECENT, QUEUE } from "@/lib/mock/data";
+import { useData } from "@/components/portal/DataProvider";
 import {
   Icon,
   Pill,
@@ -123,10 +123,11 @@ const SeeAll = ({ onClick }: { onClick?: () => void }) => (
 
 // ── NOW PLAYING ───────────────────────────────────────────
 export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolean; onAll?: () => void }) {
+  const { nowPlaying, services: allServices, users } = useData();
   useTick(1000);
   const t0 = useRef(Date.now()).current;
   const elapsed = (Date.now() - t0) / 1000;
-  let streams = NOW_PLAYING;
+  let streams = nowPlaying;
   if (role !== "admin") streams = streams.filter((s) => s.user === "you");
   const visible = streams;
   return (
@@ -143,11 +144,11 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {visible.map((s, i) => {
-            const svc = SERVICES.find((x) => x.id === s.src)!;
+            const svc = allServices.find((x) => x.id === s.src);
             const cur = Math.min(s.dur * 60, s.pos * s.dur * 60 + (s.paused ? 0 : elapsed));
             const pct = (cur / (s.dur * 60)) * 100;
             const c = catColor("stream");
-            const u = USERS.find((x) => x.id === s.user);
+            const u = users.find((x) => x.id === s.user);
             const accent = s.src === "plex" ? "var(--originator-third-party)" : "var(--primary)";
             return (
               <div key={s.id} style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none" }}>
@@ -197,8 +198,8 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
                       {s.bitrate} Mbps · {s.codec}
                     </span>
                     <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
-                      <Icon name={svc.icon} size={12} color={catColor("stream")} />
-                      {svc.name}
+                      <Icon name={svc?.icon ?? "play_circle"} size={12} color={catColor("stream")} />
+                      {svc?.name ?? s.src}
                     </span>
                   </div>
                 </div>
@@ -213,7 +214,8 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
 
 // ── SERVICE TILES (stripe) ─────────────────────────────────
 export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[] }) {
-  let list = services || SERVICES;
+  const data = useData();
+  let list = services || data.services;
   if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus");
 
   const Tile = ({ s }: { s: Service }) => {
@@ -410,7 +412,8 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
 }
 
 export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void }) {
-  const list = SERVICES.filter((s) => s.central);
+  const { services } = useData();
+  const list = services.filter((s) => s.central);
   const down = list.filter((s) => s.status === "down");
   const deg = list.filter((s) => s.status === "degraded");
   const allGood = down.length === 0 && deg.length === 0;
@@ -450,7 +453,8 @@ export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: S
 
 // ── STATUS (heartbeat) ─────────────────────────────────────
 export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void }) {
-  const list = SERVICES.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
+  const { services } = useData();
+  const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
@@ -494,9 +498,10 @@ export const REQ_TONE: Record<string, string> = { available: "originator-own", a
 export const REQ_LABEL: Record<string, string> = { available: "Available", approved: "Approved", pending: "Pending", declined: "Declined" };
 
 export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => void }) {
-  const me = USERS.find((u) => u.id === "you")!;
-  const mine = REQUESTS.filter((r) => r.user === "you");
-  const queue = REQUESTS.filter((r) => r.status === "pending");
+  const { users, requests } = useData();
+  const me = users.find((u) => u.id === "you") ?? users[0];
+  const mine = requests.filter((r) => r.user === "you");
+  const queue = requests.filter((r) => r.status === "pending");
   const adminMode = role === "admin";
   const items = adminMode ? queue : mine;
   return (
@@ -520,7 +525,7 @@ export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => voi
       )}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {items.map((r, i) => {
-          const u = USERS.find((x) => x.id === r.user);
+          const u = users.find((x) => x.id === r.user);
           return (
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
               <PosterTile title={r.title} kind={r.kind} cat="request" w={32} />
@@ -561,9 +566,10 @@ export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => voi
 
 // ── LIBRARY STAT STRIP ─────────────────────────────────────
 export function LibraryStats() {
+  const { library } = useData();
   return (
     <div className="aerie-lib-grid">
-      {LIBRARY.map((l) => (
+      {library.map((l) => (
         <div key={l.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Eyebrow>{l.label}</Eyebrow>
@@ -579,10 +585,11 @@ export function LibraryStats() {
 
 // ── RECENTLY ADDED ─────────────────────────────────────────
 export function RecentlyAdded() {
+  const { recent } = useData();
   return (
     <PanelShell title="Recently Added" icon="new_releases" accent="var(--primary)">
       <div className="custom-scrollbar" style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
-        {RECENT.map((r) => (
+        {recent.map((r) => (
           <div key={r.id} style={{ width: 76, flexShrink: 0 }}>
             <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} />
             <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
@@ -596,10 +603,11 @@ export function RecentlyAdded() {
 
 // ── DOWNLOAD QUEUE (admin) ─────────────────────────────────
 export function QueuePanel() {
+  const { queue } = useData();
   return (
-    <PanelShell title="Download Queue" icon="downloading" accent="var(--originator-third-party)" count={`${QUEUE.length} active`}>
+    <PanelShell title="Download Queue" icon="downloading" accent="var(--originator-third-party)" count={`${queue.length} active`}>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {QUEUE.map((q, i) => (
+        {queue.map((q, i) => (
           <div key={q.id} style={{ padding: "11px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
               <Icon name={q.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />

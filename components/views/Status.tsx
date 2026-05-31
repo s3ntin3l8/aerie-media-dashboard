@@ -3,8 +3,9 @@
 // AERIE — Status / uptime dashboard (Gatus + Prometheus)
 // ============================================================
 import React from "react";
-import { SERVICES, catColor } from "@/lib/mock/data";
+import { catColor } from "@/lib/mock/data";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { useData } from "@/components/portal/DataProvider";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline } from "@/components/primitives";
 import { PanelShell } from "@/components/panels";
 import { PageHeader, StatTile } from "@/components/views/shared";
@@ -32,7 +33,8 @@ function MetricCard({ title, value, unit, color, data }: { title: string; value:
 
 export function Status() {
   const { role } = usePortal();
-  const list = SERVICES.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
+  const { services } = useData();
+  const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;

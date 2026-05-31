@@ -5,11 +5,13 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
-import { SERVICES, USERS, catColor } from "@/lib/mock/data";
+import { catColor } from "@/lib/mock/data";
+import { useData } from "@/components/portal/DataProvider";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
 import { PageHeader } from "@/components/views/shared";
 
 function AdminServices({ onOpenService }: { onOpenService: (s: Service) => void }) {
+  const { services } = useData();
   const cols = "1.6fr 1fr 0.7fr 1.2fr 0.5fr";
   return (
     <div className="aerie-x-scroll">
@@ -19,7 +21,7 @@ function AdminServices({ onOpenService }: { onOpenService: (s: Service) => void 
             <Eyebrow key={i}>{h}</Eyebrow>
           ))}
         </div>
-        {SERVICES.map((s, i) => (
+        {services.map((s, i) => (
           <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
               <div style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${catColor(s.cat)} 13%, transparent)`, flexShrink: 0 }}>
@@ -54,9 +56,10 @@ function AdminServices({ onOpenService }: { onOpenService: (s: Service) => void 
 }
 
 function AdminMembers() {
+  const { users } = useData();
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
-      {USERS.map((u) => (
+      {users.map((u) => (
         <div key={u.id} style={{ padding: 15, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
             <Avatar name={u.name} size={38} color={u.role === "admin" ? "var(--primary)" : "var(--originator-court)"} you={u.id === "you"} />
@@ -96,6 +99,7 @@ function AdminMembers() {
 }
 
 function AdminVisibility() {
+  const { services } = useData();
   const groups = ["admins", "friends", "guests"];
   const vis: Record<string, (s: Service) => boolean> = {
     admins: () => true,
@@ -114,7 +118,7 @@ function AdminVisibility() {
             </div>
           ))}
         </div>
-        {SERVICES.map((s, i) => (
+        {services.map((s, i) => (
           <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", padding: "10px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               <Icon name={s.icon} size={16} color={catColor(s.cat)} />

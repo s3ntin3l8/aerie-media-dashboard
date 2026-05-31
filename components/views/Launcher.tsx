@@ -5,8 +5,9 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
-import { SERVICES, CAT, catColor } from "@/lib/mock/data";
+import { CAT, catColor } from "@/lib/mock/data";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { useData } from "@/components/portal/DataProvider";
 import { Icon, StatusDot, Pill, Divider, SearchField } from "@/components/primitives";
 import { PageHeader } from "@/components/views/shared";
 
@@ -84,7 +85,8 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
 export function Launcher() {
   const router = useRouter();
   const { role } = usePortal();
-  let list = SERVICES;
+  const { services } = useData();
+  let list = services;
   if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus");
   const grouped = CAT_ORDER.map((cat) => ({ cat, items: list.filter((s) => s.cat === cat) })).filter((g) => g.items.length);
 

@@ -5,8 +5,8 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { MediaRequest } from "@/lib/types";
-import { REQUESTS, USERS } from "@/lib/mock/data";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { useData } from "@/components/portal/DataProvider";
 import { Icon, Pill, Avatar, PosterTile, SearchField } from "@/components/primitives";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
@@ -14,7 +14,8 @@ import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
 type RequestStatusFilter = "all" | "pending" | "approved" | "available";
 
 function RequestCard({ r, adminMode, onAct }: { r: MediaRequest; adminMode: boolean; onAct: (id: string, action: "approve" | "decline") => void }) {
-  const u = USERS.find((x) => x.id === r.user);
+  const { users } = useData();
+  const u = users.find((x) => x.id === r.user);
   return (
     <div style={{ display: "flex", gap: 13, padding: 14, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
       <PosterTile title={r.title} kind={r.kind} cat="request" w={58} />
@@ -62,12 +63,13 @@ function RequestCard({ r, adminMode, onAct }: { r: MediaRequest; adminMode: bool
 export function Requests() {
   const router = useRouter();
   const { role } = usePortal();
+  const { requests, users } = useData();
   const adminMode = role === "admin";
-  const me = USERS.find((u) => u.id === "you")!;
+  const me = users.find((u) => u.id === "you") ?? users[0];
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
   const [acted, setActed] = useState<Record<string, string>>({});
 
-  const base = adminMode ? REQUESTS : REQUESTS.filter((r) => r.user === "you");
+  const base = adminMode ? requests : requests.filter((r) => r.user === "you");
   const filtered = base
     .filter((r) => (filter === "all" ? true : r.status === filter))
     .map((r) => (acted[r.id] ? { ...r, status: acted[r.id] as MediaRequest["status"] } : r));
@@ -113,7 +115,7 @@ export function Requests() {
                 <StatTile label="Pending" value={counts.pending} color="var(--amber)" icon="pending" />
                 <StatTile label="Approved" value={counts.approved} color="var(--originator-court)" icon="check_circle" />
                 <StatTile label="Available" value={counts.available} color="var(--originator-own)" icon="download_done" />
-                <StatTile label="Members" value={USERS.length - 1} color="var(--on-surface)" icon="group" />
+                <StatTile label="Members" value={users.length - 1} color="var(--on-surface)" icon="group" />
               </>
             ) : (
               <>
