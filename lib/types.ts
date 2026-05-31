@@ -50,6 +50,8 @@ export interface NowPlaying {
   /** duration in minutes */
   dur: number;
   paused: boolean;
+  /** proxied cover-art URL (/api/artwork?…), if available */
+  art?: string;
 }
 
 export interface MediaRequest {

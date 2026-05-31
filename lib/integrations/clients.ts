@@ -77,6 +77,8 @@ interface TautulliSession {
   progress_percent?: string;
   duration?: string;
   state?: string;
+  thumb?: string;
+  grandparent_thumb?: string;
 }
 
 export async function tautulliNowPlaying(): Promise<NowPlaying[]> {
@@ -88,6 +90,7 @@ export async function tautulliNowPlaying(): Promise<NowPlaying[]> {
   const sessions = data.response?.data?.sessions ?? [];
   return sessions.map((s) => {
     const kind: MediaKind = s.media_type === "episode" ? "series" : s.media_type === "track" ? "track" : "movie";
+    const thumb = kind === "series" ? s.grandparent_thumb || s.thumb : s.thumb;
     return {
       id: `tt-${s.session_key}`,
       title: kind === "series" ? s.grandparent_title || s.full_title : s.title || s.full_title,
@@ -104,6 +107,7 @@ export async function tautulliNowPlaying(): Promise<NowPlaying[]> {
       pos: s.progress_percent ? Number(s.progress_percent) / 100 : 0,
       dur: s.duration ? Math.round(Number(s.duration) / 60000) : 0,
       paused: s.state === "paused",
+      art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
     };
   });
 }
@@ -115,10 +119,12 @@ interface JellyfinSession {
   UserName: string;
   DeviceName: string;
   NowPlayingItem?: {
+    Id: string;
     Name: string;
     Type: string;
     ProductionYear?: number;
     SeriesName?: string;
+    SeriesId?: string;
     RunTimeTicks?: number;
   };
   PlayState?: { IsPaused?: boolean; PositionTicks?: number };
@@ -153,6 +159,7 @@ export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
         pos,
         dur: durMin,
         paused: Boolean(s.PlayState?.IsPaused),
+        art: item.Id ? `/api/artwork?svc=jellyfin&ref=${encodeURIComponent(kind === "series" && item.SeriesId ? item.SeriesId : item.Id)}` : undefined,
       } satisfies NowPlaying;
     });
 }

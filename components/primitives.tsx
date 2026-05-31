@@ -317,11 +317,13 @@ export function ProgressBar({
 
 // Poster placeholder — flat category-tinted block + glyph (restrained imagery)
 export function PosterTile({
+  title,
   kind = "movie",
   cat = "stream",
   w = 56,
   ratio = 1.5,
   rounded = 8,
+  art,
 }: {
   title?: string;
   kind?: MediaKind;
@@ -329,9 +331,12 @@ export function PosterTile({
   w?: number;
   ratio?: number;
   rounded?: number;
+  /** real cover-art URL; falls back to the tinted block on error */
+  art?: string;
 }) {
   const c = catColor(cat);
   const glyph = kind === "series" ? "live_tv" : kind === "track" ? "album" : "movie";
+  const [imgOk, setImgOk] = useState(true);
   return (
     <div
       style={{
@@ -348,8 +353,19 @@ export function PosterTile({
         justifyContent: "center",
       }}
     >
+      {/* placeholder glyph (also the fallback when art fails to load) */}
       <Icon name={glyph} size={Math.round(w * 0.42)} color={`color-mix(in srgb, ${c} 75%, var(--on-surface-variant))`} />
-      <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c }} />
+      {art && imgOk && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={art}
+          alt={title || ""}
+          loading="lazy"
+          onError={() => setImgOk(false)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      )}
+      <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c, zIndex: 1 }} />
     </div>
   );
 }

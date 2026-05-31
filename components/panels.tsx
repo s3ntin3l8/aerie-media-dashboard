@@ -153,7 +153,7 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
             return (
               <div key={s.id} style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none" }}>
                 <span style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 9999, background: accent }} />
-                <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} />
+                <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} art={s.art} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
                     <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: big ? 15 : 13.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
