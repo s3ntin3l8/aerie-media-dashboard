@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      AERIE_PORTAL_URL: https://media.s3ntin3l8.de
+      AERIE_PORTAL_URL: ${AERIE_PORTAL_URL:-http://localhost:3000}
       DATABASE_URL: file:/app/data/aerie.db
     volumes:
       - aerie-data:/app/data
@@ -19,7 +19,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
-      - traefik.http.routers.aerie.rule=Host(`media.s3ntin3l8.de`)
+      - traefik.http.routers.aerie.rule=Host(`${AERIE_DOMAIN:-aerie.example.com}`)
       - traefik.http.routers.aerie.entrypoints=websecure
       - traefik.http.routers.aerie.tls.certresolver=le
       - traefik.http.services.aerie.loadbalancer.server.port=3000
@@ -27,7 +27,7 @@ services:
 
       # ── Reusable middlewares (attach to embeddable services) ──
       # 1) Allow framing only from the portal origin (replaces X-Frame-Options).
-      - traefik.http.middlewares.aerie-embed.headers.contentSecurityPolicy=frame-ancestors https://media.s3ntin3l8.de
+      - traefik.http.middlewares.aerie-embed.headers.contentSecurityPolicy=frame-ancestors ${AERIE_PORTAL_URL:-http://localhost:3000}
       - traefik.http.middlewares.aerie-embed.headers.customResponseHeaders.X-Frame-Options=
       # 2) Authentik forward-auth (point at your Authentik outpost address).
       - traefik.http.middlewares.authentik.forwardauth.address=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
@@ -42,7 +42,7 @@ services:
   #     networks: [proxy]
   #     labels:
   #       - traefik.enable=true
-  #       - traefik.http.routers.radarr.rule=Host(`radarr.s3ntin3l8.de`)
+  #       - traefik.http.routers.radarr.rule=Host(`radarr.example.com`)
   #       - traefik.http.routers.radarr.entrypoints=websecure
   #       - traefik.http.routers.radarr.tls.certresolver=le
   #       - traefik.http.routers.radarr.middlewares=authentik@docker,aerie-embed@docker
