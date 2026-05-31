@@ -1,0 +1,154 @@
+/* ============================================================
+   AERIE — global base
+   Design tokens live in styles/colors_and_type.css + components.css
+   (imported from layout.tsx). This file holds the app-shell reset
+   and the keyframes ported from the prototype index.html.
+   ============================================================ */
+
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
+* {
+  box-sizing: border-box;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+/* Self-hosted JetBrains Mono (next/font) feeds --font-mono.
+   Falls back to system mono if the variable is absent. */
+:root {
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@keyframes aeriePulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+@keyframes aerieEq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+@keyframes aerieSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Responsive layout utilities ──────────────────────────────
+   The prototype is desktop-only with fixed inline grids. These
+   class hooks let the inline-styled components collapse on small
+   screens (responsive-from-the-start requirement). */
+
+/* Command-layout home grid: main column + 360px right rail */
+.aerie-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .aerie-home-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Library stat strip: 4 → 2 → 1 */
+.aerie-lib-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 760px) {
+  .aerie-lib-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Prometheus metric cards: 3 → 2 → 1 */
+.aerie-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 880px) {
+  .aerie-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .aerie-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Horizontal stat-tile row wraps on narrow screens */
+.aerie-stat-row {
+  display: flex;
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .aerie-stat-row {
+    flex-wrap: wrap;
+  }
+  .aerie-stat-row > * {
+    flex: 1 1 calc(50% - 6px);
+  }
+}
+
+/* Generic responsive horizontal padding for page bodies */
+.aerie-page-pad {
+  padding: 22px 32px 56px;
+}
+@media (max-width: 640px) {
+  .aerie-page-pad {
+    padding: 18px 16px 48px;
+  }
+}
+
+/* Headers / toolbars wrap instead of overflowing */
+.aerie-header-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .aerie-header-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+}
+
+/* Wide admin tables scroll horizontally on small screens */
+.aerie-x-scroll {
+  overflow-x: auto;
+}
+.aerie-x-scroll > * {
+  min-width: 640px;
+}
+

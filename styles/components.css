@@ -1,0 +1,168 @@
+/* ============================================================
+   THE SANCTUARY — components.css
+   Low-level interactive primitives lifted from static/input.css.
+   Depends on colors_and_type.css tokens.
+   ============================================================ */
+
+/* ── BUTTON SYSTEM ───────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  border: none;
+  transition: background-color 150ms, opacity 150ms, transform 100ms;
+  padding: 10px 20px;
+  font-size: 14px;
+  line-height: 1;
+}
+.btn:active { transform: scale(0.97); }
+.btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 90%, transparent);
+}
+.btn-secondary {
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-container-highest);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--on-surface-variant);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-container-high);
+  color: var(--primary);
+}
+.btn-danger {
+  background: transparent;
+  color: var(--error);
+}
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--error) 14%, transparent); }
+
+.btn-sm { padding: 6px 16px; font-size: 12px; }
+.btn-xs {
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Tonal text-button used in panel headers (e.g. "+ Add Cost") */
+.btn-tonal {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  border: none;
+  cursor: pointer;
+  transition: background-color 150ms;
+}
+.btn-tonal:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); }
+
+/* ── CHIP ────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--outline-variant);
+  color: var(--on-surface-variant);
+  background: var(--surface-lowest);
+  line-height: 1.4;
+}
+
+/* ── STATUS PILL — uppercase micro-badge ─────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+}
+
+/* ── KEYBOARD KEY ────────────────────────────────────── */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  min-width: 1.6em;
+  min-height: 1.8em;
+  border: 1px solid var(--outline-variant);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  color: var(--on-surface-variant);
+  background: var(--surface-lowest);
+  line-height: 1;
+}
+
+/* ── CARD ────────────────────────────────────────────── */
+.card {
+  background: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.panel {
+  background: var(--surface-container);
+  border: 1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── INPUT ───────────────────────────────────────────── */
+.input {
+  width: 100%;
+  background: var(--surface-container-low);
+  border: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--on-surface);
+  font-family: var(--font-body);
+}
+.input::placeholder { color: color-mix(in srgb, var(--on-surface-variant) 60%, transparent); }
+.input:focus { outline: none; border-color: var(--primary); }
+
+/* ── SIGNIFICANCE DOTS (●●○) ─────────────────────────── */
+.sig-dots { display: inline-flex; align-items: center; gap: 2px; }
+.sig-dots span { width: 6px; height: 6px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--outline-variant) 40%, transparent); }
+.sig-dots[data-tier="critical"] span:nth-child(-n+3) { background: var(--error); }
+.sig-dots[data-tier="significant"] span:nth-child(-n+2) { background: var(--amber); }
+.sig-dots[data-tier="informational"] span:nth-child(-n+1) { background: var(--primary); }
+
+/* ── SCROLLBAR ───────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 10px; }
+
+/* ── ANIMATIONS ──────────────────────────────────────── */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideRight { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes drawerSlideIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.fade-in { animation: fadeIn .16s ease both; }
+.slide-in-right { animation: slideRight .24s cubic-bezier(.2,.7,.2,1) both; }
+.drawer-slide-in { animation: drawerSlideIn .22s cubic-bezier(.2,.7,.2,1) both; }
