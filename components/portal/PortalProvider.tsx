@@ -4,7 +4,7 @@
 // keyboard shortcuts). Real role comes from auth later; the
 // admin "preview as member" toggle flips it client-side.
 // ============================================================
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AppUser, Role } from "@/lib/types";
 import { signOutAction } from "@/app/(portal)/actions";
@@ -24,6 +24,9 @@ interface PortalState {
   toggleRole: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  /** true while any modal (service/request) is open — suppresses portal shortcuts */
+  modalOpen: boolean;
+  setModalOpen: (open: boolean) => void;
   signOut: () => void;
 }
 
@@ -49,6 +52,12 @@ export function PortalProvider({ user, children }: { user: AppUser; children: Re
   const [theme, setTheme] = useState<Theme>("dark");
   const [role, setRole] = useState<Role>(realRole);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  // Ref mirror so the (stable) keydown listener always sees the latest value.
+  const modalOpenRef = useRef(false);
+  useEffect(() => {
+    modalOpenRef.current = modalOpen;
+  }, [modalOpen]);
 
   // Restore persisted theme on mount.
   useEffect(() => {
@@ -85,6 +94,8 @@ export function PortalProvider({ user, children }: { user: AppUser; children: Re
     let gPending = false;
     let gT: ReturnType<typeof setTimeout>;
     const onKey = (e: KeyboardEvent) => {
+      // A modal owns the keyboard while open (it handles its own Escape).
+      if (modalOpenRef.current) return;
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase() || "";
       const typing = tag === "input" || tag === "textarea";
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -121,7 +132,7 @@ export function PortalProvider({ user, children }: { user: AppUser; children: Re
   }, [router]);
 
   return (
-    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, realRole, role, toggleRole, paletteOpen, setPaletteOpen, signOut }}>
+    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, realRole, role, toggleRole, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
       {children}
     </Ctx.Provider>
   );

@@ -4,20 +4,26 @@
 // ============================================================
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { MediaRequest } from "@/lib/types";
+import type { DiscoverItem, MediaRequest } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { Icon, Pill, Avatar, PosterTile, SearchField } from "@/components/primitives";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
+import { RequestModal } from "@/components/modals/RequestModal";
+import { Toast } from "@/components/modals/Toast";
 
 type RequestStatusFilter = "all" | "pending" | "approved" | "available";
 
-function RequestCard({ r, adminMode, onAct }: { r: MediaRequest; adminMode: boolean; onAct: (id: string, action: "approve" | "decline") => void }) {
+function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; adminMode: boolean; onAct: (id: string, action: "approve" | "decline") => void; onReview: (r: MediaRequest) => void }) {
   const { users } = useData();
   const u = users.find((x) => x.id === r.user);
   return (
-    <div style={{ display: "flex", gap: 13, padding: 14, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
+    <div
+      className={adminMode ? "req-card" : undefined}
+      onClick={adminMode ? () => onReview(r) : undefined}
+      style={{ display: "flex", gap: 13, padding: 14, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", cursor: adminMode ? "pointer" : "default", transition: "border-color .15s, background .15s" }}
+    >
       <PosterTile title={r.title} kind={r.kind} cat="request" w={58} />
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
@@ -46,10 +52,10 @@ function RequestCard({ r, adminMode, onAct }: { r: MediaRequest; adminMode: bool
           </span>
           {adminMode && r.status === "pending" && (
             <div style={{ display: "flex", gap: 5, marginLeft: 4 }}>
-              <button onClick={() => onAct(r.id, "approve")} className="btn btn-tonal" style={{ color: "var(--originator-own)", background: "color-mix(in srgb, var(--originator-own) 12%, transparent)" }}>
+              <button onClick={(e) => { e.stopPropagation(); onAct(r.id, "approve"); }} className="btn btn-tonal" style={{ color: "var(--originator-own)", background: "color-mix(in srgb, var(--originator-own) 12%, transparent)" }}>
                 Approve
               </button>
-              <button onClick={() => onAct(r.id, "decline")} className="btn btn-tonal" style={{ color: "var(--error)", background: "color-mix(in srgb, var(--error) 10%, transparent)" }}>
+              <button onClick={(e) => { e.stopPropagation(); onAct(r.id, "decline"); }} className="btn btn-tonal" style={{ color: "var(--error)", background: "color-mix(in srgb, var(--error) 10%, transparent)" }}>
                 Decline
               </button>
             </div>
@@ -68,6 +74,12 @@ export function Requests() {
   const me = users.find((u) => u.id === "you") ?? users[0];
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
   const [acted, setActed] = useState<Record<string, string>>({});
+  const [reqModal, setReqModal] = useState<{ mode: "request" | "review"; request?: MediaRequest } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
+  };
 
   const base = adminMode ? requests : requests.filter((r) => r.user === "you");
   const filtered = base
@@ -91,7 +103,7 @@ export function Requests() {
         accent="var(--originator-court)"
         sub={adminMode ? "Approve incoming requests and track fulfilment across all members." : "Track what you’ve asked for and what’s ready to watch."}
       >
-        <SearchField placeholder="Search movies & shows to request…" width={300} />
+        <SearchField asButton onClick={() => setReqModal({ mode: "request" })} placeholder="Search movies & shows to request…" width={300} />
         <button onClick={() => router.push("/s/overseerr")} className="btn btn-secondary btn-sm">
           <Icon name="open_in_full" size={15} /> Open Overseerr
         </button>
@@ -155,12 +167,24 @@ export function Requests() {
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
               {filtered.map((r) => (
-                <RequestCard key={r.id} r={r} adminMode={adminMode} onAct={onAct} />
+                <RequestCard key={r.id} r={r} adminMode={adminMode} onAct={onAct} onReview={(req) => setReqModal({ mode: "review", request: req })} />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {reqModal && (
+        <RequestModal
+          open
+          mode={reqModal.mode}
+          request={reqModal.request}
+          onClose={() => setReqModal(null)}
+          onSubmit={(pick: DiscoverItem) => flash(`Requested “${pick.title}” — pending approval`)}
+          onAct={onAct}
+        />
+      )}
+      <Toast message={toast} />
     </section>
   );
 }

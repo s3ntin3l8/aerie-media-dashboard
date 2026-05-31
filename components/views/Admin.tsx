@@ -6,12 +6,14 @@ import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
 import { catColor } from "@/lib/mock/data";
-import { useData } from "@/components/portal/DataProvider";
-import { setVisibility } from "@/app/(portal)/admin/actions";
+import { useData, useRefresh } from "@/components/portal/DataProvider";
+import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
 import { PageHeader } from "@/components/views/shared";
+import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
+import { Toast } from "@/components/modals/Toast";
 
-function AdminServices({ onOpenService }: { onOpenService: (s: Service) => void }) {
+function AdminServices({ onOpenService, onEdit }: { onOpenService: (s: Service) => void; onEdit: (s: Service) => void }) {
   const { services } = useData();
   const cols = "1.6fr 1fr 0.7fr 1.2fr 0.5fr";
   return (
@@ -45,7 +47,7 @@ function AdminServices({ onOpenService }: { onOpenService: (s: Service) => void 
               <button onClick={() => onOpenService(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Open">
                 <Icon name="open_in_full" size={15} />
               </button>
-              <button className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit">
+              <button onClick={() => onEdit(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit">
                 <Icon name="edit" size={15} />
               </button>
             </div>
@@ -171,20 +173,87 @@ function AdminVisibility() {
   );
 }
 
+const slug = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+const isIconName = (s: string) => /^[a-z_]+$/.test(s);
+
 export function Admin() {
   const router = useRouter();
+  const { groups, visibility, adminGroup } = useData();
+  const refresh = useRefresh();
   const [tab, setTab] = useState("services");
+  const [svcModal, setSvcModal] = useState<{ mode: "add" | "edit"; service?: Service } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const tabs: [string, string, string][] = [
     ["services", "Services & Secrets", "dns"],
     ["members", "Members", "group"],
     ["visibility", "Visibility", "visibility"],
   ];
   const openService = (s: Service) => router.push(`/s/${s.id}`);
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
+  };
+
+  // Build the per-group visibility map the modal seeds from.
+  const visForService = (id: string) => {
+    const m: Record<string, boolean> = {};
+    for (const g of groups) m[g.name] = false;
+    for (const v of visibility) if (v.serviceId === id) m[v.groupName] = v.visible;
+    m[adminGroup] = true;
+    return m;
+  };
+  const addDefaults = () => {
+    const m: Record<string, boolean> = {};
+    for (const g of groups) m[g.name] = g.name !== "guests";
+    m[adminGroup] = true;
+    return m;
+  };
+
+  const onSave = async (form: ServiceForm, vis: Record<string, boolean>) => {
+    const editing = svcModal?.mode === "edit";
+    const id = editing ? svcModal!.service!.id : slug(form.name);
+    if (!id) return;
+    if (!editing && (await serviceExists(id))) {
+      flash(`A service id "${id}" already exists`);
+      return;
+    }
+    await upsertService({
+      id,
+      name: form.name.trim(),
+      cat: form.cat,
+      icon: isIconName(form.icon) ? form.icon : "dns",
+      host: form.host.trim(),
+      baseUrl: `https://${form.host.trim()}`,
+      embeddable: form.embeddable,
+      central: form.central,
+      centralLabel: form.central ? form.centralLabel || null : null,
+      version: form.version || null,
+      note: form.note || null,
+    });
+    // Only write the secret when the admin actually entered one (blank = keep).
+    if (form.apiKey && form.apiKey.trim()) await setServiceSecret(id, form.apiKey.trim());
+    // Visibility after the service row exists (FK); admin group is always on.
+    for (const g of groups) await setVisibility(id, g.name, g.name === adminGroup ? true : Boolean(vis[g.name]));
+    setSvcModal(null);
+    refresh();
+    flash(editing ? `Saved changes to ${form.name}` : `${form.name} added to the portal`);
+  };
+
+  const onDelete = async (s: Service) => {
+    await deleteService(s.id);
+    setSvcModal(null);
+    refresh();
+    flash(`${s.name} removed`);
+  };
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
       <PageHeader eyebrow="Lead operator" title="Admin" icon="tune" accent="var(--primary)" sub="Manage services, members and what each group can see.">
-        <button className="btn btn-primary btn-sm">
+        <button onClick={() => setSvcModal({ mode: "add" })} className="btn btn-primary btn-sm">
           <Icon name="add" size={15} /> Add service
         </button>
       </PageHeader>
@@ -217,11 +286,26 @@ export function Admin() {
       </div>
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
         <div className="aerie-page-pad" style={{ maxWidth: 1080, margin: "0 auto" }}>
-          {tab === "services" && <AdminServices onOpenService={openService} />}
+          {tab === "services" && <AdminServices onOpenService={openService} onEdit={(s) => setSvcModal({ mode: "edit", service: s })} />}
           {tab === "members" && <AdminMembers />}
           {tab === "visibility" && <AdminVisibility />}
         </div>
       </div>
+
+      {svcModal && (
+        <ServiceModal
+          open
+          mode={svcModal.mode}
+          service={svcModal.service}
+          groups={groups}
+          adminGroup={adminGroup}
+          initialVisibility={svcModal.mode === "edit" && svcModal.service ? visForService(svcModal.service.id) : addDefaults()}
+          onClose={() => setSvcModal(null)}
+          onSave={onSave}
+          onDelete={onDelete}
+        />
+      )}
+      <Toast message={toast} />
     </section>
   );
 }

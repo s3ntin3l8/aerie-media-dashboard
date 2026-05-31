@@ -3,11 +3,18 @@
 // ============================================================
 function Admin({ onOpenService }) {
   const [tab, setTab] = useState('services');
+  const [svcModal, setSvcModal] = useState(null); // { mode, service }
+  const [toast, setToast] = useState(null);
   const tabs = [['services', 'Services & Secrets', 'dns'], ['members', 'Members', 'group'], ['visibility', 'Visibility', 'visibility']];
+
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+  const onSave = (data, vis) => { setSvcModal(null); flash(svcModal.mode === 'edit' ? `Saved changes to ${data.name}` : `${data.name} added to the portal`); };
+  const onDelete = (s) => { setSvcModal(null); flash(`${s.name} removed`); };
+
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--surface)' }}>
       <PageHeader eyebrow="Lead operator" title="Admin" icon="tune" accent="var(--primary)" sub="Manage services, members and what each group can see.">
-        <button className="btn btn-primary btn-sm"><Icon name="add" size={15} /> Add service</button>
+        <button onClick={() => setSvcModal({ mode: 'add' })} className="btn btn-primary btn-sm"><Icon name="add" size={15} /> Add service</button>
       </PageHeader>
       <div style={{ display: 'flex', gap: 4, padding: '12px 32px 0', borderBottom: '1px solid var(--outline-variant)', flexShrink: 0 }}>
         {tabs.map(([id, label, icon]) => (
@@ -20,16 +27,28 @@ function Admin({ onOpenService }) {
       </div>
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '20px 32px 56px' }}>
-          {tab === 'services' && <AdminServices onOpenService={onOpenService} />}
+          {tab === 'services' && <AdminServices onOpenService={onOpenService} onEdit={s => setSvcModal({ mode: 'edit', service: s })} />}
           {tab === 'members' && <AdminMembers />}
           {tab === 'visibility' && <AdminVisibility />}
         </div>
       </div>
+
+      <ServiceModal open={!!svcModal} mode={svcModal && svcModal.mode} service={svcModal && svcModal.service} onClose={() => setSvcModal(null)} onSave={onSave} onDelete={onDelete} />
+      {toast && <Toast msg={toast} />}
     </section>
   );
 }
 
-function AdminServices({ onOpenService }) {
+function Toast({ msg }) {
+  return (
+    <div className="fade-in" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 360, display: 'flex', alignItems: 'center', gap: 9, padding: '11px 16px', borderRadius: 11, background: 'var(--surface-container-highest)', border: '1px solid var(--outline-variant)', boxShadow: 'var(--shadow-lg)' }}>
+      <Icon name="check_circle" size={17} color="var(--originator-own)" />
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)' }}>{msg}</span>
+    </div>
+  );
+}
+
+function AdminServices({ onOpenService, onEdit }) {
   return (
     <div style={{ borderRadius: 16, border: '1px solid var(--outline-variant)', overflow: 'hidden', background: 'var(--surface-container-lowest)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 0.7fr 1.2fr 0.5fr', gap: 12, padding: '11px 18px', borderBottom: '1px solid var(--outline-variant)', background: 'color-mix(in srgb, var(--surface-container) 50%, transparent)' }}>
@@ -51,7 +70,7 @@ function AdminServices({ onOpenService }) {
           </span>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
             <button onClick={() => onOpenService(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Open"><Icon name="open_in_full" size={15} /></button>
-            <button className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit"><Icon name="edit" size={15} /></button>
+            <button onClick={() => onEdit(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit"><Icon name="edit" size={15} /></button>
           </div>
         </div>
       ))}
@@ -161,4 +180,4 @@ function PaletteRow({ icon, iconColor, label, hint, onClick }) {
   );
 }
 
-Object.assign(window, { Admin, AdminServices, AdminMembers, AdminVisibility, CommandPalette, PaletteRow });
+Object.assign(window, { Admin, Toast, AdminServices, AdminMembers, AdminVisibility, CommandPalette, PaletteRow });

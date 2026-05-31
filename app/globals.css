@@ -59,6 +59,29 @@ a {
   }
 }
 
+/* ── Modals ──────────────────────────────────────────────── */
+@keyframes modalIn {
+  from {
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    transform: none;
+  }
+}
+.req-result:not(:disabled):hover {
+  background: color-mix(in srgb, var(--originator-court) 9%, transparent) !important;
+}
+.req-card:hover {
+  border-color: color-mix(in srgb, var(--originator-court) 45%, transparent) !important;
+  background: color-mix(in srgb, var(--originator-court) 5%, transparent) !important;
+}
+.input[type="password"] {
+  letter-spacing: 0.12em;
+}
+textarea.input {
+  line-height: 1.5;
+}
+
 /* ── Responsive layout utilities ──────────────────────────────
    The prototype is desktop-only with fixed inline grids. These
    class hooks let the inline-styled components collapse on small

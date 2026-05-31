@@ -34,6 +34,8 @@ export interface Snapshot {
   plays24h: number[];
   groups: GroupRow[];
   visibility: VisibilityRow[];
+  /** the group name that maps to the admin role (locked "always" in visibility) */
+  adminGroup: string;
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -130,5 +132,5 @@ export async function getSnapshot(): Promise<Snapshot> {
 
   const recent: RecentItem[] = ttRecent && ttRecent.length > 0 ? ttRecent : RECENT;
 
-  return { services, nowPlaying, requests, users, library, recent, queue, plays24h: PLAYS_24H, groups, visibility };
+  return { services, nowPlaying, requests, users, library, recent, queue, plays24h: PLAYS_24H, groups, visibility, adminGroup: env.adminGroup };
 }

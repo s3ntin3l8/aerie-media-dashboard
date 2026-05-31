@@ -52,6 +52,27 @@ const REQUESTS = [
   { id: 'rq-2049', title: 'Hit Man',                 kind: 'movie',  year: 2024, user: 'marco', status: 'available', requested: '18 May', poster: 'hm' },
 ];
 
+// Quality profiles (Sonarr/Radarr-style) for the request flow
+const QUALITY_PROFILES = [
+  { id: 'hd1080', label: '1080p', sub: 'HD · Bluray/WEB', icon: 'hd', def: true },
+  { id: 'uhd4k',  label: '4K HDR', sub: '2160p · Dolby Vision', icon: '4k' },
+  { id: 'any',    label: 'Any', sub: 'First available', icon: 'auto_awesome' },
+];
+
+// Discover catalog — TMDB-style results for "request media". `state` ties to the request queue.
+const DISCOVER = [
+  { id: 'd1', title: 'Severance',          kind: 'series', year: 2022, rating: 8.7, seasons: 2, state: 'available', overview: 'Office workers undergo a procedure that splits their work and personal memories.' },
+  { id: 'd2', title: 'The Substance',      kind: 'movie',  year: 2024, rating: 7.3, state: null,        overview: 'A fading star takes a black-market drug that generates a younger version of herself.' },
+  { id: 'd3', title: 'Fallout',            kind: 'series', year: 2024, rating: 8.4, seasons: 1, state: 'pending',   overview: 'A vault dweller ventures into a post-nuclear wasteland in search of her father.' },
+  { id: 'd4', title: 'Furiosa',            kind: 'movie',  year: 2024, rating: 7.6, state: 'approved',  overview: 'The origin of the warrior Furiosa before she joined forces with Mad Max.' },
+  { id: 'd5', title: 'Shōgun',             kind: 'series', year: 2024, rating: 8.6, seasons: 1, state: 'available', overview: 'A English pilot is shipwrecked in feudal Japan amid a brewing power struggle.' },
+  { id: 'd6', title: 'Challengers',        kind: 'movie',  year: 2024, rating: 7.1, state: null,        overview: 'A former tennis prodigy turned coach reshapes the rivalry between two players.' },
+  { id: 'd7', title: 'Ripley',             kind: 'series', year: 2024, rating: 8.0, seasons: 1, state: 'pending',   overview: 'A grifter in 1960s Italy is hired to retrieve a wealthy heir — and assumes his life.' },
+  { id: 'd8', title: 'Hit Man',            kind: 'movie',  year: 2024, rating: 6.9, state: 'available', overview: 'A professor moonlighting as a fake hitman gets entangled with a would-be client.' },
+  { id: 'd9', title: 'The Penguin',        kind: 'series', year: 2024, rating: 8.1, seasons: 1, state: null,        overview: 'A Gotham crime lieutenant claws his way toward control of the city underworld.' },
+  { id: 'd10', title: 'Civil War',         kind: 'movie',  year: 2024, rating: 7.0, state: 'approved',  overview: 'A team of journalists treks across a fractured America during a near-future conflict.' },
+];
+
 // Friends (for admin user-management + "who's watching")
 const USERS = [
   { id: 'you',   name: 'Björn',   handle: 'bjoern',  role: 'admin', email: 'bjoern@aerie.tv',   linked: true,  groups: ['media-admins'],   reqUsed: 2, reqQuota: 10, watching: 'np3' },
@@ -90,4 +111,4 @@ const QUEUE = [
   { id: 'q3', title: 'Shōgun S01E09 · 1080p',  svc: 'sonarr', pct: 12, eta: '38m', speed: '4.6 MB/s' },
 ];
 
-Object.assign(window, { CAT, SERVICES, NOW_PLAYING, REQUESTS, USERS, LIBRARY, PLAYS_24H, RECENT, QUEUE });
+Object.assign(window, { CAT, SERVICES, NOW_PLAYING, REQUESTS, USERS, LIBRARY, PLAYS_24H, RECENT, QUEUE, QUALITY_PROFILES, DISCOVER });

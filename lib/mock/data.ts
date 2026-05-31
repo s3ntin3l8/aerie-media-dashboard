@@ -5,9 +5,11 @@
 import type {
   CatMeta,
   Category,
+  DiscoverItem,
   LibraryStat,
   MediaRequest,
   NowPlaying,
+  QualityProfile,
   QueueItem,
   RecentItem,
   Service,
@@ -98,4 +100,25 @@ export const QUEUE: QueueItem[] = [
   { id: "q1", title: "Furiosa (2024) · 2160p", svc: "radarr", pct: 64, eta: "14m", speed: "22.4 MB/s" },
   { id: "q2", title: "Fallout S01E06 · 1080p", svc: "sonarr", pct: 91, eta: "3m", speed: "8.1 MB/s" },
   { id: "q3", title: "Shōgun S01E09 · 1080p", svc: "sonarr", pct: 12, eta: "38m", speed: "4.6 MB/s" },
+];
+
+// Request quality profiles (request modal).
+export const QUALITY_PROFILES: QualityProfile[] = [
+  { id: "hd1080", label: "1080p", sub: "HD · Bluray/WEB", icon: "hd", def: true },
+  { id: "uhd4k", label: "4K HDR", sub: "2160p · Dolby Vision", icon: "4k" },
+  { id: "any", label: "Any", sub: "First available", icon: "auto_awesome" },
+];
+
+// Discover catalog — TMDB-style results for "request media". `state` ties to the request queue.
+export const DISCOVER: DiscoverItem[] = [
+  { id: "d1", title: "Severance", kind: "series", year: 2022, rating: 8.7, seasons: 2, state: "available", overview: "Office workers undergo a procedure that splits their work and personal memories." },
+  { id: "d2", title: "The Substance", kind: "movie", year: 2024, rating: 7.3, state: null, overview: "A fading star takes a black-market drug that generates a younger version of herself." },
+  { id: "d3", title: "Fallout", kind: "series", year: 2024, rating: 8.4, seasons: 1, state: "pending", overview: "A vault dweller ventures into a post-nuclear wasteland in search of her father." },
+  { id: "d4", title: "Furiosa", kind: "movie", year: 2024, rating: 7.6, state: "approved", overview: "The origin of the warrior Furiosa before she joined forces with Mad Max." },
+  { id: "d5", title: "Shōgun", kind: "series", year: 2024, rating: 8.6, seasons: 1, state: "available", overview: "A English pilot is shipwrecked in feudal Japan amid a brewing power struggle." },
+  { id: "d6", title: "Challengers", kind: "movie", year: 2024, rating: 7.1, state: null, overview: "A former tennis prodigy turned coach reshapes the rivalry between two players." },
+  { id: "d7", title: "Ripley", kind: "series", year: 2024, rating: 8.0, seasons: 1, state: "pending", overview: "A grifter in 1960s Italy is hired to retrieve a wealthy heir — and assumes his life." },
+  { id: "d8", title: "Hit Man", kind: "movie", year: 2024, rating: 6.9, state: "available", overview: "A professor moonlighting as a fake hitman gets entangled with a would-be client." },
+  { id: "d9", title: "The Penguin", kind: "series", year: 2024, rating: 8.1, seasons: 1, state: null, overview: "A Gotham crime lieutenant claws his way toward control of the city underworld." },
+  { id: "d10", title: "Civil War", kind: "movie", year: 2024, rating: 7.0, state: "approved", overview: "A team of journalists treks across a fractured America during a near-future conflict." },
 ];

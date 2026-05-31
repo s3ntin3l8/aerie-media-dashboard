@@ -106,6 +106,27 @@ export interface QueueItem {
   speed: string;
 }
 
+/** A discoverable title in the request modal's catalog. */
+export interface DiscoverItem {
+  id: string;
+  title: string;
+  kind: MediaKind;
+  year: number;
+  rating: number;
+  seasons?: number;
+  state: RequestStatus | null;
+  overview: string;
+}
+
+/** A request quality profile option. */
+export interface QualityProfile {
+  id: string;
+  label: string;
+  sub: string;
+  icon: string;
+  def?: boolean;
+}
+
 /** The signed-in portal user (from the auth session, or a dev-mode mock). */
 export interface AppUser {
   id: string;

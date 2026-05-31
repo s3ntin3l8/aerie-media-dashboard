@@ -81,3 +81,18 @@ export async function upsertService(input: ServiceInput) {
     .onConflictDoUpdate({ target: schema.services.id, set: values });
   revalidatePath("/admin");
 }
+
+/** True if a service id already exists (used to guard add-mode slug collisions). */
+export async function serviceExists(id: string): Promise<boolean> {
+  await ensureDb();
+  const rows = await db.select({ id: schema.services.id }).from(schema.services).where(eq(schema.services.id, id)).limit(1);
+  return rows.length > 0;
+}
+
+/** Remove a service (secrets + visibility cascade via FK). */
+export async function deleteService(id: string) {
+  await requireAdmin();
+  await ensureDb();
+  await db.delete(schema.services).where(eq(schema.services.id, id));
+  revalidatePath("/admin");
+}

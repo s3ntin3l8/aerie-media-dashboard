@@ -28,10 +28,13 @@ function StatTile({ label, value, color = 'var(--on-surface)', icon }) {
   );
 }
 
-function RequestCard({ r, adminMode, onAct }) {
+function RequestCard({ r, adminMode, onAct, onReview }) {
   const u = window.USERS.find(x => x.id === r.user);
+  const clickable = adminMode;
   return (
-    <div style={{ display: 'flex', gap: 13, padding: 14, borderRadius: 14, background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)' }}>
+    <div onClick={clickable ? () => onReview(r) : undefined}
+      className={clickable ? 'req-card' : ''}
+      style={{ display: 'flex', gap: 13, padding: 14, borderRadius: 14, background: 'var(--surface-container-lowest)', border: '1px solid var(--outline-variant)', cursor: clickable ? 'pointer' : 'default', transition: 'border-color .14s, background .14s' }}>
       <PosterTile title={r.title} kind={r.kind} cat="request" w={58} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -53,8 +56,8 @@ function RequestCard({ r, adminMode, onAct }) {
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--on-surface-variant)' }}>{r.eta ? <span style={{ color: 'var(--originator-court)', fontWeight: 600 }}>{r.eta}</span> : `Requested ${r.requested}`}</span>
           {adminMode && r.status === 'pending' && (
             <div style={{ display: 'flex', gap: 5, marginLeft: 4 }}>
-              <button onClick={() => onAct(r.id, 'approve')} className="btn btn-tonal" style={{ color: 'var(--originator-own)', background: 'color-mix(in srgb, var(--originator-own) 12%, transparent)' }}>Approve</button>
-              <button onClick={() => onAct(r.id, 'decline')} className="btn btn-tonal" style={{ color: 'var(--error)', background: 'color-mix(in srgb, var(--error) 10%, transparent)' }}>Decline</button>
+              <button onClick={(e) => { e.stopPropagation(); onAct(r.id, 'approve'); }} className="btn btn-tonal" style={{ color: 'var(--originator-own)', background: 'color-mix(in srgb, var(--originator-own) 12%, transparent)' }}>Approve</button>
+              <button onClick={(e) => { e.stopPropagation(); onAct(r.id, 'decline'); }} className="btn btn-tonal" style={{ color: 'var(--error)', background: 'color-mix(in srgb, var(--error) 10%, transparent)' }}>Decline</button>
             </div>
           )}
         </div>
@@ -79,11 +82,18 @@ function Requests({ role, onOpenService }) {
   };
   const onAct = (id, action) => setActed(a => ({ ...a, [id]: action === 'approve' ? 'approved' : 'declined' }));
 
+  const [reqModal, setReqModal] = useState(null); // { mode, request }
+  const [toast, setToast] = useState(null);
+  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+  const onReview = (r) => setReqModal({ mode: 'review', request: r });
+  const onReviewAct = (id, action) => { onAct(id, action); setReqModal(null); };
+  const onSubmitRequest = (pick) => { flash(`Requested “${pick.title}” — pending approval`); };
+
   return (
     <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--surface)' }}>
       <PageHeader eyebrow={adminMode ? 'Overseerr · all members' : 'Overseerr · your library'} title={adminMode ? 'Requests & Approvals' : 'My Requests'} icon="playlist_add" accent="var(--originator-court)"
         sub={adminMode ? 'Approve incoming requests and track fulfilment across all members.' : 'Track what you’ve asked for and what’s ready to watch.'}>
-        <SearchField placeholder="Search movies & shows to request…" width={300} />
+        <SearchField asButton onClick={() => setReqModal({ mode: 'request' })} placeholder="Search movies & shows to request…" width={300} />
         <button onClick={() => onOpenService(window.SERVICES.find(s => s.id === 'overseerr'))} className="btn btn-secondary btn-sm"><Icon name="open_in_full" size={15} /> Open Overseerr</button>
       </PageHeader>
 
@@ -126,11 +136,15 @@ function Requests({ role, onOpenService }) {
 
           {filtered.length === 0 ? <Empty icon="bookmark_border" line="No requests here" sub="Search above to request a movie or show." /> : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 12 }}>
-              {filtered.map(r => <RequestCard key={r.id} r={r} adminMode={adminMode} onAct={onAct} />)}
+              {filtered.map(r => <RequestCard key={r.id} r={r} adminMode={adminMode} onAct={onAct} onReview={onReview} />)}
             </div>
           )}
         </div>
       </div>
+
+      <RequestModal open={!!reqModal} mode={reqModal && reqModal.mode} request={reqModal && reqModal.request}
+        onClose={() => setReqModal(null)} onSubmit={onSubmitRequest} onAct={onReviewAct} />
+      {toast && <Toast msg={toast} />}
     </section>
   );
 }
