@@ -6,12 +6,13 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DiscoverItem, MediaRequest } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData } from "@/components/portal/DataProvider";
+import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { Icon, Pill, Avatar, PosterTile, SearchField } from "@/components/primitives";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
 import { RequestModal } from "@/components/modals/RequestModal";
 import { Toast } from "@/components/modals/Toast";
+import { submitRequest, reviewRequest } from "@/app/(portal)/requests/actions";
 
 type RequestStatusFilter = "all" | "pending" | "approved" | "available";
 
@@ -70,6 +71,7 @@ export function Requests() {
   const router = useRouter();
   const { role } = usePortal();
   const { requests, users } = useData();
+  const refresh = useRefresh();
   const adminMode = role === "admin";
   const me = users.find((u) => u.id === "you") ?? users[0];
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
@@ -92,7 +94,11 @@ export function Requests() {
     approved: base.filter((r) => (acted[r.id] || r.status) === "approved").length,
     available: base.filter((r) => r.status === "available").length,
   };
-  const onAct = (id: string, action: "approve" | "decline") => setActed((a) => ({ ...a, [id]: action === "approve" ? "approved" : "declined" }));
+  const onAct = (id: string, action: "approve" | "decline") => {
+    // optimistic UI, then persist via Overseerr (no-op in mock) and reconcile
+    setActed((a) => ({ ...a, [id]: action === "approve" ? "approved" : "declined" }));
+    void reviewRequest(id, action).then(() => refresh());
+  };
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
@@ -180,7 +186,13 @@ export function Requests() {
           mode={reqModal.mode}
           request={reqModal.request}
           onClose={() => setReqModal(null)}
-          onSubmit={(pick: DiscoverItem) => flash(`Requested “${pick.title}” — pending approval`)}
+          onSubmit={(pick: DiscoverItem, _quality: string, seasons: Record<number, boolean>) => {
+            const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
+            void submitRequest(pick, picked).then((r) => {
+              flash(r.message);
+              refresh();
+            });
+          }}
           onAct={onAct}
         />
       )}

@@ -27,14 +27,17 @@ secrets — no code changes.
 | Live data | `/api/snapshot` polled by the client; now-playing/status stay fresh |
 | Cover art | Tautulli/Jellyfin proxy (`/api/artwork`) with placeholder fallback |
 | Embedding | Real `<iframe>` + Traefik `frame-ancestors` middleware + Authentik forward-auth (`docs/EMBEDDING.md`) |
-| Admin | Functional, persisted visibility matrix; `setServiceSecret`/`upsertService` server actions |
+| Admin | Add/edit/remove **service modal** (wired to `upsertService`/`setServiceSecret`/`deleteService`), persisted visibility matrix |
+| Requests | **Request modal** (member discover→confirm→submit) + **review modal** (admin approve/decline); real Overseerr search/create/review when configured |
 | Deploy | Standalone Dockerfile + `docker-compose.yml` behind Traefik; `.env.example` |
 
-**Remaining (flagged — beyond the exported design, need a small forms/UX pass):**
-add/edit-service modal & API-key entry UI (server actions already exist; the
-design's Admin buttons are non-functional placeholders), DB-mirrored members +
-Tautulli library-stat wiring, and the live **embedding spike** on your infra
-(`docs/EMBEDDING.md`).
+**Remaining / coded-not-verified:** the integration clients (Tautulli, Jellyfin,
+Overseerr search/request/review, Gatus, Prometheus, *arr) are implemented but only
+exercised against the **mock fallback** — they're unverified against live upstreams
+until you point them at real hosts. Per-user request **attribution** in Overseerr
+needs `account_links.overseerrUserId` populated (set up the Plex source in Authentik
+first), and the member "My Requests" filter assumes the mock `you` id. Finally, the
+live **embedding spike** (`docs/EMBEDDING.md`) must run on your infra.
 
 ## Configure for production
 

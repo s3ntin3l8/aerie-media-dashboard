@@ -7,7 +7,7 @@
 import "server-only";
 import { fetchJson, IntegrationError } from "./http";
 import { getServiceCredentials } from "./registry";
-import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem } from "@/lib/types";
+import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -261,6 +261,64 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
     requested: r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
     poster: String(r.media?.tmdbId ?? ""),
   }));
+}
+
+// ── Overseerr — discover/search + request create/approve/decline ──
+interface OverseerrSearchResult {
+  id: number;
+  mediaType: "movie" | "tv" | "person";
+  title?: string;
+  name?: string;
+  releaseDate?: string;
+  firstAirDate?: string;
+  voteAverage?: number;
+  overview?: string;
+  mediaInfo?: { status?: number };
+}
+
+// Overseerr MediaStatus → our request state.
+function mediaStatusToState(status?: number): RequestStatus | null {
+  if (status === 5 || status === 4) return "available";
+  if (status === 3) return "approved";
+  if (status === 2) return "pending";
+  return null;
+}
+
+export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const data = await fetchJson<{ results: OverseerrSearchResult[] }>(
+    `${baseUrl}/api/v1/search?query=${encodeURIComponent(query || "a")}&page=1&language=en`,
+    { service: "overseerr", headers: { "X-Api-Key": apiKey } },
+  );
+  return (data.results ?? [])
+    .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")
+    .slice(0, 20)
+    .map((r) => {
+      const date = r.releaseDate || r.firstAirDate || "";
+      return {
+        id: String(r.id), // tmdbId
+        title: r.title || r.name || `#${r.id}`,
+        kind: r.mediaType === "tv" ? "series" : "movie",
+        year: date ? Number(date.slice(0, 4)) : 0,
+        rating: r.voteAverage ? Math.round(r.voteAverage * 10) / 10 : 0,
+        // season count isn't in search results → leave undefined (picker hidden, submit = all)
+        state: mediaStatusToState(r.mediaInfo?.status),
+        overview: r.overview || "",
+      } satisfies DiscoverItem;
+    });
+}
+
+export async function overseerrCreateRequest(input: { tmdbId: number; mediaType: "movie" | "tv"; seasons?: number[]; userId?: number }): Promise<void> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const body: Record<string, unknown> = { mediaType: input.mediaType, mediaId: input.tmdbId };
+  if (input.mediaType === "tv") body.seasons = input.seasons && input.seasons.length ? input.seasons : "all";
+  if (input.userId) body.userId = input.userId;
+  await fetchJson(`${baseUrl}/api/v1/request`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body });
+}
+
+export async function overseerrReview(requestId: number, action: "approve" | "decline"): Promise<void> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  await fetchJson(`${baseUrl}/api/v1/request/${requestId}/${action}`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey } });
 }
 
 // ── *arr (Sonarr / Radarr) — download queue ────────────────

@@ -11,7 +11,7 @@ import type { DiscoverItem, MediaRequest, RequestStatus, User } from "@/lib/type
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { useData } from "@/components/portal/DataProvider";
-import { DISCOVER, QUALITY_PROFILES } from "@/lib/mock/data";
+import { QUALITY_PROFILES } from "@/lib/mock/data";
 
 const RQ_TONE: Record<string, string> = { available: "originator-own", approved: "originator-court", pending: "amber", declined: "error" };
 const RQ_LABEL: Record<string, string> = { available: "In library", approved: "Approved", pending: "Requested", declined: "Declined" };
@@ -28,8 +28,29 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
     setTimeout(() => inputRef.current?.focus(), 40);
   }, []);
   const atQuota = me.reqUsed >= me.reqQuota;
-  const ql = q.trim().toLowerCase();
-  const results = DISCOVER.filter((d) => !ql || d.title.toLowerCase().includes(ql));
+
+  // Type-ahead against /api/discover (real Overseerr search, or mock catalog),
+  // debounced with an AbortController so superseded keystrokes cancel.
+  const [results, setResults] = useState<DiscoverItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/discover?q=${encodeURIComponent(q)}`, { signal: ctrl.signal, cache: "no-store" });
+        if (res.ok) setResults((await res.json()) as DiscoverItem[]);
+      } catch {
+        /* aborted or failed — keep last results */
+      } finally {
+        setLoading(false);
+      }
+    }, 220);
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+    };
+  }, [q]);
 
   return (
     <>
@@ -57,7 +78,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
           </div>
         )}
         {results.length === 0 ? (
-          <div style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "var(--on-surface-variant)" }}>No titles match &ldquo;{q}&rdquo;.</div>
+          <div style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "var(--on-surface-variant)" }}>{loading ? "Searching…" : <>No titles match &ldquo;{q}&rdquo;.</>}</div>
         ) : (
           results.map((d) => {
             const inLib = d.state === "available";
