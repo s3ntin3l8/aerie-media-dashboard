@@ -85,7 +85,7 @@ and the verbatim token system. Compare against `design/screenshots/` —
 
 The design-time "Tweaks" panel was intentionally dropped; the committed defaults
 are locked (dark theme, command layout, spotlight central, stripe tiles, heartbeat
-status viz). See `.claude/plans/` for the full plan and locked decisions.
+status viz).
 
 ## Contributing / quality gates
 
