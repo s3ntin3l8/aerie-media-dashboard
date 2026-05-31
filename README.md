@@ -10,16 +10,37 @@ design (see `design/`).
 
 ## Status
 
-**Phase: pixel-faithful frontend on mock data** (Build Order step 2 of the plan).
-All screens render against `lib/mock/data.ts`; real auth + integrations come next.
+**All plan milestones implemented.** The app runs today on mock data with zero
+config (dev mode), and switches to real services + OIDC purely via env + stored
+secrets — no code changes.
 
-| Done | Next |
+| Area | State |
 |---|---|
-| Design-token CSS ported verbatim (`styles/`) | Auth.js ↔ Authentik OIDC + RBAC |
-| All primitives + panels + views | Real integration clients (Tautulli, Overseerr, Gatus, …) |
-| Routes: Home, Services, Service embed/launch, Requests, Status, Admin, Login | SQLite + Drizzle, encrypted secrets |
-| Dark/light theme, ⌘K palette, keyboard nav, admin/member preview | Real cover art, now-playing polling |
-| Responsive layout hooks | Traefik embed middleware + Docker deploy |
+| Frontend | Pixel-faithful AERIE recreation; dark/light, ⌘K palette, keyboard nav, admin/member preview, responsive |
+| Auth | Auth.js v5 ↔ Authentik OIDC; role from `groups` claim (`admins`→admin); route protection; dev bypass |
+| Persistence | SQLite + Drizzle (services, secrets, groups, visibility, users, links, prefs); migrations + seed |
+| Secrets | AES-256-GCM at rest (`ENCRYPTION_KEY`) |
+| Integrations | Gatus, Tautulli, Jellyfin, Overseerr, Sonarr/Radarr, Prometheus clients; `Promise.allSettled` facade with per-panel mock fallback |
+| Live data | `/api/snapshot` polled by the client; now-playing/status stay fresh |
+| Cover art | Tautulli/Jellyfin proxy (`/api/artwork`) with placeholder fallback |
+| Embedding | Real `<iframe>` + Traefik `frame-ancestors` middleware + Authentik forward-auth (`docs/EMBEDDING.md`) |
+| Admin | Functional, persisted visibility matrix; `setServiceSecret`/`upsertService` server actions |
+| Deploy | Standalone Dockerfile + `docker-compose.yml` behind Traefik; `.env.example` |
+
+**Remaining (flagged — beyond the exported design, need a small forms/UX pass):**
+add/edit-service modal & API-key entry UI (server actions already exist; the
+design's Admin buttons are non-functional placeholders), DB-mirrored members +
+Tautulli library-stat wiring, and the live **embedding spike** on your infra
+(`docs/EMBEDDING.md`).
+
+## Configure for production
+
+1. `cp .env.example .env` and fill in Authentik OIDC creds, `AUTH_SECRET`, `ENCRYPTION_KEY`.
+2. `npm run db:migrate && npm run db:seed` (or let the runtime bootstrap do it).
+3. Enter each service's API key in **Admin → Services** (stored encrypted) to light
+   up live data; services without a key keep showing mock/placeholder data.
+4. Deploy with `docker compose up -d` behind Traefik; apply the embed +
+   forward-auth middlewares to embeddable services (see `docs/EMBEDDING.md`).
 
 ## Develop
 

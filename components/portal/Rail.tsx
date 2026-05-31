@@ -29,107 +29,85 @@ export function BrandBadge({ size = 28 }: { size?: number }) {
   );
 }
 
-export function Rail() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut } = usePortal();
-  const { services, requests } = useData();
+function RailNav({
+  icon,
+  label,
+  href,
+  active,
+  badge = 0,
+  badgeTone = "error",
+  onNavigate,
+}: {
+  icon: string;
+  label: string;
+  href: string;
+  active: boolean;
+  badge?: number;
+  badgeTone?: string;
+  onNavigate: (href: string) => void;
+}) {
+  return (
+    <RailTip label={label}>
+      <a
+        onClick={() => onNavigate(href)}
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          cursor: "pointer",
+          color: active ? "var(--primary)" : "var(--on-surface-variant)",
+          background: active ? "color-mix(in srgb, var(--primary) 12%, transparent)" : "transparent",
+          transition: "color .2s, background .2s",
+        }}
+        onMouseEnter={(e) => {
+          if (!active) {
+            e.currentTarget.style.background = "color-mix(in srgb, var(--surface-container-high) 70%, transparent)";
+            e.currentTarget.style.color = "var(--primary)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!active) {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--on-surface-variant)";
+          }
+        }}
+      >
+        {active && <span style={{ position: "absolute", left: -8, top: 9, bottom: 9, width: 2.5, borderRadius: 9999, background: "var(--primary)" }} />}
+        <Icon name={icon} size={20} fill={active} />
+        {badge > 0 && (
+          <span
+            style={{
+              position: "absolute",
+              top: -2,
+              right: -2,
+              minWidth: 16,
+              height: 16,
+              padding: "0 4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: `var(--${badgeTone})`,
+              color: "#fff",
+              fontSize: 9,
+              fontWeight: 800,
+              borderRadius: 9999,
+              border: "2px solid var(--surface-lowest)",
+            }}
+          >
+            {badge}
+          </span>
+        )}
+      </a>
+    </RailTip>
+  );
+}
 
-  const me = user;
-  const downCount = services.filter((s) => s.status === "down").length;
-  const pendingCount = requests.filter((r) => r.status === "pending").length;
-
-  const isActive = (id: string) => {
-    if (id === "home") return pathname === "/";
-    if (id === "launch") return pathname === "/services" || pathname.startsWith("/s/");
-    if (id === "requests") return pathname.startsWith("/requests");
-    if (id === "status") return pathname.startsWith("/status");
-    if (id === "admin") return pathname.startsWith("/admin");
-    return false;
-  };
-
-  const NavItem = ({
-    icon,
-    label,
-    id,
-    href,
-    badge = 0,
-    badgeTone = "error",
-    adminOnly,
-  }: {
-    icon: string;
-    label: string;
-    id: string;
-    href: string;
-    badge?: number;
-    badgeTone?: string;
-    adminOnly?: boolean;
-  }) => {
-    if (adminOnly && role !== "admin") return null;
-    const active = isActive(id);
-    return (
-      <RailTip label={label}>
-        <a
-          onClick={() => router.push(href)}
-          style={{
-            position: "relative",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            cursor: "pointer",
-            color: active ? "var(--primary)" : "var(--on-surface-variant)",
-            background: active ? "color-mix(in srgb, var(--primary) 12%, transparent)" : "transparent",
-            transition: "color .2s, background .2s",
-          }}
-          onMouseEnter={(e) => {
-            if (!active) {
-              e.currentTarget.style.background = "color-mix(in srgb, var(--surface-container-high) 70%, transparent)";
-              e.currentTarget.style.color = "var(--primary)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!active) {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = "var(--on-surface-variant)";
-            }
-          }}
-        >
-          {active && (
-            <span style={{ position: "absolute", left: -8, top: 9, bottom: 9, width: 2.5, borderRadius: 9999, background: "var(--primary)" }} />
-          )}
-          <Icon name={icon} size={20} fill={active} />
-          {badge > 0 && (
-            <span
-              style={{
-                position: "absolute",
-                top: -2,
-                right: -2,
-                minWidth: 16,
-                height: 16,
-                padding: "0 4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: `var(--${badgeTone})`,
-                color: "#fff",
-                fontSize: 9,
-                fontWeight: 800,
-                borderRadius: 9999,
-                border: "2px solid var(--surface-lowest)",
-              }}
-            >
-              {badge}
-            </span>
-          )}
-        </a>
-      </RailTip>
-    );
-  };
-
-  const Ctrl = ({ icon, label, onClick, kbd, active }: { icon: string; label: string; onClick: () => void; kbd?: string; active?: boolean }) => (
+function RailCtrl({ icon, label, onClick, kbd, active }: { icon: string; label: string; onClick: () => void; kbd?: string; active?: boolean }) {
+  return (
     <RailTip label={label} kbd={kbd}>
       <button
         onClick={onClick}
@@ -159,6 +137,27 @@ export function Rail() {
       </button>
     </RailTip>
   );
+}
+
+export function Rail() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut } = usePortal();
+  const { services, requests } = useData();
+
+  const me = user;
+  const downCount = services.filter((s) => s.status === "down").length;
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+  const go = (href: string) => router.push(href);
+
+  const isActive = (id: string) => {
+    if (id === "home") return pathname === "/";
+    if (id === "launch") return pathname === "/services" || pathname.startsWith("/s/");
+    if (id === "requests") return pathname.startsWith("/requests");
+    if (id === "status") return pathname.startsWith("/status");
+    if (id === "admin") return pathname.startsWith("/admin");
+    return false;
+  };
 
   return (
     <aside
@@ -182,32 +181,33 @@ export function Rail() {
         </RailTip>
       </div>
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 4 }}>
-        <NavItem icon="dashboard" label="Dashboard" id="home" href="/" />
-        <NavItem icon="apps" label="Services" id="launch" href="/services" />
-        <NavItem
+        <RailNav icon="dashboard" label="Dashboard" href="/" active={isActive("home")} onNavigate={go} />
+        <RailNav icon="apps" label="Services" href="/services" active={isActive("launch")} onNavigate={go} />
+        <RailNav
           icon="bookmark_added"
           label="My Requests"
-          id="requests"
           href="/requests"
+          active={isActive("requests")}
           badge={role === "admin" ? pendingCount : 0}
           badgeTone="originator-court"
+          onNavigate={go}
         />
-        <NavItem icon="favorite" label="Status" id="status" href="/status" />
+        <RailNav icon="favorite" label="Status" href="/status" active={isActive("status")} onNavigate={go} />
         <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
-        <NavItem icon="tune" label="Admin" id="admin" href="/admin" adminOnly badge={downCount} />
+        {role === "admin" && <RailNav icon="tune" label="Admin" href="/admin" active={isActive("admin")} badge={downCount} onNavigate={go} />}
       </nav>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingBottom: 14 }}>
-        <Ctrl icon="search" label="Search & Commands" onClick={() => setPaletteOpen(true)} kbd="⌘K" />
+        <RailCtrl icon="search" label="Search & Commands" onClick={() => setPaletteOpen(true)} kbd="⌘K" />
         {realRole === "admin" && (
-          <Ctrl
+          <RailCtrl
             icon={role === "admin" ? "admin_panel_settings" : "person"}
             label={`View as: ${role === "admin" ? "Admin" : "Friend"} — click to switch`}
             onClick={toggleRole}
             active={role === "admin"}
           />
         )}
-        <Ctrl icon={theme === "dark" ? "light_mode" : "dark_mode"} label="Toggle theme" onClick={toggleTheme} kbd="⌘D" />
-        <Ctrl icon="logout" label="Sign out" onClick={signOut} />
+        <RailCtrl icon={theme === "dark" ? "light_mode" : "dark_mode"} label="Toggle theme" onClick={toggleTheme} kbd="⌘D" />
+        <RailCtrl icon="logout" label="Sign out" onClick={signOut} />
         <RailTip label={`${me.name}${me.email ? ` · ${me.email}` : ""}`}>
           <div style={{ marginTop: 2, cursor: "pointer" }}>
             <Avatar name={me.name} size={32} you />

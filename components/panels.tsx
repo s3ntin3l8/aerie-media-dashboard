@@ -4,7 +4,7 @@
 // stripe tiles, heartbeat status). Variant switchers from the
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { Role, Service, ServiceStatus } from "@/lib/types";
 import { useData } from "@/components/portal/DataProvider";
 import {
@@ -22,14 +22,14 @@ import {
 
 type CSS = React.CSSProperties;
 
-// shared ticking clock for live progress
+// shared ticking clock (epoch ms) for live progress
 export function useTick(ms = 1000) {
-  const [, setN] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setN((n) => n + 1), ms);
+    const t = setInterval(() => setNow(Date.now()), ms);
     return () => clearInterval(t);
   }, [ms]);
-  return Date.now();
+  return now;
 }
 
 export function fmtTime(totalSec: number) {
@@ -124,9 +124,9 @@ const SeeAll = ({ onClick }: { onClick?: () => void }) => (
 // ── NOW PLAYING ───────────────────────────────────────────
 export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolean; onAll?: () => void }) {
   const { nowPlaying, services: allServices, users } = useData();
-  useTick(1000);
-  const t0 = useRef(Date.now()).current;
-  const elapsed = (Date.now() - t0) / 1000;
+  const now = useTick(1000);
+  const [t0] = useState(() => Date.now());
+  const elapsed = (now - t0) / 1000;
   let streams = nowPlaying;
   if (role !== "admin") streams = streams.filter((s) => s.user === "you");
   const visible = streams;

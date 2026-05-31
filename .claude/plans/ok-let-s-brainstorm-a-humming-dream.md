@@ -200,3 +200,26 @@ prototype's exact dimensions/colors, made responsive.
 ## Still to gather during build
 - Per-service base URLs + API keys/tokens (entered via Admin UI or `.env`, encrypted at rest).
 - Exact Gatus endpoint + Prometheus base URL for the status/metrics panels.
+
+## Implementation status (complete)
+All build-order steps implemented and committed (6 commits). Build + typecheck +
+lint green; dev/mock server renders all routes and makes zero network calls.
+- **0 Init**: Next.js 16 (App Router, TS), repo initialised.
+- **1 Embedding**: real `<iframe>` + Traefik `frame-ancestors`/forward-auth
+  middleware + `docs/EMBEDDING.md` (the live Safari/Chrome spike runs on the
+  user's infra).
+- **2 Frontend**: pixel-faithful AERIE recreation (tokens/fonts verbatim, all
+  screens, ⌘K, themes, responsive).
+- **3 Auth**: Auth.js v5 ↔ Authentik OIDC, role from `groups`, route protection,
+  dev bypass.
+- **4 Integrations + DB**: SQLite/Drizzle + AES-GCM secrets; Gatus/Tautulli/
+  Jellyfin/Overseerr/*arr/Prometheus clients; `getSnapshot()` facade with per-panel
+  mock fallback; `/api/snapshot` polling; `/api/artwork` cover-art proxy.
+- **5 Admin + deploy**: functional persisted visibility matrix + secret/service
+  server actions; standalone Dockerfile + docker-compose + `.env.example`.
+
+### Flagged remaining (beyond the exported design — need a small forms/UX pass)
+- Add/edit-service modal + API-key entry UI (server actions exist; the design's
+  Admin buttons are non-functional placeholders).
+- DB-mirrored members + Tautulli library-stat wiring (currently mock).
+- Run the live embedding spike on the real boxes (`docs/EMBEDDING.md`).
