@@ -45,3 +45,6 @@ next-env.d.ts
 
 # local sqlite data
 /data
+
+# local service config (keep the .example, ignore the real one)
+/config/aerie.yaml
