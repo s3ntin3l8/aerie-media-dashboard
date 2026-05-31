@@ -48,3 +48,6 @@ next-env.d.ts
 
 # local service config (keep the .example, ignore the real one)
 /config/aerie.yaml
+
+# design prototype (local reference only; not shipped)
+/design/prototype/

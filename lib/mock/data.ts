@@ -69,7 +69,7 @@ export const REQUESTS: MediaRequest[] = [
 ];
 
 export const USERS: User[] = [
-  { id: "you", name: "Björn", handle: "bjoern", role: "admin", email: "bjoern@aerie.tv", linked: true, groups: ["admins"], reqUsed: 2, reqQuota: 10, watching: "np3" },
+  { id: "you", name: "Dev User", handle: "dev", role: "admin", email: "dev@aerie.tv", linked: true, groups: ["admins"], reqUsed: 2, reqQuota: 10, watching: "np3" },
   { id: "marco", name: "Marco", handle: "marco", role: "user", email: "marco@gmail.com", linked: true, groups: ["friends"], reqUsed: 4, reqQuota: 5, watching: "np1" },
   { id: "lena", name: "Lena", handle: "lena", role: "user", email: "lena@gmail.com", linked: true, groups: ["friends"], reqUsed: 1, reqQuota: 5, watching: "np2" },
   { id: "theo", name: "Theo", handle: "theo", role: "user", email: "theo@proton.me", linked: false, groups: ["friends"], reqUsed: 3, reqQuota: 5, watching: "np4" },

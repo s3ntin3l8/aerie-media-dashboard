@@ -10,8 +10,8 @@ import type { AppUser } from "@/lib/types";
 
 const DEV_USER: AppUser = {
   id: "you",
-  name: "Björn",
-  email: "bjoern@aerie.tv",
+  name: "Dev User",
+  email: "dev@aerie.tv",
   role: "admin",
   groups: [env.adminGroup],
 };

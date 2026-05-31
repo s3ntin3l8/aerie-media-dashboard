@@ -69,7 +69,7 @@ degrade gracefully rather than throwing. Nothing in `env` is exposed to the clie
   unauthenticated requests to `/login` and blocks non-admins from `/admin` (defence in depth;
   also re-checked in the page).
 - `lib/session.ts` — `getSessionUser()` is the server-side entry point. Returns a hardcoded
-  dev admin (`Björn`) in mock mode; otherwise the real session user, and best-effort
+  dev admin (`Dev User`) in mock mode; otherwise the real session user, and best-effort
   **mirrors** the user into the `users` table on each request.
 
 ### Data flow: server snapshot → client polling
