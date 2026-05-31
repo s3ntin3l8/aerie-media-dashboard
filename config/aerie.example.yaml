@@ -1,0 +1,152 @@
+# ============================================================
+# AERIE — declarative service config (example)
+#
+# Copy this to config/aerie.yaml (or point AERIE_CONFIG_FILE elsewhere)
+# to define your services without using the Admin UI:
+#   cp config/aerie.example.yaml config/aerie.yaml
+#
+# How it's applied (see lib/config/apply.ts):
+#   • On boot this file is reconciled into the DB as a *gap-fill* — it
+#     only inserts services / secrets / visibility that don't already
+#     exist. Anything you've edited in the Admin UI always wins and is
+#     never overwritten, so the file is safe to re-apply on every boot.
+#   • A service goes "live" only once it has an apiKey; without one it
+#     shows mock/placeholder data (graceful degradation).
+#
+# Secrets: never put raw keys here. Reference an env var as ${VAR} and
+# set it in your .env / compose file. An unset var resolves to empty,
+# which just leaves that service unconfigured (mock data).
+# ============================================================
+
+services:
+  # ── Streaming ──────────────────────────────────────────────
+  - id: plex
+    name: Plex
+    cat: stream
+    icon: play_circle
+    host: app.plex.tv
+    embeddable: false
+    central: true
+    centralLabel: Stream
+    note: "External · launch only"
+
+  - id: jellyfin
+    name: Jellyfin
+    cat: stream
+    icon: smart_display
+    host: jellyfin.aerie.tv
+    embeddable: true
+    central: true
+    centralLabel: Stream
+    note: "Embeds in portal"
+    apiKey: ${JELLYFIN_API_KEY}
+
+  # ── Requests ───────────────────────────────────────────────
+  - id: overseerr
+    name: Overseerr
+    cat: request
+    icon: playlist_add
+    host: requests.aerie.tv
+    embeddable: true
+    central: true
+    centralLabel: Requests
+    note: "Per-user requests"
+    apiKey: ${OVERSEERR_API_KEY}
+
+  # ── Automation ─────────────────────────────────────────────
+  - id: sonarr
+    name: Sonarr
+    cat: automation
+    icon: live_tv
+    host: sonarr.aerie.tv
+    embeddable: true
+    note: "TV automation"
+    apiKey: ${SONARR_API_KEY}
+
+  - id: radarr
+    name: Radarr
+    cat: automation
+    icon: movie
+    host: radarr.aerie.tv
+    embeddable: true
+    note: "Movie automation"
+    apiKey: ${RADARR_API_KEY}
+
+  - id: prowlarr
+    name: Prowlarr
+    cat: automation
+    icon: travel_explore
+    host: prowlarr.aerie.tv
+    embeddable: true
+    note: "Indexer manager"
+    apiKey: ${PROWLARR_API_KEY}
+
+  - id: qbittorrent
+    name: qBittorrent
+    cat: automation
+    icon: downloading
+    host: qbit.aerie.tv
+    embeddable: true
+    note: "Download client"
+    apiKey: ${QBITTORRENT_API_KEY}
+
+  # ── Monitoring ─────────────────────────────────────────────
+  - id: tautulli
+    name: Tautulli
+    cat: monitor
+    icon: monitoring
+    host: tautulli.aerie.tv
+    embeddable: true
+    note: "Plex stats"
+    apiKey: ${TAUTULLI_API_KEY}
+
+  - id: jellystat
+    name: Jellystat
+    cat: monitor
+    icon: insights
+    host: jellystat.aerie.tv
+    embeddable: true
+    note: "Jellyfin stats"
+    apiKey: ${JELLYSTAT_API_KEY}
+
+  - id: gatus
+    name: Gatus
+    cat: monitor
+    icon: favorite
+    host: status.aerie.tv
+    embeddable: true
+    note: "Status engine"
+    # Optional — only needed if your Gatus API requires a bearer token.
+    apiKey: ${GATUS_API_KEY}
+
+  - id: prometheus
+    name: Prometheus
+    cat: monitor
+    icon: query_stats
+    host: metrics.aerie.tv
+    embeddable: true
+    note: "Metrics · admin"
+    # Optional — only needed if Prometheus is behind bearer auth.
+    apiKey: ${PROMETHEUS_API_KEY}
+
+  # ── Infra ──────────────────────────────────────────────────
+  - id: authentik
+    name: Authentik
+    cat: infra
+    icon: shield_person
+    host: auth.aerie.tv
+    embeddable: false
+    note: "Identity · OIDC"
+
+# ── Visibility (optional) ────────────────────────────────────
+# Which group can see which service. Omit to use AERIE's defaults
+# (admins: all; friends: all but infra/prometheus; guests: streaming).
+# Groups referenced here must exist (admins/friends/guests are seeded).
+# visibility:
+#   - { serviceId: prometheus, groupName: friends, visible: false }
+#   - { serviceId: jellyfin,   groupName: guests,  visible: true }
+
+# ── Groups (optional) ────────────────────────────────────────
+# Extra visibility groups beyond the seeded admins/friends/guests.
+# groups:
+#   - { name: family, label: Family }

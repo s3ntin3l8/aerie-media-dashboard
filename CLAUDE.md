@@ -106,9 +106,21 @@ on the `Snapshot` type.
 - `schema.ts` — stores **config only** (services, encrypted secrets, groups, visibility matrix,
   mirrored users, account links, prefs). Runtime health/stats are read live and **never**
   stored. Default DB is `file:./data/aerie.db` (gitignored).
-- `client.ts` — Drizzle client + `schema` re-export. `bootstrap.ts` — lazy migrate+seed
-  (`ensureDb()`, cached per process). `seed.ts` — seeds from mock data.
+- `client.ts` — Drizzle client + `schema` re-export. `bootstrap.ts` — lazy migrate, then apply
+  the optional config file, then seed (`ensureDb()`, cached per process). `seed.ts` — seeds from
+  mock data (the fallback when neither a config file nor existing rows populate the table).
 - Migrations live in `drizzle/` (generated SQL + meta). Edit `schema.ts`, then `db:generate`.
+
+### Declarative config file (`lib/config/`, optional)
+
+A third config source beside the mock seed and the Admin UI: a YAML file (default
+`./config/aerie.yaml`, overridable via `AERIE_CONFIG_FILE`) can declare services, visibility
+and secrets so a deployment is provisioned without clicking through the UI. `services.ts`
+loads + validates it (zod) and resolves `${ENV_VAR}` secret references from `process.env`;
+`apply.ts` reconciles it into the DB at bootstrap. It's **gap-fill only** — every insert uses
+`onConflictDoNothing`, so existing rows (mock seed or UI edits) always win and the apply is
+idempotent across reboots. A missing/malformed file degrades gracefully (logs a warning, never
+throws). See `config/aerie.example.yaml`.
 
 ### Secrets (`lib/crypto.ts`)
 

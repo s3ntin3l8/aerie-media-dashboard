@@ -22,6 +22,10 @@ export const env = {
   /** 32-byte hex/base64 key for AES-256-GCM service-secret encryption. */
   encryptionKey: trim(process.env.ENCRYPTION_KEY),
 
+  // ── Declarative config ──
+  /** Path to the optional YAML file that defines services/visibility/secrets. */
+  configFile: trim(process.env.AERIE_CONFIG_FILE) || "./config/aerie.yaml",
+
   // ── Branding / deployment ──
   brand: trim(process.env.AERIE_BRAND) || "AERIE",
   portalUrl: trim(process.env.AERIE_PORTAL_URL) || "https://media.s3ntin3l8.de",
