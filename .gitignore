@@ -43,6 +43,9 @@ next-env.d.ts
 # local agent state
 /.claude/
 
+# local docker-compose overrides (personal settings)
+docker-compose.override.yml
+
 # local sqlite data
 /data
 

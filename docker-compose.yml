@@ -6,8 +6,7 @@
 # ============================================================
 services:
   aerie:
-    build: .
-    # image: ghcr.io/you/aerie:latest   # or pin a built image
+    image: ghcr.io/you/aerie:latest # or pin a built image
     restart: unless-stopped
     env_file: .env
     environment:
@@ -15,7 +14,7 @@ services:
       DATABASE_URL: file:/app/data/aerie.db
     volumes:
       - aerie-data:/app/data
-    networks: [proxy]
+    networks: [ proxy ]
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
@@ -26,14 +25,10 @@ services:
       # The portal authenticates via OIDC itself; forward-auth optional here.
 
       # ── Reusable middlewares (attach to embeddable services) ──
-      # 1) Allow framing only from the portal origin (replaces X-Frame-Options).
+      # Allow framing only from the portal origin (replaces X-Frame-Options).
+      # Forward-auth comes from the Traefik file provider: forwardAuth-authentik@file
       - traefik.http.middlewares.aerie-embed.headers.contentSecurityPolicy=frame-ancestors ${AERIE_PORTAL_URL:-http://localhost:3000}
       - traefik.http.middlewares.aerie-embed.headers.customResponseHeaders.X-Frame-Options=
-      # 2) Authentik forward-auth (point at your Authentik outpost address).
-      - traefik.http.middlewares.authentik.forwardauth.address=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
-      - traefik.http.middlewares.authentik.forwardauth.trustForwardHeader=true
-      - traefik.http.middlewares.authentik.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid
-
   # ── Example: an embeddable upstream service ───────────────────
   # Apply BOTH middlewares so the portal can iframe it with SSO:
   #
@@ -45,7 +40,7 @@ services:
   #       - traefik.http.routers.radarr.rule=Host(`radarr.example.com`)
   #       - traefik.http.routers.radarr.entrypoints=websecure
   #       - traefik.http.routers.radarr.tls.certresolver=le
-  #       - traefik.http.routers.radarr.middlewares=authentik@docker,aerie-embed@docker
+  #       - traefik.http.routers.radarr.middlewares=forwardAuth-authentik@file,aerie-embed@docker
   #       - traefik.http.services.radarr.loadbalancer.server.port=7878
 
 volumes:

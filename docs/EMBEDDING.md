@@ -23,7 +23,7 @@ before relying on embedding.**
    traefik.http.middlewares.aerie-embed.headers.customResponseHeaders.X-Frame-Options=
    ```
 
-   Attach `aerie-embed@docker` **and** `authentik@docker` (forward-auth) to each
+   Attach `aerie-embed@docker` **and** `forwardAuth-authentik@file` (forward-auth) to each
    embeddable service's router. See `docker-compose.yml` for the labels.
 
 ## The spike (run before trusting embedding)
