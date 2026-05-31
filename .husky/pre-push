@@ -1,0 +1,2 @@
+echo "▶ pre-push: typecheck + lint + build"
+npm run typecheck && npm run lint && npm run build

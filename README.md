@@ -1,5 +1,8 @@
 # AERIE — Media Command Center
 
+[![CI](https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-informational.svg)](./LICENSE)
+
 A private media portal for self-hosted services (Plex, Jellyfin, Overseerr, the
 *arr suite, Tautulli/Jellystat, Gatus, Prometheus), exposed behind Traefik and
 authenticated through Authentik (OIDC). One vantage point to reach every service,
@@ -83,3 +86,21 @@ and the verbatim token system. Compare against `design/screenshots/` —
 The design-time "Tweaks" panel was intentionally dropped; the committed defaults
 are locked (dark theme, command layout, spotlight central, stripe tiles, heartbeat
 status viz). See `.claude/plans/` for the full plan and locked decisions.
+
+## Contributing / quality gates
+
+- **CI** (`.github/workflows/ci.yml`): lint → typecheck → build, plus a Docker
+  image build, on every push and PR to `main`.
+- **pre-commit** (Husky + lint-staged): `eslint --fix` on staged files.
+- **pre-push** (Husky): `npm run typecheck && npm run lint && npm run build`.
+
+```bash
+npm install        # installs hooks via the prepare script
+npm run lint
+npm run typecheck
+npm run build
+```
+
+## License
+
+[MIT](./LICENSE) © 2026 Björn ([s3ntin3l8](https://github.com/s3ntin3l8))
