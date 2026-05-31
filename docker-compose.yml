@@ -12,6 +12,12 @@ services:
     environment:
       AERIE_PORTAL_URL: ${AERIE_PORTAL_URL:-http://localhost:3000}
       DATABASE_URL: file:/app/data/aerie.db
+      # Auth.js builds OIDC callback/redirect URLs from this. Behind a reverse
+      # proxy it otherwise mis-detects the host as the container's internal
+      # 0.0.0.0:3000, breaking the Authentik callback. Pin it to the public
+      # origin (defaults to the portal URL).
+      AUTH_URL: ${AUTH_URL:-${AERIE_PORTAL_URL:-http://localhost:3000}}
+      AUTH_TRUST_HOST: "true"
     volumes:
       - aerie-data:/app/data
     networks: [ proxy ]

@@ -56,6 +56,24 @@ AERIE_ADMIN_GROUP=admins
 The issuer URL format is always `https://<authentik-host>/application/o/<app-slug>/` — the
 trailing slash is required.
 
+### Behind a reverse proxy: `AUTH_URL` is mandatory
+
+Auth.js builds the OIDC `redirect_uri` and callback URLs from the request host. Behind a
+reverse proxy (Traefik) the app only sees its **internal** address, so without a pin Auth.js
+mis-detects the origin as `http://0.0.0.0:3000` — the login redirect lands on a dead
+`0.0.0.0:3000` URL and the Authentik callback fails (it surfaces as `error=Configuration` /
+`invalid_client`, because the token-exchange `redirect_uri` no longer matches the authorize
+step). Pin the public origin:
+
+```dotenv
+AUTH_URL=https://media.example.com   # must equal AERIE_PORTAL_URL, no trailing slash
+```
+
+With the provided `docker-compose.yml` this is **auto-derived from `AERIE_PORTAL_URL`**
+(and `AUTH_TRUST_HOST=true` is set), so you don't normally set it by hand — just make sure
+`AERIE_PORTAL_URL` is your real external origin. Set `AUTH_URL` explicitly only when running
+outside compose.
+
 `AUTH_SECRET` is mandatory once OIDC is on — Auth.js throws `MissingSecret` without it.
 Generate one with:
 
