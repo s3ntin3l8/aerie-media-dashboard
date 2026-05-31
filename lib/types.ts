@@ -101,3 +101,12 @@ export interface QueueItem {
   eta: string;
   speed: string;
 }
+
+/** The signed-in portal user (from the auth session, or a dev-mode mock). */
+export interface AppUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  groups: string[];
+}

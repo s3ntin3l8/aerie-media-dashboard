@@ -10,9 +10,10 @@ import { Icon, Eyebrow, Heartbeat } from "@/components/primitives";
 import { BrandBadge } from "@/components/portal/Rail";
 import { SERVICES } from "@/lib/mock/data";
 
-export function Login() {
+export function Login({ configured = false, signInAction }: { configured?: boolean; signInAction?: () => Promise<void> }) {
   const router = useRouter();
   const [phase, setPhase] = useState<"idle" | "redirecting">("idle");
+  // Dev/mock mode: simulate the redirect, then land on the dashboard.
   const go = () => {
     setPhase("redirecting");
     setTimeout(() => router.push("/"), 1400);
@@ -81,9 +82,17 @@ export function Login() {
             </p>
           </div>
 
-          <button onClick={go} disabled={phase === "redirecting"} className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "13px 20px", fontSize: 14, opacity: phase === "redirecting" ? 0.7 : 1 }}>
-            <Icon name="shield_person" size={18} /> Continue with Authentik
-          </button>
+          {configured && signInAction ? (
+            <form action={signInAction} style={{ width: "100%" }} onSubmit={() => setPhase("redirecting")}>
+              <button type="submit" disabled={phase === "redirecting"} className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "13px 20px", fontSize: 14, opacity: phase === "redirecting" ? 0.7 : 1 }}>
+                <Icon name="shield_person" size={18} /> Continue with Authentik
+              </button>
+            </form>
+          ) : (
+            <button onClick={go} disabled={phase === "redirecting"} className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "13px 20px", fontSize: 14, opacity: phase === "redirecting" ? 0.7 : 1 }}>
+              <Icon name="shield_person" size={18} /> Continue with Authentik
+            </button>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0" }}>
             <div style={{ flex: 1, height: 1, background: "var(--outline-variant)" }} />

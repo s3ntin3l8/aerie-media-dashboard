@@ -6,7 +6,8 @@
 // ============================================================
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Role } from "@/lib/types";
+import type { AppUser, Role } from "@/lib/types";
+import { signOutAction } from "@/app/(portal)/actions";
 
 type Theme = "dark" | "light";
 
@@ -14,13 +15,16 @@ interface PortalState {
   theme: Theme;
   setTheme: (t: Theme) => void;
   toggleTheme: () => void;
-  /** real role of the signed-in user (from auth, later) */
+  /** the signed-in user (real session or dev mock) */
+  user: AppUser;
+  /** real role of the signed-in user */
   realRole: Role;
   /** effective role after admin "preview as member" toggle */
   role: Role;
   toggleRole: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  signOut: () => void;
 }
 
 const Ctx = createContext<PortalState | null>(null);
@@ -39,8 +43,9 @@ const NAV: Record<string, string> = {
   a: "/admin",
 };
 
-export function PortalProvider({ realRole = "admin", children }: { realRole?: Role; children: React.ReactNode }) {
+export function PortalProvider({ user, children }: { user: AppUser; children: React.ReactNode }) {
   const router = useRouter();
+  const realRole = user.role;
   const [theme, setTheme] = useState<Theme>("dark");
   const [role, setRole] = useState<Role>(realRole);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -66,7 +71,14 @@ export function PortalProvider({ realRole = "admin", children }: { realRole?: Ro
   }, [theme]);
 
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
-  const toggleRole = () => setRole((r) => (r === "admin" ? "user" : "admin"));
+  // Only a real admin may preview the member experience; members can't elevate.
+  const toggleRole = () => {
+    if (realRole !== "admin") return;
+    setRole((r) => (r === "admin" ? "user" : "admin"));
+  };
+  const signOut = () => {
+    void signOutAction();
+  };
 
   // Keyboard shortcuts: ⌘K palette, ⌘D theme, g-then-key navigate, Esc close.
   useEffect(() => {
@@ -109,7 +121,7 @@ export function PortalProvider({ realRole = "admin", children }: { realRole?: Ro
   }, [router]);
 
   return (
-    <Ctx.Provider value={{ theme, setTheme, toggleTheme, realRole, role, toggleRole, paletteOpen, setPaletteOpen }}>
+    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, realRole, role, toggleRole, paletteOpen, setPaletteOpen, signOut }}>
       {children}
     </Ctx.Provider>
   );

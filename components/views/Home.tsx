@@ -6,7 +6,7 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { SERVICES, NOW_PLAYING, PLAYS_24H, USERS } from "@/lib/mock/data";
+import { SERVICES, NOW_PLAYING, PLAYS_24H } from "@/lib/mock/data";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
 import {
   CentralServices,
@@ -66,8 +66,7 @@ function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
   );
 }
 
-function GreetingHeader({ role, onOpenPalette, onRequest }: { role: string; onOpenPalette: () => void; onRequest: () => void }) {
-  const me = USERS.find((u) => u.id === "you")!;
+function GreetingHeader({ role, userName, onOpenPalette, onRequest }: { role: string; userName: string; onOpenPalette: () => void; onRequest: () => void }) {
   const hour = new Date().getHours();
   const greet = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
@@ -82,7 +81,7 @@ function GreetingHeader({ role, onOpenPalette, onRequest }: { role: string; onOp
             </span>
           </div>
           <h1 suppressHydrationWarning style={{ fontFamily: "var(--font-headline)", fontSize: 28, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--on-surface)", whiteSpace: "nowrap" }}>
-            {greet}, {me.name}.
+            {greet}, {userName}.
           </h1>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -98,12 +97,12 @@ function GreetingHeader({ role, onOpenPalette, onRequest }: { role: string; onOp
 
 export function Home() {
   const router = useRouter();
-  const { role, setPaletteOpen } = usePortal();
+  const { role, setPaletteOpen, user } = usePortal();
   const openService = (s: Service) => router.push(`/s/${s.id}`);
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
-      <GreetingHeader role={role} onOpenPalette={() => setPaletteOpen(true)} onRequest={() => router.push("/requests")} />
+      <GreetingHeader role={role} userName={user.name} onOpenPalette={() => setPaletteOpen(true)} onRequest={() => router.push("/requests")} />
       <HealthTicker onOpenStatus={() => router.push("/status")} />
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
         <div className="aerie-page-pad" style={{ maxWidth: 1320, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>

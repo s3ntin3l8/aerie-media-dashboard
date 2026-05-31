@@ -6,7 +6,7 @@ import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Icon, Avatar, RailTip } from "@/components/primitives";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { SERVICES, REQUESTS, USERS } from "@/lib/mock/data";
+import { SERVICES, REQUESTS } from "@/lib/mock/data";
 
 export function BrandBadge({ size = 28 }: { size?: number }) {
   return (
@@ -32,9 +32,9 @@ export function BrandBadge({ size = 28 }: { size?: number }) {
 export function Rail() {
   const router = useRouter();
   const pathname = usePathname();
-  const { role, toggleRole, theme, toggleTheme, setPaletteOpen } = usePortal();
+  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut } = usePortal();
 
-  const me = USERS.find((u) => u.id === "you")!;
+  const me = user;
   const downCount = SERVICES.filter((s) => s.status === "down").length;
   const pendingCount = REQUESTS.filter((r) => r.status === "pending").length;
 
@@ -197,14 +197,17 @@ export function Rail() {
       </nav>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingBottom: 14 }}>
         <Ctrl icon="search" label="Search & Commands" onClick={() => setPaletteOpen(true)} kbd="⌘K" />
-        <Ctrl
-          icon={role === "admin" ? "admin_panel_settings" : "person"}
-          label={`View as: ${role === "admin" ? "Admin" : "Friend"} — click to switch`}
-          onClick={toggleRole}
-          active={role === "admin"}
-        />
+        {realRole === "admin" && (
+          <Ctrl
+            icon={role === "admin" ? "admin_panel_settings" : "person"}
+            label={`View as: ${role === "admin" ? "Admin" : "Friend"} — click to switch`}
+            onClick={toggleRole}
+            active={role === "admin"}
+          />
+        )}
         <Ctrl icon={theme === "dark" ? "light_mode" : "dark_mode"} label="Toggle theme" onClick={toggleTheme} kbd="⌘D" />
-        <RailTip label={`${me.name} · ${me.email}`}>
+        <Ctrl icon="logout" label="Sign out" onClick={signOut} />
+        <RailTip label={`${me.name}${me.email ? ` · ${me.email}` : ""}`}>
           <div style={{ marginTop: 2, cursor: "pointer" }}>
             <Avatar name={me.name} size={32} you />
           </div>
