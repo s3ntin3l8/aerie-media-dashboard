@@ -8,7 +8,7 @@ import type { Service } from "@/lib/types";
 import { CAT, catColor } from "@/lib/mock/data";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
-import { Icon, StatusDot, Pill, Divider, SearchField } from "@/components/primitives";
+import { Icon, StatusDot, Divider, SearchField } from "@/components/primitives";
 import { PageHeader } from "@/components/views/shared";
 
 const CAT_ORDER = ["stream", "request", "automation", "monitor", "infra"] as const;
@@ -135,8 +135,6 @@ export function ServiceView({ s }: { s: Service }) {
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     setLoaded(false);
-    const t = setTimeout(() => setLoaded(true), 900);
-    return () => clearTimeout(t);
   }, [s.id]);
 
   return (
@@ -176,53 +174,26 @@ export function ServiceView({ s }: { s: Service }) {
             </span>
           </div>
           <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "var(--surface-container-low)" }}>
-            {!loaded ? (
-              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
+            {!loaded && (
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, zIndex: 1 }}>
                 <Icon name="sync" size={28} color={c} style={{ animation: "aerieSpin 1s linear infinite" }} />
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface-variant)" }}>Loading embedded session…</span>
               </div>
-            ) : (
-              <EmbeddedMock s={s} c={c} />
             )}
+            {/* Real embed. Traefik must serve this host with a frame-ancestors
+                CSP allowing the portal origin + forward-auth (see docs/EMBEDDING.md). */}
+            <iframe
+              src={`https://${s.host}`}
+              title={`${s.name} (embedded)`}
+              onLoad={() => setLoaded(true)}
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", opacity: loaded ? 1 : 0, transition: "opacity .2s" }}
+            />
           </div>
         </>
       ) : (
         <LaunchScreen s={s} c={c} />
       )}
     </section>
-  );
-}
-
-function EmbeddedMock({ s, c }: { s: Service; c: string }) {
-  return (
-    <div className="custom-scrollbar" style={{ position: "absolute", inset: 0, overflowY: "auto", padding: 24 }}>
-      <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
-          <div style={{ width: 40, height: 40, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${c} 14%, transparent)` }}>
-            <Icon name={s.icon} size={22} color={c} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)" }}>{s.name} — embedded session</div>
-            <div style={{ fontSize: 12, color: "var(--on-surface-variant)" }}>
-              Rendered in-portal via <span style={{ fontFamily: "var(--font-mono)" }}>&lt;iframe&gt;</span>; authenticated by your Authentik cookie through forward-auth.
-            </div>
-          </div>
-          <Pill rawColor={c}>Live</Pill>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 13 }}>
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} style={{ borderRadius: 12, overflow: "hidden", border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
-              <div style={{ height: 92, background: `linear-gradient(135deg, color-mix(in srgb, ${c} ${8 + (i % 4) * 4}%, var(--surface-container-high)), var(--surface-container))` }} />
-              <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ height: 8, width: "80%", borderRadius: 4, background: "color-mix(in srgb, var(--on-surface-variant) 18%, transparent)" }} />
-                <div style={{ height: 8, width: "50%", borderRadius: 4, background: "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)" }} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", paddingTop: 4 }}>— embedded {s.host} —</div>
-      </div>
-    </div>
   );
 }
 

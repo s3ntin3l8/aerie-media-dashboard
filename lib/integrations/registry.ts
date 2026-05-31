@@ -101,3 +101,47 @@ export async function getServiceCredentials(serviceId: string): Promise<ServiceC
 export async function isConfigured(serviceId: string): Promise<boolean> {
   return (await getServiceSecret(serviceId)) != null;
 }
+
+export interface GroupRow {
+  name: string;
+  label: string | null;
+}
+export interface VisibilityRow {
+  serviceId: string;
+  groupName: string;
+  visible: boolean;
+}
+
+const MOCK_GROUPS: GroupRow[] = [
+  { name: "admins", label: "Admins" },
+  { name: "friends", label: "Friends" },
+  { name: "guests", label: "Guests" },
+];
+const MOCK_VIS_RULE: Record<string, (cat: string, id: string) => boolean> = {
+  admins: () => true,
+  friends: (cat, id) => cat !== "infra" && id !== "prometheus",
+  guests: (cat, id) => cat === "stream" || id === "overseerr",
+};
+
+export async function getGroups(): Promise<GroupRow[]> {
+  try {
+    await ensureDb();
+    const rows = await db.select().from(schema.groups);
+    return rows.length ? rows : MOCK_GROUPS;
+  } catch {
+    return MOCK_GROUPS;
+  }
+}
+
+export async function getVisibility(): Promise<VisibilityRow[]> {
+  try {
+    await ensureDb();
+    const rows = await db.select().from(schema.serviceVisibility);
+    if (rows.length) return rows.map((r) => ({ serviceId: r.serviceId, groupName: r.groupName, visible: r.visible }));
+  } catch {
+    /* fall through to mock */
+  }
+  const configs = await getServiceConfigs();
+  return configs.flatMap((c) => MOCK_GROUPS.map((g) => ({ serviceId: c.id, groupName: g.name, visible: MOCK_VIS_RULE[g.name](c.cat, c.id) })));
+}
+

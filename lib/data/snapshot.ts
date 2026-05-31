@@ -9,7 +9,7 @@
 import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, RecentItem, Service, User } from "@/lib/types";
 import { SERVICES as MOCK_SERVICES, NOW_PLAYING, REQUESTS, USERS, LIBRARY, RECENT, QUEUE, PLAYS_24H } from "@/lib/mock/data";
-import { getServiceConfigs, getServiceSecret } from "@/lib/integrations/registry";
+import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import { gatusHealth, tautulliNowPlaying, jellyfinNowPlaying, overseerrRequests, arrQueue, type ServiceHealth } from "@/lib/integrations/clients";
 
 export interface Snapshot {
@@ -21,6 +21,8 @@ export interface Snapshot {
   recent: RecentItem[];
   queue: QueueItem[];
   plays24h: number[];
+  groups: GroupRow[];
+  visibility: VisibilityRow[];
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -38,7 +40,7 @@ function padBeats(beats: number[]): number[] {
 
 export async function getSnapshot(): Promise<Snapshot> {
   const mockById = new Map(MOCK_SERVICES.map((s) => [s.id, s]));
-  const configs = await getServiceConfigs();
+  const [configs, groups, visibility] = await Promise.all([getServiceConfigs(), getGroups(), getVisibility()]);
 
   // Which services have a stored secret → eligible for a live call.
   const has = async (id: string) => (await getServiceSecret(id)) != null;
@@ -90,5 +92,5 @@ export async function getSnapshot(): Promise<Snapshot> {
 
   // Library / recent / plays / members still come from mock (Tautulli-stats
   // and DB-mirrored members wiring is the next increment).
-  return { services, nowPlaying, requests, users: USERS, library: LIBRARY, recent: RECENT, queue, plays24h: PLAYS_24H };
+  return { services, nowPlaying, requests, users: USERS, library: LIBRARY, recent: RECENT, queue, plays24h: PLAYS_24H, groups, visibility };
 }
