@@ -145,3 +145,54 @@ export async function getVisibility(): Promise<VisibilityRow[]> {
   return configs.flatMap((c) => MOCK_GROUPS.map((g) => ({ serviceId: c.id, groupName: g.name, visible: MOCK_VIS_RULE[g.name](c.cat, c.id) })));
 }
 
+export interface MemberRow {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  reqQuota: number;
+  linked: boolean;
+}
+
+/** Portal members mirrored from the DB. Empty array → facade falls back to mock. */
+export async function getMembers(): Promise<MemberRow[]> {
+  try {
+    await ensureDb();
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        email: schema.users.email,
+        role: schema.users.role,
+        reqQuota: schema.users.reqQuota,
+        linked: schema.accountLinks.linked,
+      })
+      .from(schema.users)
+      .leftJoin(schema.accountLinks, eq(schema.users.id, schema.accountLinks.portalUserId));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      role: (r.role as "admin" | "user") ?? "user",
+      reqQuota: r.reqQuota,
+      linked: Boolean(r.linked),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Upsert the signed-in user into the members table (called on each request). */
+export async function mirrorUser(u: { id: string; name: string; email: string; role: "admin" | "user" }): Promise<void> {
+  try {
+    await ensureDb();
+    await db
+      .insert(schema.users)
+      .values({ id: u.id, name: u.name, email: u.email, role: u.role, reqQuota: 5, createdAt: new Date() })
+      .onConflictDoUpdate({ target: schema.users.id, set: { name: u.name, email: u.email, role: u.role } });
+    await db.insert(schema.accountLinks).values({ portalUserId: u.id, linked: false }).onConflictDoNothing();
+  } catch {
+    /* mirroring is best-effort */
+  }
+}
+

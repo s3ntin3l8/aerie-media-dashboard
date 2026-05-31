@@ -7,7 +7,7 @@
 import "server-only";
 import { fetchJson, IntegrationError } from "./http";
 import { getServiceCredentials } from "./registry";
-import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus } from "@/lib/types";
+import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -107,6 +107,74 @@ export async function tautulliNowPlaying(): Promise<NowPlaying[]> {
       pos: s.progress_percent ? Number(s.progress_percent) / 100 : 0,
       dur: s.duration ? Math.round(Number(s.duration) / 60000) : 0,
       paused: s.state === "paused",
+      art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
+    };
+  });
+}
+
+// ── Tautulli — library counts ──────────────────────────────
+interface TautulliLibrary {
+  section_type: string; // movie | show | artist
+  section_name: string;
+  count?: string | number;
+  parent_count?: string | number;
+  child_count?: string | number;
+}
+
+const n = (v: string | number | undefined) => (v == null ? 0 : Number(v));
+const fmt = (v: number) => v.toLocaleString("en-US");
+
+export async function tautulliLibraries(): Promise<LibraryStat[]> {
+  const { baseUrl, apiKey } = await creds("tautulli");
+  const data = await fetchJson<{ response: { data: TautulliLibrary[] } }>(`${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_libraries`, { service: "tautulli" });
+  const libs = data.response?.data ?? [];
+  const out: LibraryStat[] = [];
+  const movie = libs.find((l) => l.section_type === "movie");
+  const show = libs.find((l) => l.section_type === "show");
+  const artist = libs.find((l) => l.section_type === "artist");
+  if (movie) out.push({ id: "movies", label: "Movies", count: fmt(n(movie.count)), icon: "movie", delta: `${fmt(n(movie.count))} titles` });
+  if (show) out.push({ id: "shows", label: "TV Shows", count: fmt(n(show.count)), icon: "live_tv", delta: `${fmt(n(show.child_count))} episodes` });
+  if (artist) out.push({ id: "music", label: "Music", count: fmt(n(artist.child_count)), icon: "library_music", delta: `${fmt(n(artist.parent_count))} albums` });
+  return out;
+}
+
+/** Total play count in the last 24h (Tautulli history `recordsFiltered`). */
+export async function tautulliPlaysToday(): Promise<number> {
+  const { baseUrl, apiKey } = await creds("tautulli");
+  const after = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const data = await fetchJson<{ response: { data: { recordsFiltered?: number } } }>(
+    `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_history&after=${after}&length=0`,
+    { service: "tautulli" },
+  );
+  return data.response?.data?.recordsFiltered ?? 0;
+}
+
+// ── Tautulli — recently added ──────────────────────────────
+interface TautulliRecent {
+  title: string;
+  year?: string;
+  media_type: string;
+  thumb?: string;
+  parent_thumb?: string;
+  grandparent_thumb?: string;
+}
+
+export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
+  const { baseUrl, apiKey } = await creds("tautulli");
+  const data = await fetchJson<{ response: { data: { recently_added: TautulliRecent[] } } }>(
+    `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_recently_added&count=${count}`,
+    { service: "tautulli" },
+  );
+  const items = data.response?.data?.recently_added ?? [];
+  return items.map((it, i) => {
+    const kind: MediaKind = it.media_type === "movie" ? "movie" : it.media_type === "track" || it.media_type === "album" ? "track" : "series";
+    const thumb = it.grandparent_thumb || it.parent_thumb || it.thumb;
+    return {
+      id: `ra-${i}`,
+      title: it.title,
+      kind,
+      year: it.year ? Number(it.year) : 0,
+      cat: "stream" as const,
       art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
     };
   });

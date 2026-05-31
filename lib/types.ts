@@ -93,6 +93,8 @@ export interface RecentItem {
   kind: MediaKind;
   year: number;
   cat: Category;
+  /** proxied cover-art URL (/api/artwork?…), if available */
+  art?: string;
 }
 
 export interface QueueItem {

@@ -591,7 +591,7 @@ export function RecentlyAdded() {
       <div className="custom-scrollbar" style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
         {recent.map((r) => (
           <div key={r.id} style={{ width: 76, flexShrink: 0 }}>
-            <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} />
+            <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} art={r.art} />
             <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{r.year}</div>
           </div>

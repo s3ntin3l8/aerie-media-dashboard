@@ -9,8 +9,19 @@
 import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, RecentItem, Service, User } from "@/lib/types";
 import { SERVICES as MOCK_SERVICES, NOW_PLAYING, REQUESTS, USERS, LIBRARY, RECENT, QUEUE, PLAYS_24H } from "@/lib/mock/data";
-import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
-import { gatusHealth, tautulliNowPlaying, jellyfinNowPlaying, overseerrRequests, arrQueue, type ServiceHealth } from "@/lib/integrations/clients";
+import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
+import {
+  gatusHealth,
+  tautulliNowPlaying,
+  jellyfinNowPlaying,
+  overseerrRequests,
+  arrQueue,
+  tautulliLibraries,
+  tautulliRecentlyAdded,
+  tautulliPlaysToday,
+  type ServiceHealth,
+} from "@/lib/integrations/clients";
+import { env } from "@/lib/env";
 
 export interface Snapshot {
   services: Service[];
@@ -53,13 +64,17 @@ export async function getSnapshot(): Promise<Snapshot> {
     has("radarr"),
   ]);
 
-  const [health, ttNow, jfNow, osReq, sonarrQ, radarrQ] = await Promise.all([
+  const [health, ttNow, jfNow, osReq, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members] = await Promise.all([
     gatusOn ? safe(gatusHealth) : Promise.resolve(null),
     ttOn ? safe(tautulliNowPlaying) : Promise.resolve(null),
     jfOn ? safe(jellyfinNowPlaying) : Promise.resolve(null),
     osOn ? safe(overseerrRequests) : Promise.resolve(null),
     sonarrOn ? safe(() => arrQueue("sonarr")) : Promise.resolve(null),
     radarrOn ? safe(() => arrQueue("radarr")) : Promise.resolve(null),
+    ttOn ? safe(tautulliLibraries) : Promise.resolve(null),
+    ttOn ? safe(tautulliRecentlyAdded) : Promise.resolve(null),
+    ttOn ? safe(tautulliPlaysToday) : Promise.resolve(null),
+    getMembers(),
   ]);
 
   // services: DB config merged with live Gatus health (or mock health).
@@ -90,7 +105,30 @@ export async function getSnapshot(): Promise<Snapshot> {
   const requests: MediaRequest[] = osOn ? (osReq ?? []) : REQUESTS;
   const queue: QueueItem[] = sonarrOn || radarrOn ? [...(sonarrQ ?? []), ...(radarrQ ?? [])] : QUEUE;
 
-  // Library / recent / plays / members still come from mock (Tautulli-stats
-  // and DB-mirrored members wiring is the next increment).
-  return { services, nowPlaying, requests, users: USERS, library: LIBRARY, recent: RECENT, queue, plays24h: PLAYS_24H, groups, visibility };
+  // ── members: DB-mirrored, with reqUsed/watching/groups derived from live data ──
+  const users: User[] =
+    members.length > 0
+      ? members.map((m) => ({
+          id: m.id,
+          name: m.name,
+          handle: m.email.split("@")[0] || m.id,
+          role: m.role,
+          email: m.email,
+          linked: m.linked,
+          groups: m.role === "admin" ? [env.adminGroup] : ["friends"],
+          reqUsed: requests.filter((r) => r.user === m.id).length,
+          reqQuota: m.reqQuota,
+          watching: nowPlaying.find((np) => np.user === m.id)?.id ?? null,
+        }))
+      : USERS;
+
+  // ── library: Tautulli sections + 24h plays, else mock ──
+  const library: LibraryStat[] =
+    ttLibs && ttLibs.length > 0
+      ? [...ttLibs, { id: "plays", label: "Plays 24h", count: (ttPlays ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }]
+      : LIBRARY;
+
+  const recent: RecentItem[] = ttRecent && ttRecent.length > 0 ? ttRecent : RECENT;
+
+  return { services, nowPlaying, requests, users, library, recent, queue, plays24h: PLAYS_24H, groups, visibility };
 }
