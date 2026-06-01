@@ -281,16 +281,7 @@ export function ServiceModal({
             <Field label="Category">
               <CatPicker value={f.cat} onChange={(v) => set("cat", v)} />
             </Field>
-            <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 12 }}>
-              <Field label="Icon" hint="symbol">
-                <div style={{ position: "relative", minWidth: 0 }}>
-                  <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${c} 14%, transparent)` }}>
-                    <Icon name={isIcon(f.icon) ? f.icon : "help"} size={15} color={c} />
-                  </span>
-                  <input className="input" style={{ ...fieldInput, paddingLeft: 40, fontFamily: "var(--font-mono)" }} value={f.icon} onChange={(e) => set("icon", e.target.value)} placeholder="smart_display" />
-                </div>
-              </Field>
-              <Field label="Host">
+            <Field label="Host">
                 <div style={{ display: "flex", gap: 7 }}>
                   <select className="input" value={f.scheme} onChange={(e) => set("scheme", e.target.value as "https" | "http")} style={{ ...fieldInput, fontFamily: "var(--font-mono)", width: "auto", flexShrink: 0 }}>
                     <option value="https">https://</option>
@@ -298,8 +289,7 @@ export function ServiceModal({
                   </select>
                   <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)", flex: 1, minWidth: 0 }} value={f.host} onChange={(e) => set("host", e.target.value)} placeholder="host.example.com" />
                 </div>
-              </Field>
-            </div>
+            </Field>
             <Field label="Internal note" hint="shown to admins only">
               <input className="input" style={fieldInput} value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="What is this service for?" />
             </Field>
