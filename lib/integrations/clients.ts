@@ -241,7 +241,56 @@ interface OverseerrRequest {
   media?: { status?: number; tmdbId?: number; mediaType?: string };
   requestedBy?: { id: number; displayName?: string; email?: string };
   createdAt?: string;
-  title?: string;
+}
+
+interface OverseerrMediaDetails {
+  title?: string;       // movies
+  name?: string;        // tv shows
+  posterPath?: string;
+  releaseDate?: string;  // movies
+  firstAirDate?: string; // tv shows
+}
+
+// Cache enriched media details by "type:tmdbId".
+// Titles and poster paths are effectively immutable — 1h TTL is fine.
+// Module scope persists across snapshot polls within the same server process.
+interface EnrichedDetails {
+  title: string;
+  posterPath?: string;
+  year?: number;
+  cachedAt: number;
+}
+const enrichCache = new Map<string, EnrichedDetails>();
+const ENRICH_TTL = 60 * 60 * 1000;
+// On failed fetch, retry after 30s to avoid hammering a slow upstream.
+const ENRICH_RETRY = 30 * 1000;
+
+async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv", tmdbId: number): Promise<EnrichedDetails> {
+  const cacheKey = `${type}:${tmdbId}`;
+  const cached = enrichCache.get(cacheKey);
+  if (cached) {
+    const ttl = cached.title ? ENRICH_TTL : ENRICH_RETRY;
+    if (Date.now() - cached.cachedAt < ttl) return cached;
+  }
+  try {
+    const details = await fetchJson<OverseerrMediaDetails>(
+      `${baseUrl}/api/v1/${type}/${tmdbId}`,
+      { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 15000 },
+    );
+    const dateStr = details.releaseDate || details.firstAirDate || "";
+    const result: EnrichedDetails = {
+      title: details.title || details.name || "",
+      posterPath: details.posterPath ?? undefined,
+      year: dateStr ? Number(dateStr.slice(0, 4)) : undefined,
+      cachedAt: Date.now(),
+    };
+    enrichCache.set(cacheKey, result);
+    return result;
+  } catch {
+    const fallback: EnrichedDetails = { title: "", cachedAt: Date.now() };
+    enrichCache.set(cacheKey, fallback);
+    return fallback;
+  }
 }
 
 const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending", 2: "approved", 3: "declined" };
@@ -251,17 +300,33 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
   const data = await fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=50&sort=added`, {
     service: "overseerr",
     headers: { "X-Api-Key": apiKey },
+    timeoutMs: 10000,
   });
-  return (data.results ?? []).map((r) => ({
-    id: `os-${r.id}`,
-    title: r.title || `Request ${r.id}`,
-    kind: r.type === "tv" ? "series" : "movie",
-    year: r.createdAt ? new Date(r.createdAt).getFullYear() : 0,
-    user: String(r.requestedBy?.id ?? "unknown"),
-    status: r.media?.status === 5 ? "available" : (OVERSEERR_STATUS[r.status] ?? "pending"),
-    requested: r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
-    poster: String(r.media?.tmdbId ?? ""),
-  }));
+  const results = data.results ?? [];
+
+  // Enrich in parallel; cache means only new/uncached requests touch the upstream.
+  const enriched = await Promise.all(
+    results.map((r) =>
+      r.media?.tmdbId
+        ? enrichMedia(baseUrl, apiKey!, r.type, r.media.tmdbId)
+        : Promise.resolve<EnrichedDetails>({ title: "", cachedAt: 0 }),
+    ),
+  );
+
+  return results.map((r, i) => {
+    const { title, posterPath, year } = enriched[i];
+    const fallbackYear = r.createdAt ? new Date(r.createdAt).getFullYear() : 0;
+    return {
+      id: `os-${r.id}`,
+      title: title || `Request ${r.id}`,
+      kind: r.type === "tv" ? "series" : "movie",
+      year: year ?? fallbackYear,
+      user: String(r.requestedBy?.id ?? "unknown"),
+      status: r.media?.status === 5 ? "available" : (OVERSEERR_STATUS[r.status] ?? "pending"),
+      requested: r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
+      art: posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(posterPath)}` : undefined,
+    };
+  });
 }
 
 // ── Overseerr — discover/search + request create/approve/decline ──

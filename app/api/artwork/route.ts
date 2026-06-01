@@ -14,6 +14,10 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
       return `${base}/api/v2?apikey=${apiKey}&cmd=pms_image_proxy&img=${encodeURIComponent(ref)}&width=300&height=450&fallback=poster`;
     case "jellyfin":
       return `${base}/Items/${encodeURIComponent(ref)}/Images/Primary?fillHeight=450&fillWidth=300&quality=90${apiKey ? `&api_key=${apiKey}` : ""}`;
+    case "overseerr":
+      // ref is a TMDB poster_path (e.g. "/b8VtW6I.jpg"); proxy through to avoid
+      // exposing the TMDB CDN directly and to apply our cache headers.
+      return `https://image.tmdb.org/t/p/w342${ref}`;
     default:
       return null;
   }

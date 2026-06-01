@@ -29,7 +29,15 @@ export function DataProvider({ initial, pollMs = 12000, children }: { initial: S
     try {
       const res = await fetch("/api/snapshot", { cache: "no-store" });
       if (!res.ok) return;
-      setData((await res.json()) as Snapshot);
+      const next = (await res.json()) as Snapshot;
+      // If Overseerr degraded to empty (timeout, cold enrichment cache, etc.)
+      // keep the previous requests rather than flashing an empty state.
+      // Trade-off: a genuine drop to 0 requests shows stale data for one extra poll.
+      setData((prev) =>
+        next.requests.length === 0 && prev.requests.length > 0
+          ? { ...next, requests: prev.requests }
+          : next,
+      );
     } catch {
       /* keep last good snapshot */
     }

@@ -25,7 +25,7 @@ function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; admin
       onClick={adminMode ? () => onReview(r) : undefined}
       style={{ display: "flex", gap: 13, padding: 14, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", cursor: adminMode ? "pointer" : "default", transition: "border-color .15s, background .15s" }}
     >
-      <PosterTile title={r.title} kind={r.kind} cat="request" w={58} />
+      <PosterTile title={r.title} kind={r.kind} cat="request" w={58} art={r.art} />
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div style={{ minWidth: 0 }}>

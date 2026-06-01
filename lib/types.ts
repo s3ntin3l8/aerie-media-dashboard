@@ -63,7 +63,7 @@ export interface MediaRequest {
   status: RequestStatus;
   requested: string;
   eta?: string;
-  poster: string;
+  art?: string;
 }
 
 export interface User {
