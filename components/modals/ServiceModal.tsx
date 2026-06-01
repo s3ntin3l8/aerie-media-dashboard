@@ -22,8 +22,6 @@ export interface ServiceForm {
   central: boolean;
   centralLabel: string;
   note: string;
-  healthUrl: string;
-  interval: string;
   apiKey: string;
   monitoringKey: string;
 }
@@ -143,8 +141,6 @@ export function ServiceModal({
     central: false,
     centralLabel: "",
     note: "",
-    healthUrl: "",
-    interval: "60",
     apiKey: "",
     monitoringKey: "",
   });
@@ -163,8 +159,6 @@ export function ServiceModal({
         central: Boolean(service.central),
         centralLabel: service.centralLabel || "",
         note: service.note || "",
-        healthUrl: `https://${service.host}/health`,
-        interval: "60",
         apiKey: "", // blank = keep existing secret (never pre-fill it)
         monitoringKey: service.monitoringKey ?? "",
       };
@@ -379,22 +373,10 @@ export function ServiceModal({
 
         <Divider />
 
-        {/* HEALTH CHECK (display only — Gatus owns probing) */}
+        {/* MONITORING SOURCE (Gatus owns probing — live heartbeat shown when editing) */}
         <section>
-          <SectionLabel hint={editing && service ? `last probe ${service.ms}ms` : "Gatus probe"}>Health check</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 150px", gap: 12 }}>
-            <Field label="Check URL">
-              <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.healthUrl} onChange={(e) => set("healthUrl", e.target.value)} placeholder="https://host/health" />
-            </Field>
-            <Field label="Interval">
-              <select className="input" style={fieldInput} value={f.interval} onChange={(e) => set("interval", e.target.value)}>
-                <option value="30">Every 30s</option>
-                <option value="60">Every 1 min</option>
-                <option value="300">Every 5 min</option>
-                <option value="900">Every 15 min</option>
-              </select>
-            </Field>
-          </div>
+          <SectionLabel hint={editing && service ? `${service.uptime}% · last probe ${service.ms}ms` : "which Gatus endpoint tracks this service"}>Monitoring source</SectionLabel>
+          <MonitoringKeyPicker value={f.monitoringKey} onChange={(v) => set("monitoringKey", v)} />
           {editing && service && service.beats && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, padding: "9px 13px", borderRadius: 10, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
               <Heartbeat beats={service.beats.slice(-22)} h={18} barW={3} />
@@ -404,14 +386,6 @@ export function ServiceModal({
               </span>
             </div>
           )}
-        </section>
-
-        <Divider />
-
-        {/* MONITORING SOURCE */}
-        <section>
-          <SectionLabel hint="which Gatus endpoint tracks this service">Monitoring source</SectionLabel>
-          <MonitoringKeyPicker value={f.monitoringKey} onChange={(v) => set("monitoringKey", v)} />
         </section>
 
         <Divider />
