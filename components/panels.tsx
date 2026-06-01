@@ -6,7 +6,7 @@
 // ============================================================
 import React, { useEffect, useState } from "react";
 import type { Role, Service, ServiceStatus } from "@/lib/types";
-import { useData } from "@/components/portal/DataProvider";
+import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
 import {
   Icon,
   Pill,
@@ -126,8 +126,10 @@ const SeeAll = ({ onClick }: { onClick?: () => void }) => (
 export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolean; onAll?: () => void }) {
   const { nowPlaying, services: allServices, users } = useData();
   const now = useTick(1000);
-  const [t0] = useState(() => Date.now());
-  const elapsed = (now - t0) / 1000;
+  const fetchedAt = useSnapshotTime();
+  // elapsed is relative to when this snapshot was fetched — resets on every poll
+  // so the clock stays in sync with Tautulli rather than drifting from mount time.
+  const elapsed = (now - fetchedAt) / 1000;
   let streams = nowPlaying;
   if (role !== "admin") streams = streams.filter((s) => s.user === "you");
   const visible = streams;
@@ -199,7 +201,7 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
                       {s.bitrate} Mbps · {s.codec}
                     </span>
                     <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
-                      <Icon name={svc?.icon ?? "play_circle"} size={12} color={catColor("stream")} />
+                      <Icon name={(svc?.icon && svc.icon.length > 2) ? svc.icon : "play_circle"} size={12} color={catColor("stream")} />
                       {svc?.name ?? s.src}
                     </span>
                   </div>

@@ -99,7 +99,7 @@ export async function tautulliNowPlaying(): Promise<NowPlaying[]> {
       kind,
       year: s.year ? Number(s.year) : undefined,
       ep: kind === "series" ? s.title : undefined,
-      user: String(s.user_id ?? s.user),
+      user: s.user,
       src: "plex",
       device: s.player,
       res: s.video_full_resolution || "—",
