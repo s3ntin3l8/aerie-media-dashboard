@@ -1,0 +1,19 @@
+AERIE
+Copyright (c) 2026 Björn Hansen
+
+This product includes third-party software with the following notices:
+
+-------------------------------------------------------------------------------
+
+dashboard-icons
+Copyright 2024 Bjorn Lammers, Meier Lukas, Thomas Camlong, and Homarr Labs
+Licensed under the Apache License, Version 2.0
+
+  https://github.com/homarr-labs/dashboard-icons
+
+Icons are fetched at runtime from the jsDelivr CDN and are not bundled in
+this repository. A copy of the Apache License 2.0 is available at:
+
+  https://www.apache.org/licenses/LICENSE-2.0
+
+-------------------------------------------------------------------------------

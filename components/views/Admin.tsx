@@ -9,6 +9,7 @@ import { catColor } from "@/lib/categories";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
+import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { Toast } from "@/components/modals/Toast";
@@ -27,9 +28,7 @@ function AdminServices({ onOpenService, onEdit }: { onOpenService: (s: Service) 
         {services.map((s, i) => (
           <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${catColor(s.cat)} 13%, transparent)`, flexShrink: 0 }}>
-                <Icon name={s.icon} size={16} color={catColor(s.cat)} />
-              </div>
+              <ServiceLogo service={s} size={28} radius={7} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</div>
                 <div style={{ fontSize: 10 }}>
@@ -139,7 +138,7 @@ function AdminVisibility() {
         {services.map((s, i) => (
           <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", padding: "10px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <Icon name={s.icon} size={16} color={catColor(s.cat)} />
+              <ServiceLogo service={s} size={20} radius={5} />
               <span style={{ fontWeight: 600, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</span>
             </div>
             {groups.map((g) => {
