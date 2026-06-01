@@ -86,6 +86,13 @@ export const preferences = sqliteTable("preferences", {
   favorites: text("favorites"), // JSON array of service ids
 });
 
+// Deployment-wide key-value settings (not per-user).
+export const deploymentSettings = sqliteTable("deployment_settings", {
+  key:   text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
 export type ServiceRow = typeof services.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type AccountLinkRow = typeof accountLinks.$inferSelect;
+export type DeploymentSettingRow = typeof deploymentSettings.$inferSelect;

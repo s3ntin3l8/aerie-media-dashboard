@@ -6,7 +6,8 @@
 // ============================================================
 import "server-only";
 import { fetchJson, IntegrationError } from "./http";
-import { getServiceCredentials } from "./registry";
+import { getServiceCredentials, getDeploymentSetting } from "./registry";
+import { env } from "@/lib/env";
 import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
@@ -353,4 +354,93 @@ export async function prometheusQuery(query: string): Promise<number | null> {
   );
   const v = data.data?.result?.[0]?.value?.[1];
   return v != null ? Number(v) : null;
+}
+
+// ── Prometheus — range query (returns `points` floats) ─────
+export async function prometheusRange(query: string, points = 40, stepSec = 60): Promise<number[]> {
+  try {
+    const c = await getServiceCredentials("prometheus");
+    if (!c) return Array<number>(points).fill(0);
+    const base = c.baseUrl.replace(/\/$/, "");
+    const now = Math.floor(Date.now() / 1000);
+    const start = now - points * stepSec;
+    const data = await fetchJson<{ data: { result: { values: [number, string][] }[] } }>(
+      `${base}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${now}&step=${stepSec}`,
+      { service: "prometheus", headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {} },
+    );
+    const raw = (data.data?.result?.[0]?.values ?? []).map(([, v]) => Number(v));
+    if (raw.length === 0) return Array<number>(points).fill(0);
+    // Pad from the front if fewer points were returned than requested.
+    return raw.length >= points ? raw.slice(-points) : [...Array<number>(points - raw.length).fill(raw[0]), ...raw];
+  } catch {
+    return Array<number>(points).fill(0);
+  }
+}
+
+// ── Prometheus — list scraped node_exporter instances ──────
+export async function prometheusInstances(): Promise<string[]> {
+  const c = await getServiceCredentials("prometheus");
+  if (!c) throw new IntegrationError("prometheus", "not configured");
+  const base = c.baseUrl.replace(/\/$/, "");
+  const data = await fetchJson<{ data: string[] }>(
+    `${base}/api/v1/label/instance/values?match[]=node_uname_info`,
+    { service: "prometheus", headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {} },
+  );
+  return data.data ?? [];
+}
+
+// ── Prometheus — node_exporter metrics bundle ───────────────
+export interface NodeMetrics {
+  instance: string | null;
+  cpuPct: number | null;
+  cpuHistory: number[];
+  memUsedBytes: number | null;
+  memTotalBytes: number | null;
+  memHistory: number[];
+  netOutBps: number | null;
+  netHistory: number[];
+  diskUsedBytes: number | null;
+  diskTotalBytes: number | null;
+  diskHistory: number[];
+}
+
+export async function prometheusMetrics(): Promise<NodeMetrics> {
+  // null (no DB row) → use env fallback. "" (sentinel) → all nodes. "x" → filter to "x".
+  const stored = await getDeploymentSetting("prometheusInstance");
+  const inst = stored === null ? (env.prometheusInstance ?? null) : (stored || null);
+  // iq: comma-prefixed label appended inside an existing {…} selector
+  // isq: standalone selector (curly-brace pair) for metrics with no other labels
+  const iq = inst ? `,instance="${inst}"` : "";
+  const isq = inst ? `{instance="${inst}"}` : "{}";
+  const diskFilter = `{fstype!~"tmpfs|overlay|squashfs|ramfs"${iq}}`;
+
+  const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try { return await fn(); } catch { return fallback; }
+  };
+
+  const [cpuHistory, memHistory, memTotal, netHistory, diskHistory, diskTotal] = await Promise.all([
+    safe(() => prometheusRange(`100 - (avg(rate(node_cpu_seconds_total{mode="idle"${iq}}[5m])) * 100)`), Array<number>(40).fill(0)),
+    safe(() => prometheusRange(`node_memory_MemTotal_bytes${isq} - node_memory_MemAvailable_bytes${isq}`), Array<number>(40).fill(0)),
+    safe(() => prometheusQuery(`node_memory_MemTotal_bytes${isq}`), null),
+    safe(() => prometheusRange(`sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br.*"${iq}}[5m])) * 8`), Array<number>(40).fill(0)),
+    safe(() => prometheusRange(`sum(node_filesystem_size_bytes${diskFilter} - node_filesystem_avail_bytes${diskFilter})`), Array<number>(40).fill(0)),
+    safe(() => prometheusQuery(`sum(node_filesystem_size_bytes${diskFilter})`), null),
+  ]);
+
+  const last = (h: number[]) => (h.length ? h[h.length - 1] : null);
+  const finite = (v: number | null) => (v != null && isFinite(v) ? v : null);
+
+  return {
+    instance: inst,
+    cpuPct: finite(last(cpuHistory)),
+    cpuHistory,
+    memUsedBytes: finite(last(memHistory)),
+    memTotalBytes: memTotal,
+    memHistory,
+    netOutBps: finite(last(netHistory)),
+    netHistory,
+    diskUsedBytes: finite(last(diskHistory)),
+    diskTotalBytes: diskTotal,
+    diskHistory,
+  };
 }

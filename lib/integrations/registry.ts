@@ -84,6 +84,24 @@ export async function isConfigured(serviceId: string): Promise<boolean> {
   return (await getServiceSecret(serviceId)) != null;
 }
 
+/** Read a deployment-wide setting. Returns null if the key has no row (not the same as ""). */
+export async function getDeploymentSetting(key: string): Promise<string | null> {
+  try {
+    await ensureDb();
+    const rows = await db.select().from(schema.deploymentSettings).where(eq(schema.deploymentSettings.key, key)).limit(1);
+    return rows.length > 0 ? rows[0].value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Upsert a deployment-wide setting. */
+export async function setDeploymentSetting(key: string, value: string): Promise<void> {
+  await ensureDb();
+  await db.insert(schema.deploymentSettings).values({ key, value })
+    .onConflictDoUpdate({ target: schema.deploymentSettings.key, set: { value } });
+}
+
 export interface GroupRow {
   name: string;
   label: string | null;

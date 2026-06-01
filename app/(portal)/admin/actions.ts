@@ -8,6 +8,8 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
 import { getSessionUser } from "@/lib/session";
+import { setDeploymentSetting } from "@/lib/integrations/registry";
+import { prometheusInstances } from "@/lib/integrations/clients";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -95,4 +97,18 @@ export async function deleteService(id: string) {
   await ensureDb();
   await db.delete(schema.services).where(eq(schema.services.id, id));
   revalidatePath("/admin");
+}
+
+/**
+ * Persist the deployment-wide Prometheus instance filter.
+ * null → write the all-nodes sentinel ("") which suppresses the env fallback.
+ */
+export async function setPrometheusInstance(instance: string | null): Promise<void> {
+  await requireAdmin();
+  if (instance !== null && instance !== "") {
+    const known = await prometheusInstances().catch(() => null);
+    if (known && !known.includes(instance)) throw new Error(`Unknown Prometheus instance: ${instance}`);
+  }
+  await setDeploymentSetting("prometheusInstance", instance ?? "");
+  revalidatePath("/status");
 }

@@ -2,20 +2,19 @@
 // ============================================================
 // AERIE — Status / uptime dashboard (Gatus + Prometheus)
 // ============================================================
-import React from "react";
+import React, { useEffect, useState, useTransition } from "react";
 import { catColor } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData } from "@/components/portal/DataProvider";
+import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline } from "@/components/primitives";
 import { PanelShell } from "@/components/panels";
 import { PageHeader, StatTile } from "@/components/views/shared";
+import { setPrometheusInstance } from "@/app/(portal)/admin/actions";
 
-function rand(seed: number) {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
-function series(n: number, base: number, amp: number, seed: number) {
-  return Array.from({ length: n }, (_, i) => base + Math.sin(i / 2.2 + seed) * amp * 0.5 + rand(i + seed) * amp);
+function fmtBytes(b: number | null): string {
+  if (b == null) return "—";
+  const gb = b / 1_073_741_824;
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(b / 1_048_576).toFixed(0)} MB`;
 }
 
 function MetricCard({ title, value, unit, color, data }: { title: string; value: string; unit: string; color: string; data: number[] }) {
@@ -31,9 +30,61 @@ function MetricCard({ title, value, unit, color, data }: { title: string; value:
   );
 }
 
+function InstanceSelect({ current }: { current: string | null }) {
+  const refresh = useRefresh();
+  const [instances, setInstances] = useState<string[]>([]);
+  const [value, setValue] = useState<string>(current ?? "");
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => { setValue(current ?? ""); }, [current]);
+
+  useEffect(() => {
+    fetch("/api/prometheus/instances", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: string[]) => setInstances(d))
+      .catch(() => {});
+  }, []);
+
+  if (instances.length === 0) return null;
+
+  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const next = e.target.value;
+    setValue(next);
+    startTransition(async () => {
+      await setPrometheusInstance(next === "" ? null : next);
+      refresh();
+    });
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={handleChange}
+      disabled={pending}
+      style={{
+        marginLeft: "auto",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+        padding: "3px 8px",
+        borderRadius: 6,
+        border: "1px solid var(--outline-variant)",
+        background: "var(--surface-container)",
+        color: "var(--on-surface)",
+        cursor: "pointer",
+        opacity: pending ? 0.5 : 1,
+      }}
+    >
+      <option value="">All nodes</option>
+      {instances.map((inst) => (
+        <option key={inst} value={inst}>{inst}</option>
+      ))}
+    </select>
+  );
+}
+
 export function Status() {
   const { role } = usePortal();
-  const { services } = useData();
+  const { services, metrics } = useData();
   const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
@@ -107,15 +158,44 @@ export function Status() {
                 <Pill tone="primary" style={{ marginLeft: 4 }}>
                   Admin
                 </Pill>
+                {metrics != null && <InstanceSelect current={metrics.instance} />}
               </div>
-              <div className="aerie-metrics-grid">
-                <MetricCard title="CPU load" value="38%" unit="8-core" color="var(--primary)" data={series(40, 30, 30, 1)} />
-                <MetricCard title="Memory" value="11.2 GB" unit="of 32 GB" color="var(--originator-court)" data={series(40, 30, 18, 5)} />
-                <MetricCard title="Network out" value="142 Mbps" unit="peak 380" color="var(--originator-third-party)" data={series(40, 40, 50, 9)} />
-                <MetricCard title="Disk array" value="68%" unit="44 TB / 64 TB" color="var(--amber)" data={series(40, 60, 8, 3)} />
-                <MetricCard title="Transcodes" value="1" unit="active sessions" color="var(--originator-own)" data={series(40, 12, 22, 7)} />
-                <MetricCard title="Requests/min" value="24" unit="all services" color="var(--primary)" data={series(40, 22, 28, 11)} />
-              </div>
+              {metrics == null ? (
+                <div style={{ padding: "18px 20px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", color: "var(--on-surface-variant)", fontSize: 13 }}>
+                  Prometheus not configured — add the service and set a baseUrl in <strong>Admin → Services</strong>.
+                </div>
+              ) : (
+                <div className="aerie-metrics-grid">
+                  <MetricCard
+                    title="CPU load"
+                    value={metrics.cpuPct != null ? `${metrics.cpuPct.toFixed(1)}%` : "—"}
+                    unit={metrics.instance ? `node: ${metrics.instance}` : "all nodes"}
+                    color="var(--primary)"
+                    data={metrics.cpuHistory}
+                  />
+                  <MetricCard
+                    title="Memory"
+                    value={fmtBytes(metrics.memUsedBytes)}
+                    unit={`of ${fmtBytes(metrics.memTotalBytes)}`}
+                    color="var(--originator-court)"
+                    data={metrics.memHistory}
+                  />
+                  <MetricCard
+                    title="Network out"
+                    value={metrics.netOutBps != null ? `${(metrics.netOutBps / 1e6).toFixed(1)} Mbps` : "—"}
+                    unit="transmit"
+                    color="var(--originator-third-party)"
+                    data={metrics.netHistory}
+                  />
+                  <MetricCard
+                    title="Disk"
+                    value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${Math.round((metrics.diskUsedBytes / metrics.diskTotalBytes) * 100)}%` : "—"}
+                    unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`}
+                    color="var(--amber)"
+                    data={metrics.diskHistory}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>

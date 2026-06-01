@@ -41,6 +41,10 @@ export const env = {
   /** Path to the optional YAML file that defines services/visibility/secrets. */
   configFile: trim(process.env.AERIE_CONFIG_FILE) || "./config/aerie.yaml",
 
+  // ── Prometheus ──
+  /** Instance label to filter node_exporter metrics (e.g. "pve" or "192.168.1.10:9100"). */
+  prometheusInstance: trim(process.env.PROMETHEUS_INSTANCE),
+
   // ── Branding / deployment ──
   brand: trim(process.env.AERIE_BRAND) || "AERIE",
   portalUrl: trim(process.env.AERIE_PORTAL_URL) || "https://media.s3ntin3l8.de",

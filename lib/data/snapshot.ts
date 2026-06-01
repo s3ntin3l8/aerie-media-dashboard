@@ -17,7 +17,9 @@ import {
   tautulliLibraries,
   tautulliRecentlyAdded,
   tautulliPlaysToday,
+  prometheusMetrics,
   type ServiceHealth,
+  type NodeMetrics,
 } from "@/lib/integrations/clients";
 import { env } from "@/lib/env";
 
@@ -34,6 +36,7 @@ export interface Snapshot {
   visibility: VisibilityRow[];
   /** the group name that maps to the admin role (locked "always" in visibility) */
   adminGroup: string;
+  metrics: NodeMetrics | null;
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -53,9 +56,12 @@ export async function getSnapshot(): Promise<Snapshot> {
   const [configs, groups, visibility] = await Promise.all([getServiceConfigs(), getGroups(), getVisibility()]);
 
   // Which services have a stored secret → eligible for a live call.
+  // Gatus and Prometheus only need a baseUrl (API key is optional), so gate them on config
+  // existence rather than has() — using has() would silently skip no-auth deployments.
   const has = async (id: string) => (await getServiceSecret(id)) != null;
-  const [gatusOn, ttOn, jfOn, osOn, sonarrOn, radarrOn] = await Promise.all([
-    has("gatus"),
+  const gatusOn = configs.some((c) => c.id === "gatus");
+  const promOn = configs.some((c) => c.id === "prometheus");
+  const [ttOn, jfOn, osOn, sonarrOn, radarrOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
     has("overseerr"),
@@ -63,7 +69,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     has("radarr"),
   ]);
 
-  const [health, ttNow, jfNow, osReq, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members] = await Promise.all([
+  const [health, ttNow, jfNow, osReq, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members, promResult] = await Promise.all([
     gatusOn ? safe(gatusHealth) : Promise.resolve(null),
     ttOn ? safe(tautulliNowPlaying) : Promise.resolve(null),
     jfOn ? safe(jellyfinNowPlaying) : Promise.resolve(null),
@@ -74,6 +80,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     ttOn ? safe(tautulliRecentlyAdded) : Promise.resolve(null),
     ttOn ? safe(tautulliPlaysToday) : Promise.resolve(null),
     getMembers(),
+    promOn ? safe(prometheusMetrics) : Promise.resolve(null),
   ]);
 
   // services: DB config merged with live Gatus health. Without a Gatus
@@ -131,5 +138,5 @@ export async function getSnapshot(): Promise<Snapshot> {
   // No real per-hour plays source yet → empty sparkline (see plan follow-up).
   const plays24h: number[] = [];
 
-  return { services, nowPlaying, requests, users, library, recent, queue, plays24h, groups, visibility, adminGroup: env.adminGroup };
+  return { services, nowPlaying, requests, users, library, recent, queue, plays24h, groups, visibility, adminGroup: env.adminGroup, metrics: promResult ?? null };
 }
