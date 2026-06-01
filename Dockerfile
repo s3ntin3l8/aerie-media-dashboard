@@ -29,9 +29,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Migrations are read at runtime by lib/db/bootstrap.ts
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle ./drizzle
 
-# SQLite lives on a mounted volume
+# SQLite lives in /app/data, bind-mounted from a host folder by compose
+# (see docker-compose.yml). No VOLUME declaration: the bind mount provides
+# persistence, and VOLUME would otherwise spawn stray anonymous volumes.
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
-VOLUME ["/app/data"]
 
 USER nextjs
 EXPOSE 3000
