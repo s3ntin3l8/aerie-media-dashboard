@@ -5,7 +5,6 @@
 import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
-import { catColor } from "@/lib/categories";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";

@@ -5,8 +5,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Kbd, Eyebrow, catColor } from "@/components/primitives";
+import { ServiceLogo } from "@/components/ServiceLogo";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
+import type { Service } from "@/lib/types";
 
 function PaletteRow({
   icon,
@@ -14,12 +16,14 @@ function PaletteRow({
   label,
   hint,
   onClick,
+  service,
 }: {
   icon: string;
   iconColor?: string;
   label: string;
   hint?: string;
   onClick: () => void;
+  service?: Service;
 }) {
   const [h, setH] = useState(false);
   return (
@@ -37,7 +41,11 @@ function PaletteRow({
         background: h ? "color-mix(in srgb, var(--primary) 9%, transparent)" : "transparent",
       }}
     >
-      <Icon name={icon} size={18} color={iconColor || "var(--on-surface-variant)"} />
+      {service ? (
+        <ServiceLogo service={service} size={20} radius={5} />
+      ) : (
+        <Icon name={icon} size={18} color={iconColor || "var(--on-surface-variant)"} />
+      )}
       <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: "var(--on-surface)" }}>{label}</span>
       {hint && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{hint}</span>}
       {h && <Icon name="arrow_right_alt" size={16} color="var(--primary)" />}
@@ -143,6 +151,7 @@ export function CommandPalette() {
               iconColor={catColor(s.cat)}
               label={s.name}
               hint={s.embeddable ? "embed" : "launch"}
+              service={s}
               onClick={() => {
                 router.push(`/s/${s.id}`);
                 close();

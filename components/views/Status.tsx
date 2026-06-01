@@ -3,11 +3,11 @@
 // AERIE — Status / uptime dashboard (Gatus + Prometheus)
 // ============================================================
 import React, { useEffect, useState, useTransition } from "react";
-import { catColor } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline } from "@/components/primitives";
 import { PanelShell } from "@/components/panels";
+import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { setPrometheusInstance } from "@/app/(portal)/admin/actions";
 
@@ -130,9 +130,7 @@ export function Status() {
             <div style={{ display: "flex", flexDirection: "column" }}>
               {list.map((s, i) => (
                 <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, background: `color-mix(in srgb, ${catColor(s.cat)} 13%, transparent)`, flexShrink: 0 }}>
-                    <Icon name={s.icon} size={17} color={catColor(s.cat)} />
-                  </div>
+                  <ServiceLogo service={s} size={30} radius={8} />
                   <div style={{ flex: "0 0 150px", minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <StatusDot status={s.status} size={7} />
