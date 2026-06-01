@@ -100,16 +100,11 @@ textarea.input {
   }
 }
 
-/* Library stat strip: 4 → 2 → 1 */
+/* Library stat strip: fills full width with however many boxes are present */
 .aerie-lib-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
-}
-@media (max-width: 760px) {
-  .aerie-lib-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 /* Prometheus metric cards: 3 → 2 → 1 */
