@@ -41,7 +41,7 @@ const providers: NextAuthConfig["providers"] = authConfigured
         issuer: env.authIssuer,
         clientId: env.authClientId,
         clientSecret: env.authClientSecret,
-        // `groups` is a non-default scope; the IdP must emit it (see docs/OIDC.md).
+        // `groups` is a non-default scope; the IdP must emit it (see docs/AUTH.md).
         authorization: { params: { scope: env.oidcScopes } },
         profile(profile: OidcProfile) {
           const groups = normalizeGroups(profile[env.oidcGroupsClaim]);

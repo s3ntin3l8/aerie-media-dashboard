@@ -72,7 +72,7 @@ OIDC config lives here too (`oidcProviderId/Name/Icon`, `oidcScopes`, `oidcGroup
   lazy import so DB code stays out of the edge bundle). Role = membership in `AERIE_ADMIN_GROUP`
   **or** email in `AERIE_ADMIN_EMAILS` → `admin`, else `user`. JWT strategy; role/groups are
   threaded through the `jwt` (from `profile` for OIDC, `user` for credentials) and `session`
-  callbacks. The `groups` scope is non-default and may need an IdP scope mapping (see `docs/OIDC.md`).
+  callbacks. The `groups` scope is non-default and may need an IdP scope mapping (see `docs/AUTH.md`).
 - `app/login/` — `page.tsx` resolves the auth **mode** server-side (`oidc` | `credentials` |
   `setup`, the last when no local admin exists yet) and renders `components/views/Login.tsx`.
   `actions.ts` has `signInWithPassword` and `createInitialAdmin` (the latter guarded: only when
@@ -188,5 +188,5 @@ Standalone `Dockerfile` + `docker-compose.yml` behind Traefik. Production setup:
 `cp .env.example .env` (OIDC creds **or** leave them blank for the first-run local-admin setup;
 `AUTH_SECRET`, `ENCRYPTION_KEY`) → `db:migrate` (or rely on runtime bootstrap) → sign in (OIDC or
 create the local admin at `/login`) → add services and enter each API key in **Admin → Services**
-to light up live data → `docker compose up -d`. Auth details are in `docs/OIDC.md`; embedding/
+to light up live data → `docker compose up -d`. Auth details are in `docs/AUTH.md`; embedding/
 forward-auth middleware in `docs/EMBEDDING.md`.

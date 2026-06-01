@@ -53,13 +53,12 @@ AERIE_ADMIN_GROUP=admins
 # AERIE_ADMIN_EMAILS=you@example.com  # alternative to groups
 ```
 
-### Migrating an existing Authentik deployment
-
-Older deployments used `AUTH_AUTHENTIK_ISSUER` / `_ID` / `_SECRET` and a provider id of
-`authentik` (callback `…/api/auth/callback/authentik`). Rename those to `OIDC_ISSUER` /
-`OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET`. To keep the old callback working without touching your
-IdP, also set `OIDC_PROVIDER_ID=authentik`; otherwise add the new `…/callback/oidc` redirect URI
-to your Authentik provider.
+> **The redirect URI must match exactly.** The callback path is
+> `…/api/auth/callback/<OIDC_PROVIDER_ID>` — with the default `OIDC_PROVIDER_ID=oidc` it ends in
+> `oidc` (spelling: `o-i-d-c`, *not* `oicd`). Providers like Authentik match the redirect URI
+> **strictly**, so a typo or a stale path registered in the IdP surfaces as
+> *"The request fails due to a missing, invalid, or mismatching redirection URI (redirect_uri)."*
+> Register the exact path the app sends, or override the segment with `OIDC_PROVIDER_ID`.
 
 ---
 
