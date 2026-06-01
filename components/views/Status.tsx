@@ -13,6 +13,8 @@ import { setPrometheusInstance } from "@/app/(portal)/admin/actions";
 
 function fmtBytes(b: number | null): string {
   if (b == null) return "—";
+  const tb = b / 1_099_511_627_776;
+  if (tb >= 1) return `${tb.toFixed(1)} TB`;
   const gb = b / 1_073_741_824;
   return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(b / 1_048_576).toFixed(0)} MB`;
 }
@@ -188,11 +190,25 @@ export function Status() {
                     data={metrics.netHistory}
                   />
                   <MetricCard
+                    title="Network in"
+                    value={metrics.netInBps != null ? `${(metrics.netInBps / 1e6).toFixed(1)} Mbps` : "—"}
+                    unit="receive"
+                    color="var(--originator-court)"
+                    data={metrics.netInHistory}
+                  />
+                  <MetricCard
                     title="Disk"
                     value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${Math.round((metrics.diskUsedBytes / metrics.diskTotalBytes) * 100)}%` : "—"}
                     unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`}
                     color="var(--amber)"
                     data={metrics.diskHistory}
+                  />
+                  <MetricCard
+                    title="System load"
+                    value={metrics.sysLoad != null ? metrics.sysLoad.toFixed(2) : "—"}
+                    unit="1-min avg"
+                    color="var(--originator-own)"
+                    data={metrics.sysLoadHistory}
                   />
                 </div>
               )}

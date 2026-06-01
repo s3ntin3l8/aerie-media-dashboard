@@ -10,6 +10,7 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { Icon, StatusDot, Divider, SearchField } from "@/components/primitives";
 import { Empty } from "@/components/panels";
+import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
 
 const CAT_ORDER = ["stream", "request", "automation", "monitor", "infra"] as const;
@@ -45,9 +46,7 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
     >
       <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c }} />
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 12, background: `color-mix(in srgb, ${c} 14%, transparent)`, flexShrink: 0 }}>
-          <Icon name={s.icon} size={24} color={c} />
-        </div>
+        <ServiceLogo service={s} size={44} radius={12} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)" }}>{s.name}</span>
@@ -137,6 +136,7 @@ export function Launcher() {
 // frame-ancestors are in place (see plan §Embedding).
 export function ServiceView({ s }: { s: Service }) {
   const router = useRouter();
+  const { paletteOpen, modalOpen } = usePortal();
   const c = catColor(s.cat);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -150,9 +150,7 @@ export function ServiceView({ s }: { s: Service }) {
           <Icon name="arrow_back" size={16} /> Services
         </button>
         <div style={{ width: 1, height: 22, background: "var(--outline-variant)" }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8, background: `color-mix(in srgb, ${c} 14%, transparent)` }}>
-          <Icon name={s.icon} size={18} color={c} />
-        </div>
+        <ServiceLogo service={s} size={30} radius={8} />
         <div>
           <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 14, color: "var(--on-surface)", lineHeight: 1.1 }}>{s.name}</div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>v{s.version}</div>
@@ -194,21 +192,28 @@ export function ServiceView({ s }: { s: Service }) {
               onLoad={() => setLoaded(true)}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", opacity: loaded ? 1 : 0, transition: "opacity .2s" }}
             />
+            {/* Iframes paint in their own compositing layer and ignore z-index from the
+                parent document. This transparent div sits in the parent stacking context
+                so it covers the iframe when any portal overlay is open, letting the
+                palette/modal backdrop-filter blur work correctly. */}
+            {(paletteOpen || modalOpen) && (
+              <div style={{ position: "absolute", inset: 0, zIndex: 2 }} />
+            )}
           </div>
         </>
       ) : (
-        <LaunchScreen s={s} c={c} />
+        <LaunchScreen s={s} />
       )}
     </section>
   );
 }
 
-function LaunchScreen({ s, c }: { s: Service; c: string }) {
+function LaunchScreen({ s }: { s: Service }) {
   return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32, background: "var(--surface)" }}>
       <div style={{ width: "100%", maxWidth: 440, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ position: "relative", width: 72, height: 72, borderRadius: 20, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${c} 13%, transparent)`, border: `1px solid color-mix(in srgb, ${c} 26%, transparent)`, marginBottom: 20 }}>
-          <Icon name={s.icon} size={36} color={c} />
+        <div style={{ marginBottom: 20 }}>
+          <ServiceLogo service={s} size={72} radius={20} />
         </div>
         <h2 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 22, color: "var(--on-surface)" }}>{s.name} opens in a new tab</h2>
         <p style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--on-surface-variant)", marginTop: 10, maxWidth: 360 }}>

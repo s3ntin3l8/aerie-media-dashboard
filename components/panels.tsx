@@ -19,6 +19,7 @@ import {
   Avatar,
   catColor,
 } from "@/components/primitives";
+import { ServiceLogo } from "@/components/ServiceLogo";
 
 type CSS = React.CSSProperties;
 
@@ -249,9 +250,7 @@ export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; on
       >
         <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c }} />
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 9, background: `color-mix(in srgb, ${c} 14%, transparent)` }}>
-            <Icon name={s.icon} size={20} color={c} />
-          </div>
+          <ServiceLogo service={s} size={36} radius={9} />
           <Icon name={s.embeddable ? "open_in_full" : "open_in_new"} size={14} color="var(--on-surface-variant)" />
         </div>
         <div>
@@ -377,9 +376,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
     >
       <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: sc }} />
       <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, borderRadius: 11, background: `color-mix(in srgb, ${c} 14%, transparent)`, flexShrink: 0 }}>
-          <Icon name={s.icon} size={22} color={c} />
-        </div>
+        <ServiceLogo service={s} size={40} radius={11} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 16, color: "var(--on-surface)" }}>{s.name}</span>

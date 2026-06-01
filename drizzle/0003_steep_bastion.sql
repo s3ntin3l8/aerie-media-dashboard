@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `logo_slug` text;
