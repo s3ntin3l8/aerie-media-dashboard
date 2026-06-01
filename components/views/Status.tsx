@@ -84,9 +84,21 @@ function InstanceSelect({ current }: { current: string | null }) {
   );
 }
 
+function useSecondsAgo(dep: unknown): string {
+  const [lastSeen, setLastSeen] = useState(() => Date.now());
+  const [ago, setAgo] = useState(0);
+  useEffect(() => { setLastSeen(Date.now()); setAgo(0); }, [dep]);
+  useEffect(() => {
+    const t = setInterval(() => setAgo(Math.floor((Date.now() - lastSeen) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [lastSeen]);
+  return ago < 5 ? "live" : `${ago}s ago`;
+}
+
 export function Status() {
   const { role } = usePortal();
   const { services, metrics } = useData();
+  const metricsAge = useSecondsAgo(metrics);
   const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
@@ -158,6 +170,11 @@ export function Status() {
                 <Pill tone="primary" style={{ marginLeft: 4 }}>
                   Admin
                 </Pill>
+                {metrics != null && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: metricsAge === "live" ? "var(--originator-own)" : "var(--on-surface-variant)", marginLeft: 2 }}>
+                    {metricsAge}
+                  </span>
+                )}
                 {metrics != null && <InstanceSelect current={metrics.instance} />}
               </div>
               {metrics == null ? (

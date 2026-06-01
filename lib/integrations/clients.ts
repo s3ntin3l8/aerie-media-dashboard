@@ -483,7 +483,9 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
   // isq: standalone selector (curly-brace pair) for metrics with no other labels
   const iq = inst ? `,instance="${inst}"` : "";
   const isq = inst ? `{instance="${inst}"}` : "{}";
-  const diskFilter = `{fstype!~"tmpfs|overlay|squashfs|ramfs"${iq}}`;
+  // Exclude fuse aggregate mounts (shfs = Unraid array, fuse.* = mergerfs / sshfs / etc.)
+  // so the query only sums underlying block-device filesystems and avoids double-counting.
+  const diskFilter = `{fstype!~"tmpfs|overlay|squashfs|ramfs|shfs|fuse.*"${iq}}`;
 
   const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
     try { return await fn(); } catch { return fallback; }
@@ -495,8 +497,8 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
     safe(() => prometheusQuery(`node_memory_MemTotal_bytes${isq}`), null),
     safe(() => prometheusRange(`sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br.*"${iq}}[5m])) * 8`), Array<number>(40).fill(0)),
     safe(() => prometheusRange(`sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br.*"${iq}}[5m])) * 8`), Array<number>(40).fill(0)),
-    safe(() => prometheusRange(`sum(node_filesystem_size_bytes${diskFilter} - node_filesystem_avail_bytes${diskFilter})`), Array<number>(40).fill(0)),
-    safe(() => prometheusQuery(`sum(node_filesystem_size_bytes${diskFilter})`), null),
+    safe(() => prometheusRange(`sum(max by(instance, device) (node_filesystem_size_bytes${diskFilter} - node_filesystem_avail_bytes${diskFilter}))`), Array<number>(40).fill(0)),
+    safe(() => prometheusQuery(`sum(max by(instance, device) (node_filesystem_size_bytes${diskFilter}))`), null),
     safe(() => prometheusRange(`node_load1${isq}`), Array<number>(40).fill(0)),
   ]);
 
