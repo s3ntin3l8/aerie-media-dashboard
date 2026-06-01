@@ -226,6 +226,7 @@ export function Admin() {
       name: form.name.trim(),
       cat: form.cat,
       icon: isIconName(form.icon) ? form.icon : "dns",
+      logoSlug: form.logoSlug || null,
       host: form.host.trim(),
       baseUrl: `https://${form.host.trim()}`,
       embeddable: form.embeddable,
@@ -233,6 +234,7 @@ export function Admin() {
       centralLabel: form.central ? form.centralLabel || null : null,
       version: form.version || null,
       note: form.note || null,
+      monitoringKey: form.monitoringKey || null,
     });
     // Only write the secret when the admin actually entered one (blank = keep).
     if (form.apiKey && form.apiKey.trim()) await setServiceSecret(id, form.apiKey.trim());

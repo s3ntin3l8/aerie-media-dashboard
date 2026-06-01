@@ -11,6 +11,7 @@ export const services = sqliteTable("services", {
   name: text("name").notNull(),
   cat: text("cat").notNull(), // stream | request | automation | monitor | infra
   icon: text("icon").notNull(),
+  logoSlug: text("logo_slug"),
   embeddable: integer("embeddable", { mode: "boolean" }).notNull().default(false),
   central: integer("central", { mode: "boolean" }).notNull().default(false),
   centralLabel: text("central_label"),
@@ -20,6 +21,7 @@ export const services = sqliteTable("services", {
   version: text("version"),
   note: text("note"),
   sortOrder: integer("sort_order").notNull().default(0),
+  monitoringKey: text("monitoring_key"),
 });
 
 // Encrypted per-service secrets (API keys/tokens). AES-256-GCM at rest.

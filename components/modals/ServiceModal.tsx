@@ -8,11 +8,13 @@ import React, { useEffect, useState } from "react";
 import type { Service } from "@/lib/types";
 import { Icon, Divider, Heartbeat, StatusDot, catColor } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, ToggleRow, Toggle, CatPicker, fieldInput } from "@/components/modals/ModalShell";
+import { IconPicker } from "@/components/modals/IconPicker";
 
 export interface ServiceForm {
   name: string;
   cat: string;
   icon: string;
+  logoSlug: string;
   host: string;
   version: string;
   embeddable: boolean;
@@ -22,6 +24,50 @@ export interface ServiceForm {
   healthUrl: string;
   interval: string;
   apiKey: string;
+  monitoringKey: string;
+}
+
+interface GatusEndpoint { key: string; name: string; group?: string }
+
+function MonitoringKeyPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [endpoints, setEndpoints] = useState<GatusEndpoint[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let ignore = false;
+    setLoading(true);
+    fetch("/api/gatus-endpoints")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: GatusEndpoint[]) => { if (!ignore) { setEndpoints(data); setLoading(false); } })
+      .catch(() => { if (!ignore) setLoading(false); });
+    return () => { ignore = true; };
+  }, []);
+
+  if (loading) return (
+    <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)", fontFamily: "var(--font-mono)" }}>
+      Loading endpoints…
+    </span>
+  );
+  if (endpoints.length === 0) return (
+    <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>
+      No Gatus endpoints found — configure Gatus first.
+    </span>
+  );
+  const knownKeys = new Set(endpoints.map((e) => e.key));
+  const orphan = value && !knownKeys.has(value) ? value : null;
+  return (
+    <Field label="Gatus endpoint">
+      <select className="input" style={fieldInput} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Auto-detect (by name)</option>
+        {orphan && <option value={orphan}>{orphan} (stored — not in current list)</option>}
+        {endpoints.map((ep) => (
+          <option key={ep.key} value={ep.key}>
+            {ep.group ? `${ep.group} / ${ep.name}` : ep.name}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
 }
 
 const isIcon = (s: string) => /^[a-z_]+$/.test(s);
@@ -53,6 +99,7 @@ export function ServiceModal({
     name: "",
     cat: "stream",
     icon: "dns",
+    logoSlug: "",
     host: "",
     version: "",
     embeddable: true,
@@ -62,6 +109,7 @@ export function ServiceModal({
     healthUrl: "",
     interval: "60",
     apiKey: "",
+    monitoringKey: "",
   });
   const init = (): ServiceForm => {
     if (editing && service) {
@@ -70,6 +118,7 @@ export function ServiceModal({
         name: service.name,
         cat: service.cat,
         icon: service.icon,
+        logoSlug: service.logoSlug ?? "",
         host: service.host,
         version: service.version || "",
         embeddable: service.embeddable,
@@ -79,6 +128,7 @@ export function ServiceModal({
         healthUrl: `https://${service.host}/health`,
         interval: "60",
         apiKey: "", // blank = keep existing secret (never pre-fill it)
+        monitoringKey: service.monitoringKey ?? "",
       };
     }
     return blank();
@@ -168,6 +218,14 @@ export function ServiceModal({
 
         <Divider />
 
+        {/* SERVICE LOGO */}
+        <section>
+          <SectionLabel hint="optional — from dashboard-icons">Service logo</SectionLabel>
+          <IconPicker value={f.logoSlug} onChange={(v) => set("logoSlug", v)} catColor={c} />
+        </section>
+
+        <Divider />
+
         {/* ACCESS & SECRETS */}
         <section>
           <SectionLabel>Access &amp; secrets</SectionLabel>
@@ -228,6 +286,14 @@ export function ServiceModal({
               </span>
             </div>
           )}
+        </section>
+
+        <Divider />
+
+        {/* MONITORING SOURCE */}
+        <section>
+          <SectionLabel hint="which Gatus endpoint tracks this service">Monitoring source</SectionLabel>
+          <MonitoringKeyPicker value={f.monitoringKey} onChange={(v) => set("monitoringKey", v)} />
         </section>
 
         <Divider />

@@ -20,6 +20,7 @@ async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: stri
 export interface ServiceHealth {
   key: string; // matched to our service id where possible
   name: string;
+  group?: string;
   status: ServiceStatus;
   ms: number;
   uptime: number; // %
@@ -55,7 +56,7 @@ export async function gatusHealth(): Promise<ServiceHealth[]> {
     const uptime = results.length ? (okCount / results.length) * 100 : 100;
     const ms = last ? Math.round(last.duration / 1e6) : 0;
     const status: ServiceStatus = !last ? "up" : last.success ? "up" : "down";
-    return { key: ep.name.toLowerCase(), name: ep.name, status, ms, uptime, beats };
+    return { key: ep.name.toLowerCase(), name: ep.name, group: ep.group, status, ms, uptime, beats };
   });
 }
 
@@ -464,9 +465,13 @@ export interface NodeMetrics {
   memHistory: number[];
   netOutBps: number | null;
   netHistory: number[];
+  netInBps: number | null;
+  netInHistory: number[];
   diskUsedBytes: number | null;
   diskTotalBytes: number | null;
   diskHistory: number[];
+  sysLoad: number | null;
+  sysLoadHistory: number[];
 }
 
 export async function prometheusMetrics(): Promise<NodeMetrics> {
@@ -483,13 +488,15 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
     try { return await fn(); } catch { return fallback; }
   };
 
-  const [cpuHistory, memHistory, memTotal, netHistory, diskHistory, diskTotal] = await Promise.all([
+  const [cpuHistory, memHistory, memTotal, netHistory, netInHistory, diskHistory, diskTotal, sysLoadHistory] = await Promise.all([
     safe(() => prometheusRange(`100 - (avg(rate(node_cpu_seconds_total{mode="idle"${iq}}[5m])) * 100)`), Array<number>(40).fill(0)),
     safe(() => prometheusRange(`node_memory_MemTotal_bytes${isq} - node_memory_MemAvailable_bytes${isq}`), Array<number>(40).fill(0)),
     safe(() => prometheusQuery(`node_memory_MemTotal_bytes${isq}`), null),
     safe(() => prometheusRange(`sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br.*"${iq}}[5m])) * 8`), Array<number>(40).fill(0)),
+    safe(() => prometheusRange(`sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br.*"${iq}}[5m])) * 8`), Array<number>(40).fill(0)),
     safe(() => prometheusRange(`sum(node_filesystem_size_bytes${diskFilter} - node_filesystem_avail_bytes${diskFilter})`), Array<number>(40).fill(0)),
     safe(() => prometheusQuery(`sum(node_filesystem_size_bytes${diskFilter})`), null),
+    safe(() => prometheusRange(`node_load1${isq}`), Array<number>(40).fill(0)),
   ]);
 
   const last = (h: number[]) => (h.length ? h[h.length - 1] : null);
@@ -504,8 +511,12 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
     memHistory,
     netOutBps: finite(last(netHistory)),
     netHistory,
+    netInBps: finite(last(netInHistory)),
+    netInHistory,
     diskUsedBytes: finite(last(diskHistory)),
     diskTotalBytes: diskTotal,
     diskHistory,
+    sysLoad: finite(last(sysLoadHistory)),
+    sysLoadHistory,
   };
 }

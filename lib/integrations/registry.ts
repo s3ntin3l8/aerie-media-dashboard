@@ -16,6 +16,7 @@ export interface ServiceConfig {
   name: string;
   cat: Category;
   icon: string;
+  logoSlug: string | null;
   embeddable: boolean;
   central: boolean;
   centralLabel: string | null;
@@ -24,6 +25,7 @@ export interface ServiceConfig {
   version: string | null;
   note: string | null;
   sortOrder: number;
+  monitoringKey: string | null;
 }
 
 export async function getServiceConfigs(): Promise<ServiceConfig[]> {
@@ -35,6 +37,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       name: r.name,
       cat: r.cat as Category,
       icon: r.icon,
+      logoSlug: r.logoSlug,
       embeddable: r.embeddable,
       central: r.central,
       centralLabel: r.centralLabel,
@@ -43,6 +46,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       version: r.version,
       note: r.note,
       sortOrder: r.sortOrder,
+      monitoringKey: r.monitoringKey ?? null,
     }));
   } catch {
     return [];

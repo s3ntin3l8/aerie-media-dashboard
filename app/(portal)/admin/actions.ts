@@ -51,6 +51,7 @@ export interface ServiceInput {
   name: string;
   cat: string;
   icon: string;
+  logoSlug?: string | null;
   host: string;
   baseUrl?: string;
   embeddable?: boolean;
@@ -58,6 +59,7 @@ export interface ServiceInput {
   centralLabel?: string | null;
   version?: string | null;
   note?: string | null;
+  monitoringKey?: string | null;
 }
 
 /** Create or update a service registry entry. */
@@ -69,6 +71,7 @@ export async function upsertService(input: ServiceInput) {
     name: input.name,
     cat: input.cat,
     icon: input.icon,
+    logoSlug: input.logoSlug ?? null,
     host: input.host,
     baseUrl: input.baseUrl || `https://${input.host}`,
     embeddable: input.embeddable ?? false,
@@ -76,6 +79,7 @@ export async function upsertService(input: ServiceInput) {
     centralLabel: input.centralLabel ?? null,
     version: input.version ?? null,
     note: input.note ?? null,
+    monitoringKey: input.monitoringKey ?? null,
   };
   await db
     .insert(schema.services)

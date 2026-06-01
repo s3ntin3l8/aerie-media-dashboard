@@ -19,6 +19,7 @@ export interface Service {
   name: string;
   cat: Category;
   icon: string;
+  logoSlug?: string;
   embeddable: boolean;
   central?: boolean;
   centralLabel?: string;
@@ -30,6 +31,7 @@ export interface Service {
   /** 30-point heartbeat: 1 = up, 0.5 = degraded, 0 = down, -1 = no data (unknown) */
   beats: number[];
   note: string;
+  monitoringKey?: string;
 }
 
 export interface NowPlaying {

@@ -35,6 +35,7 @@ export async function applyServiceConfig(db: DB, cfg: ServiceConfigFile): Promis
           name: s.name,
           cat: s.cat,
           icon: s.icon,
+          logoSlug: s.logoSlug ?? null,
           embeddable: s.embeddable ?? false,
           central: s.central ?? false,
           centralLabel: s.centralLabel ?? null,
@@ -42,6 +43,7 @@ export async function applyServiceConfig(db: DB, cfg: ServiceConfigFile): Promis
           baseUrl: s.baseUrl || `https://${s.host}`,
           version: s.version ?? null,
           note: s.note ?? null,
+          monitoringKey: s.monitoringKey ?? null,
           sortOrder: base + i,
         })),
       )

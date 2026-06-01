@@ -27,8 +27,10 @@ const serviceSchema = z.object({
   centralLabel: z.string().nullish(),
   version: z.string().nullish(),
   note: z.string().nullish(),
+  logoSlug: z.string().optional(),
   /** API key/token, typically a ${ENV_VAR} reference resolved at load time. */
   apiKey: z.string().optional(),
+  monitoringKey: z.string().nullish(),
 });
 
 const fileSchema = z.object({
