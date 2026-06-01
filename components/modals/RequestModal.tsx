@@ -256,7 +256,7 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
   return (
     <div style={{ padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 18 }}>
       <div style={{ display: "flex", gap: 15 }}>
-        <PosterTile title={req.title} kind={req.kind} cat="request" w={68} />
+        <PosterTile title={req.title} kind={req.kind} cat="request" w={68} art={req.art} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
             <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{req.title}</h3>
