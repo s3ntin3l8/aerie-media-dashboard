@@ -38,8 +38,11 @@ export function Status() {
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
-  const avgMs = Math.round(list.reduce((a, s) => a + s.ms, 0) / list.length);
-  const avgUp = (list.reduce((a, s) => a + s.uptime, 0) / list.length).toFixed(2);
+  // Averages only over services with real Gatus data — never let an
+  // unmonitored ("unknown") service skew uptime/latency to a fake number.
+  const monitored = list.filter((s) => s.status !== "unknown");
+  const avgMsText = monitored.length ? `${Math.round(monitored.reduce((a, s) => a + s.ms, 0) / monitored.length)}ms` : "—";
+  const avgUpText = monitored.length ? `${(monitored.reduce((a, s) => a + s.uptime, 0) / monitored.length).toFixed(2)}%` : "—";
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
@@ -51,12 +54,12 @@ export function Status() {
             gap: 7,
             padding: "7px 13px",
             borderRadius: 9999,
-            background: down ? "color-mix(in srgb, var(--error) 12%, transparent)" : deg ? "color-mix(in srgb, var(--amber) 12%, transparent)" : "color-mix(in srgb, var(--originator-own) 12%, transparent)",
+            background: down ? "color-mix(in srgb, var(--error) 12%, transparent)" : deg ? "color-mix(in srgb, var(--amber) 12%, transparent)" : up > 0 ? "color-mix(in srgb, var(--originator-own) 12%, transparent)" : "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)",
           }}
         >
-          <StatusDot status={down ? "down" : deg ? "degraded" : "up"} size={8} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: down ? "var(--error)" : deg ? "var(--amber)" : "var(--originator-own)" }}>
-            {down ? "Incident" : deg ? "Degraded" : "Operational"}
+          <StatusDot status={down ? "down" : deg ? "degraded" : up > 0 ? "up" : "unknown"} size={8} />
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: down ? "var(--error)" : deg ? "var(--amber)" : up > 0 ? "var(--originator-own)" : "var(--on-surface-variant)" }}>
+            {down ? "Incident" : deg ? "Degraded" : up > 0 ? "Operational" : "No data"}
           </span>
         </span>
       </PageHeader>
@@ -65,8 +68,8 @@ export function Status() {
         <div className="aerie-page-pad" style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
           <div className="aerie-stat-row">
             <StatTile label="Services up" value={`${up}/${list.length}`} color="var(--originator-own)" icon="check_circle" />
-            <StatTile label="Avg uptime 30d" value={`${avgUp}%`} color="var(--on-surface)" icon="trending_up" />
-            <StatTile label="Avg response" value={`${avgMs}ms`} color="var(--primary)" icon="bolt" />
+            <StatTile label="Avg uptime 30d" value={avgUpText} color="var(--on-surface)" icon="trending_up" />
+            <StatTile label="Avg response" value={avgMsText} color="var(--primary)" icon="bolt" />
             <StatTile label="Incidents" value={deg + down} color={deg + down ? "var(--amber)" : "var(--on-surface)"} icon="warning" />
           </div>
 
@@ -88,8 +91,8 @@ export function Status() {
                     <Heartbeat beats={s.beats} h={24} barW={5} />
                   </div>
                   <div style={{ flex: "0 0 60px", textAlign: "right" }}>
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: s.status === "down" ? "var(--error)" : s.status === "degraded" ? "var(--amber)" : "var(--on-surface)" }}>{s.uptime.toFixed(2)}%</div>
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{s.ms}ms</div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: s.status === "down" ? "var(--error)" : s.status === "degraded" ? "var(--amber)" : "var(--on-surface)" }}>{s.status === "unknown" ? "—" : `${s.uptime.toFixed(2)}%`}</div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{s.status === "unknown" ? "—" : `${s.ms}ms`}</div>
                   </div>
                 </div>
               ))}

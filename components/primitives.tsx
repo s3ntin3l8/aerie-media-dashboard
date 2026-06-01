@@ -184,10 +184,10 @@ export function HealthDots({ tier = "ok", size = 6 }: { tier?: "ok" | "warn" | "
 
 // Pulsing status dot
 export function StatusDot({ status = "up", size = 8 }: { status?: ServiceStatus; size?: number }) {
-  const col = status === "down" ? "var(--error)" : status === "degraded" ? "var(--amber)" : "var(--originator-own)";
+  const col = status === "down" ? "var(--error)" : status === "degraded" ? "var(--amber)" : status === "unknown" ? "var(--on-surface-variant)" : "var(--originator-own)";
   return (
     <span style={{ position: "relative", width: size, height: size, display: "inline-flex", flexShrink: 0 }}>
-      {status !== "down" && (
+      {status !== "down" && status !== "unknown" && (
         <span
           style={{
             position: "absolute",
@@ -203,21 +203,21 @@ export function StatusDot({ status = "up", size = 8 }: { status?: ServiceStatus;
   );
 }
 
-// Heartbeat bars (Gatus-style) — array of 0/0.5/1
+// Heartbeat bars (Gatus-style) — array of 1=up / 0.5=degraded / 0=down / -1=no data
 export function Heartbeat({ beats, h = 22, barW = 4, gap = 2 }: { beats: number[]; h?: number; barW?: number; gap?: number }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "flex-end", gap }}>
       {beats.map((b, i) => {
-        const col = b === 0 ? "var(--error)" : b === 0.5 ? "var(--amber)" : "var(--originator-own)";
+        const col = b === 0 ? "var(--error)" : b === 0.5 ? "var(--amber)" : b < 0 ? "var(--on-surface-variant)" : "var(--originator-own)";
         return (
           <span
             key={i}
-            title={b === 0 ? "down" : b === 0.5 ? "degraded" : "up"}
+            title={b < 0 ? "no data" : b === 0 ? "down" : b === 0.5 ? "degraded" : "up"}
             style={{
               width: barW,
-              height: b === 0 ? h : b === 0.5 ? h * 0.62 : h,
+              height: b === 0 ? h : b === 0.5 ? h * 0.62 : b < 0 ? Math.max(3, h * 0.28) : h,
               background: col,
-              opacity: b === 0 ? 0.9 : 0.85,
+              opacity: b < 0 ? 0.4 : b === 0 ? 0.9 : 0.85,
               borderRadius: 1.5,
             }}
           />

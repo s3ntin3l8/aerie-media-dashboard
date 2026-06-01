@@ -259,7 +259,7 @@ export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; on
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3 }}>
             <StatusDot status={s.status} size={6} />
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>
-              {s.status === "up" ? `${s.uptime.toFixed(2)}%` : s.status === "degraded" ? "degraded" : "down"}
+              {s.status === "up" ? `${s.uptime.toFixed(2)}%` : s.status === "unknown" ? "no data" : statusWord(s.status).toLowerCase()}
             </span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginLeft: "auto" }}>{s.ms}ms</span>
           </div>
@@ -284,23 +284,52 @@ export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; on
 }
 
 // ── CENTRAL SERVICES SPOTLIGHT ─────────────────────────────
+function assertNever(x: never): never {
+  throw new Error(`Unhandled ServiceStatus: ${String(x)}`);
+}
 export function statusColor(st: ServiceStatus) {
-  return st === "down" ? "var(--error)" : st === "degraded" ? "var(--amber)" : "var(--originator-own)";
+  switch (st) {
+    case "up":
+      return "var(--originator-own)";
+    case "degraded":
+      return "var(--amber)";
+    case "down":
+      return "var(--error)";
+    case "unknown":
+      return "var(--on-surface-variant)";
+    default:
+      return assertNever(st);
+  }
 }
 export function statusWord(st: ServiceStatus) {
-  return st === "down" ? "DOWN" : st === "degraded" ? "DEGRADED" : "OPERATIONAL";
+  switch (st) {
+    case "up":
+      return "OPERATIONAL";
+    case "degraded":
+      return "DEGRADED";
+    case "down":
+      return "DOWN";
+    case "unknown":
+      return "NO DATA";
+    default:
+      return assertNever(st);
+  }
+}
+/** Short uptime label for a service — honest "—" when health is unknown. */
+export function uptimeText(s: Pick<Service, "status" | "uptime">) {
+  return s.status === "unknown" ? "—" : `${s.uptime.toFixed(2)}%`;
 }
 
 function HeartbeatStrip({ beats, h = 24 }: { beats: number[]; h?: number }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: h, width: "100%" }}>
       {beats.map((b, i) => {
-        const col = statusColor(b === 0 ? "down" : b === 0.5 ? "degraded" : "up");
+        const st: ServiceStatus = b === 0 ? "down" : b === 0.5 ? "degraded" : b < 0 ? "unknown" : "up";
         return (
           <span
             key={i}
-            title={b === 0 ? "down" : b === 0.5 ? "degraded" : "up"}
-            style={{ flex: 1, minWidth: 0, height: b === 0.5 ? "62%" : "100%", minHeight: 5, background: col, opacity: b === 0 ? 0.92 : 0.8, borderRadius: 1.5 }}
+            title={st === "unknown" ? "no data" : st}
+            style={{ flex: 1, minWidth: 0, height: b < 0 ? "30%" : b === 0.5 ? "62%" : "100%", minHeight: 5, background: statusColor(st), opacity: b < 0 ? 0.4 : b === 0 ? 0.92 : 0.8, borderRadius: 1.5 }}
           />
         );
       })}
@@ -382,16 +411,28 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
       <div style={{ display: "flex", alignItems: "flex-end", gap: 18, marginBottom: 14 }}>
         <div>
           <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 34, lineHeight: 1, letterSpacing: "-0.02em", color: "var(--on-surface)", fontVariantNumeric: "tabular-nums" }}>
-            {s.uptime.toFixed(2)}
-            <span style={{ fontSize: 18, color: "var(--on-surface-variant)", marginLeft: 1 }}>%</span>
+            {s.status === "unknown" ? (
+              "—"
+            ) : (
+              <>
+                {s.uptime.toFixed(2)}
+                <span style={{ fontSize: 18, color: "var(--on-surface-variant)", marginLeft: 1 }}>%</span>
+              </>
+            )}
           </div>
           <Eyebrow style={{ marginTop: 6 }}>30-day uptime</Eyebrow>
         </div>
         <div style={{ width: 1, alignSelf: "stretch", background: "var(--outline-variant)", margin: "3px 0" }} />
         <div>
           <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 22, lineHeight: 1, letterSpacing: "-0.01em", color: "var(--on-surface)", fontVariantNumeric: "tabular-nums" }}>
-            {s.ms}
-            <span style={{ fontSize: 13, color: "var(--on-surface-variant)", marginLeft: 1 }}>ms</span>
+            {s.status === "unknown" ? (
+              "—"
+            ) : (
+              <>
+                {s.ms}
+                <span style={{ fontSize: 13, color: "var(--on-surface-variant)", marginLeft: 1 }}>ms</span>
+              </>
+            )}
           </div>
           <Eyebrow style={{ marginTop: 6 }}>Response</Eyebrow>
         </div>
@@ -421,19 +462,22 @@ export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: S
   if (list.length === 0) return null;
   const down = list.filter((s) => s.status === "down");
   const deg = list.filter((s) => s.status === "degraded");
-  const allGood = down.length === 0 && deg.length === 0;
+  const unknown = list.filter((s) => s.status === "unknown");
+  const allGood = down.length === 0 && deg.length === 0 && unknown.length === 0;
   const headline = allGood
     ? "All core services are up — stream away."
     : down.length
       ? `${down.map((s) => s.name).join(", ")} ${down.length > 1 ? "are" : "is"} down — streaming affected.`
-      : `${deg.map((s) => s.name).join(", ")} degraded — playback may be slow.`;
-  const hc = allGood ? "var(--originator-own)" : down.length ? "var(--error)" : "var(--amber)";
+      : deg.length
+        ? `${deg.map((s) => s.name).join(", ")} degraded — playback may be slow.`
+        : "Health unknown — connect Gatus to monitor uptime.";
+  const hc = allGood ? "var(--originator-own)" : down.length ? "var(--error)" : deg.length ? "var(--amber)" : "var(--on-surface-variant)";
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 13 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 9, background: `color-mix(in srgb, ${hc} 13%, transparent)`, flexShrink: 0 }}>
-          <Icon name={allGood ? "verified" : "warning"} size={18} color={hc} fill={allGood} />
+          <Icon name={allGood ? "verified" : down.length || deg.length ? "warning" : "help"} size={18} color={hc} fill={allGood} />
         </div>
         <div style={{ minWidth: 0 }}>
           <Eyebrow color="var(--primary)" style={{ marginBottom: 2 }}>
@@ -463,6 +507,7 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
+  const unknown = list.filter((s) => s.status === "unknown").length;
 
   return (
     <PanelShell
@@ -475,6 +520,7 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
           <span style={{ color: "var(--originator-own)" }}>{up} up</span>
           {deg > 0 && <span style={{ color: "var(--amber)" }}>{deg} degraded</span>}
           {down > 0 && <span style={{ color: "var(--error)" }}>{down} down</span>}
+          {unknown > 0 && <span style={{ color: "var(--on-surface-variant)" }}>{unknown} no data</span>}
         </span>
       }
     >
@@ -492,7 +538,7 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
               <Heartbeat beats={s.beats.slice(-18)} h={18} barW={3} gap={1.5} />
             </div>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: s.status === "down" ? "var(--error)" : s.status === "degraded" ? "var(--amber)" : "var(--on-surface-variant)", minWidth: 48, textAlign: "right" }}>
-              {s.uptime.toFixed(2)}%
+              {uptimeText(s)}
             </span>
           </div>
         ))}

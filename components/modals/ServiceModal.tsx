@@ -224,7 +224,7 @@ export function ServiceModal({
               <Heartbeat beats={service.beats.slice(-22)} h={18} barW={3} />
               <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
                 <StatusDot status={service.status} size={7} />
-                {service.uptime}% · {service.status}
+                {service.status === "unknown" ? "no data" : `${service.uptime}% · ${service.status}`}
               </span>
             </div>
           )}

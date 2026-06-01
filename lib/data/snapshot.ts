@@ -77,13 +77,15 @@ export async function getSnapshot(): Promise<Snapshot> {
   ]);
 
   // services: DB config merged with live Gatus health. Without a Gatus
-  // reading we have no real health data → a neutral "unknown" placeholder.
+  // reading we have no real health data → an honest "unknown" status
+  // (beats of -1 render as a neutral "no data" baseline). We never
+  // fabricate an "up / 100%" reading for an unmonitored service.
   const healthFor = (id: string, name: string): Pick<Service, "status" | "ms" | "uptime" | "beats"> => {
     if (health) {
       const h: ServiceHealth | undefined = health.find((x) => x.key === id || x.name.toLowerCase() === name.toLowerCase());
       if (h) return { status: h.status, ms: h.ms, uptime: h.uptime, beats: padBeats(h.beats) };
     }
-    return { status: "up", ms: 0, uptime: 100, beats: padBeats([]) };
+    return { status: "unknown", ms: 0, uptime: 0, beats: new Array(30).fill(-1) };
   };
 
   const services: Service[] = configs.map((c) => ({

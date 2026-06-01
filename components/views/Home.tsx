@@ -26,7 +26,8 @@ function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
-  const allGood = deg === 0 && down === 0;
+  const unknown = list.filter((s) => s.status === "unknown").length;
+  const allGood = list.length > 0 && deg === 0 && down === 0 && unknown === 0;
   const active = nowPlaying.length;
   const totalBitrate = nowPlaying.reduce((a, s) => a + parseFloat(s.bitrate), 0).toFixed(1);
   return (
@@ -44,9 +45,19 @@ function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
       }}
     >
       <div onClick={onOpenStatus} style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
-        <StatusDot status={down ? "down" : deg ? "degraded" : "up"} size={8} />
-        <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: allGood ? "var(--originator-own)" : down ? "var(--error)" : "var(--amber)" }}>
-          {allGood ? "All systems operational" : down ? `${down} service${down > 1 ? "s" : ""} down` : `${deg} degraded`}
+        <StatusDot status={down ? "down" : deg ? "degraded" : up > 0 ? "up" : "unknown"} size={8} />
+        <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: allGood ? "var(--originator-own)" : down ? "var(--error)" : deg ? "var(--amber)" : "var(--on-surface-variant)" }}>
+          {list.length === 0
+            ? "No services configured"
+            : allGood
+              ? "All systems operational"
+              : down
+                ? `${down} service${down > 1 ? "s" : ""} down`
+                : deg
+                  ? `${deg} degraded`
+                  : up > 0
+                    ? `${up} up · ${unknown} no data`
+                    : "Monitoring not configured"}
         </span>
       </div>
       <div style={{ width: 1, height: 16, background: "var(--outline-variant)" }} />

@@ -61,7 +61,7 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <StatusDot status={s.status} size={7} />
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: s.status === "degraded" ? "var(--amber)" : s.status === "down" ? "var(--error)" : "var(--on-surface-variant)" }}>
-          {s.status === "up" ? `${s.uptime.toFixed(2)}% · ${s.ms}ms` : s.status}
+          {s.status === "up" ? `${s.uptime.toFixed(2)}% · ${s.ms}ms` : s.status === "unknown" ? "no data" : s.status}
         </span>
         <span
           style={{

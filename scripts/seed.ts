@@ -13,7 +13,7 @@ async function main() {
 
   console.log(`[seed] migrating ${url} …`);
   await migrate(db, { migrationsFolder: "drizzle" });
-  console.log("[seed] seeding from mock data …");
+  console.log("[seed] seeding structural defaults (visibility groups) …");
   await seed(db);
 
   const svc = await db.select().from(schema.services);

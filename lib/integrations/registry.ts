@@ -1,7 +1,7 @@
 // ============================================================
 // AERIE — service registry (server-only)
-// Reads service config + decrypted secrets from the DB, falling
-// back to the design's mock services when the DB is unavailable.
+// Reads service config + decrypted secrets from the DB. Returns empty
+// results when the DB is unavailable (no mock fallback).
 // ============================================================
 import "server-only";
 import { eq, and, isNotNull } from "drizzle-orm";

@@ -3,7 +3,7 @@
 // ============================================================
 
 export type Category = "stream" | "request" | "automation" | "monitor" | "infra";
-export type ServiceStatus = "up" | "degraded" | "down";
+export type ServiceStatus = "up" | "degraded" | "down" | "unknown";
 export type Role = "admin" | "user";
 export type MediaKind = "movie" | "series" | "track";
 export type RequestStatus = "available" | "approved" | "pending" | "declined";
@@ -27,7 +27,7 @@ export interface Service {
   status: ServiceStatus;
   uptime: number;
   ms: number;
-  /** 30-point heartbeat: 1 = up, 0.5 = degraded, 0 = down */
+  /** 30-point heartbeat: 1 = up, 0.5 = degraded, 0 = down, -1 = no data (unknown) */
   beats: number[];
   note: string;
 }
