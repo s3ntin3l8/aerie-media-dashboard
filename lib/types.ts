@@ -24,6 +24,7 @@ export interface Service {
   central?: boolean;
   centralLabel?: string;
   host: string;
+  scheme: "http" | "https";
   version: string;
   status: ServiceStatus;
   uptime: number;

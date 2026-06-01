@@ -456,6 +456,83 @@ export async function prometheusInstances(): Promise<string[]> {
   return data.data ?? [];
 }
 
+// ── Version detection ──────────────────────────────────────
+
+type ServiceKind = "jellyfin" | "overseerr" | "arr" | "tautulli" | "prometheus";
+
+function serviceKind(id: string): ServiceKind | null {
+  const l = id.toLowerCase();
+  if (l.includes("jellyfin") || l.includes("emby")) return "jellyfin";
+  if (l.includes("overseerr") || l.includes("jellyseerr") || l.includes("seerr")) return "overseerr";
+  if (l.includes("sonarr") || l.includes("radarr") || l.includes("lidarr") ||
+      l.includes("readarr") || l.includes("prowlarr") || l.includes("whisparr") || l.includes("bazarr")) return "arr";
+  if (l.includes("tautulli")) return "tautulli";
+  if (l.includes("prometheus")) return "prometheus";
+  return null;
+}
+
+async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKind): Promise<string | null> {
+  const b = base.replace(/\/$/, "");
+  if (kind === "jellyfin") {
+    const d = await fetchJson<{ Version?: string }>(`${b}/System/Info`, {
+      service: "version-detect",
+      headers: apiKey ? { Authorization: `MediaBrowser Token="${apiKey}"` } : {},
+    });
+    return d.Version ?? null;
+  }
+  if (kind === "overseerr") {
+    const d = await fetchJson<{ version?: string }>(`${b}/api/v1/status`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-Api-Key": apiKey } : {},
+    });
+    return d.version ?? null;
+  }
+  if (kind === "arr") {
+    const d = await fetchJson<{ version?: string }>(`${b}/api/v3/system/status`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-Api-Key": apiKey } : {},
+    });
+    return d.version ?? null;
+  }
+  if (kind === "tautulli") {
+    const d = await fetchJson<{ response?: { data?: { tautulli_version?: string } } }>(
+      `${b}/api/v2?apikey=${encodeURIComponent(apiKey)}&cmd=get_tautulli_info`,
+      { service: "version-detect" },
+    );
+    return d.response?.data?.tautulli_version ?? null;
+  }
+  // prometheus
+  const d = await fetchJson<{ data?: { version?: string } }>(`${b}/api/v1/status/buildinfo`, {
+    service: "version-detect",
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  });
+  return d.data?.version ?? null;
+}
+
+/** Detect version for a saved service using its stored credentials. Returns null on failure or unknown type. */
+export async function detectVersion(serviceId: string): Promise<string | null> {
+  try {
+    const kind = serviceKind(serviceId);
+    if (!kind) return null;
+    const c = await getServiceCredentials(serviceId);
+    if (!c) return null;
+    return await fetchServiceVersion(c.baseUrl, c.apiKey ?? "", kind);
+  } catch {
+    return null;
+  }
+}
+
+/** Probe a version endpoint with explicit (transient) credentials — no DB access. */
+export async function probeVersion(baseUrl: string, apiKey: string, idHint: string): Promise<string | null> {
+  try {
+    const kind = serviceKind(idHint);
+    if (!kind) return null;
+    return await fetchServiceVersion(baseUrl, apiKey, kind);
+  } catch {
+    return null;
+  }
+}
+
 // ── Prometheus — node_exporter metrics bundle ───────────────
 export interface NodeMetrics {
   instance: string | null;

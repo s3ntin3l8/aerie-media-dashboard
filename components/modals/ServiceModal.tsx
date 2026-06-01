@@ -15,6 +15,7 @@ export interface ServiceForm {
   cat: string;
   icon: string;
   logoSlug: string;
+  scheme: "https" | "http";
   host: string;
   version: string;
   embeddable: boolean;
@@ -72,6 +73,37 @@ function MonitoringKeyPicker({ value, onChange }: { value: string; onChange: (v:
 
 const isIcon = (s: string) => /^[a-z_]+$/.test(s);
 
+// Known service presets applied to blank fields when the name matches.
+const SERVICE_PRESETS: Record<string, { cat: string; icon: string; logoSlug: string }> = {
+  jellyfin:      { cat: "stream",     icon: "smart_display", logoSlug: "jellyfin" },
+  emby:          { cat: "stream",     icon: "smart_display", logoSlug: "emby" },
+  plex:          { cat: "stream",     icon: "smart_display", logoSlug: "plex" },
+  tautulli:      { cat: "monitor",    icon: "bar_chart",     logoSlug: "tautulli" },
+  overseerr:     { cat: "request",    icon: "add_circle",    logoSlug: "overseerr" },
+  jellyseerr:    { cat: "request",    icon: "add_circle",    logoSlug: "jellyseerr" },
+  sonarr:        { cat: "automation", icon: "live_tv",       logoSlug: "sonarr" },
+  radarr:        { cat: "automation", icon: "movie",         logoSlug: "radarr" },
+  lidarr:        { cat: "automation", icon: "library_music", logoSlug: "lidarr" },
+  readarr:       { cat: "automation", icon: "menu_book",     logoSlug: "readarr" },
+  prowlarr:      { cat: "automation", icon: "search",        logoSlug: "prowlarr" },
+  bazarr:        { cat: "automation", icon: "subtitles",     logoSlug: "bazarr" },
+  whisparr:      { cat: "automation", icon: "movie",         logoSlug: "whisparr" },
+  gatus:         { cat: "monitor",    icon: "monitor_heart", logoSlug: "gatus" },
+  prometheus:    { cat: "infra",      icon: "query_stats",   logoSlug: "prometheus" },
+  grafana:       { cat: "infra",      icon: "monitoring",    logoSlug: "grafana" },
+  portainer:     { cat: "infra",      icon: "dns",           logoSlug: "portainer" },
+  nextcloud:     { cat: "infra",      icon: "cloud",         logoSlug: "nextcloud" },
+  homeassistant: { cat: "infra",      icon: "home",          logoSlug: "home-assistant" },
+  uptimekuma:    { cat: "monitor",    icon: "monitor_heart", logoSlug: "uptime-kuma" },
+};
+
+function matchPreset(name: string) {
+  const key = name.toLowerCase().replace(/[\s\-_.]/g, "");
+  return SERVICE_PRESETS[key] ?? null;
+}
+
+type ConnStatus = { state: "idle" } | { state: "testing" } | { state: "ok"; version: string | null } | { state: "err" };
+
 export function ServiceModal({
   open,
   mode,
@@ -82,6 +114,8 @@ export function ServiceModal({
   onClose,
   onSave,
   onDelete,
+  onDetectVersion,
+  onTestConnection,
 }: {
   open: boolean;
   mode: "add" | "edit";
@@ -92,6 +126,8 @@ export function ServiceModal({
   onClose: () => void;
   onSave: (form: ServiceForm, vis: Record<string, boolean>) => void;
   onDelete: (service: Service) => void;
+  onDetectVersion?: (baseUrl: string, apiKey: string, name: string) => Promise<string | null>;
+  onTestConnection?: (baseUrl: string, apiKey: string, name: string) => Promise<string | null>;
 }) {
   const editing = mode === "edit";
 
@@ -100,6 +136,7 @@ export function ServiceModal({
     cat: "stream",
     icon: "dns",
     logoSlug: "",
+    scheme: "https",
     host: "",
     version: "",
     embeddable: true,
@@ -119,6 +156,7 @@ export function ServiceModal({
         cat: service.cat,
         icon: service.icon,
         logoSlug: service.logoSlug ?? "",
+        scheme: service.scheme,
         host: service.host,
         version: service.version || "",
         embeddable: service.embeddable,
@@ -137,15 +175,39 @@ export function ServiceModal({
   const [f, setF] = useState<ServiceForm>(init);
   const [vis, setVis] = useState<Record<string, boolean>>(initialVisibility);
   const [revealKey, setRevealKey] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [connStatus, setConnStatus] = useState<ConnStatus>({ state: "idle" });
 
   useEffect(() => {
     if (open) {
       setF(init());
       setVis(initialVisibility);
       setRevealKey(false);
+      setDetecting(false);
+      setConnStatus({ state: "idle" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, service?.id, mode]);
+
+  const handleDetect = async () => {
+    if (!onDetectVersion || detecting) return;
+    setDetecting(true);
+    try {
+      const v = await onDetectVersion(`${f.scheme}://${f.host}`, f.apiKey, f.name);
+      if (v) set("version", v);
+    } finally {
+      setDetecting(false);
+    }
+  };
+  const canDetect = Boolean(onDetectVersion) && (editing || f.host.trim() !== "");
+
+  const handleTest = async () => {
+    if (!onTestConnection) return;
+    setConnStatus({ state: "testing" });
+    const result = await onTestConnection(`${f.scheme}://${f.host}`, f.apiKey, f.name);
+    setConnStatus(result !== null ? { state: "ok", version: result } : { state: "err" });
+  };
+  const canTest = Boolean(onTestConnection) && (editing || (f.host.trim() !== "" && f.apiKey.trim() !== ""));
 
   const set = <K extends keyof ServiceForm>(k: K, v: ServiceForm[K]) => setF((prev) => ({ ...prev, [k]: v }));
   const c = catColor(f.cat as Service["cat"]);
@@ -188,10 +250,38 @@ export function ServiceModal({
           <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12 }}>
               <Field label="Service name">
-                <input className="input" style={fieldInput} value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Jellyfin" autoFocus={!editing} />
+                <input
+                  className="input"
+                  style={fieldInput}
+                  value={f.name}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    if (!editing) {
+                      const preset = matchPreset(name);
+                      if (preset) {
+                        setF((prev) => ({
+                          ...prev,
+                          name,
+                          cat: prev.cat === "stream" ? preset.cat : prev.cat,
+                          icon: prev.icon === "dns" ? preset.icon : prev.icon,
+                          logoSlug: prev.logoSlug === "" ? preset.logoSlug : prev.logoSlug,
+                        }));
+                        return;
+                      }
+                    }
+                    set("name", name);
+                  }}
+                  placeholder="e.g. Jellyfin"
+                  autoFocus={!editing}
+                />
               </Field>
               <Field label="Version" hint="opt.">
-                <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.version} onChange={(e) => set("version", e.target.value)} placeholder="1.0.0" />
+                <div style={{ display: "flex", gap: 7 }}>
+                  <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)", flex: 1, minWidth: 0 }} value={f.version} onChange={(e) => set("version", e.target.value)} placeholder="1.0.0" />
+                  <button type="button" onClick={handleDetect} disabled={!canDetect || detecting} className="btn btn-secondary btn-sm" style={{ padding: "0 10px", flexShrink: 0 }} title="Auto-detect version from service API">
+                    {detecting ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>…</span> : <Icon name="auto_awesome" size={14} />}
+                  </button>
+                </div>
               </Field>
             </div>
             <Field label="Category">
@@ -207,7 +297,13 @@ export function ServiceModal({
                 </div>
               </Field>
               <Field label="Host">
-                <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.host} onChange={(e) => set("host", e.target.value)} placeholder="jellyfin.example.com" />
+                <div style={{ display: "flex", gap: 7 }}>
+                  <select className="input" value={f.scheme} onChange={(e) => set("scheme", e.target.value as "https" | "http")} style={{ ...fieldInput, fontFamily: "var(--font-mono)", width: "auto", flexShrink: 0 }}>
+                    <option value="https">https://</option>
+                    <option value="http">http://</option>
+                  </select>
+                  <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)", flex: 1, minWidth: 0 }} value={f.host} onChange={(e) => set("host", e.target.value)} placeholder="host.example.com" />
+                </div>
               </Field>
             </div>
             <Field label="Internal note" hint="shown to admins only">
@@ -254,7 +350,29 @@ export function ServiceModal({
                 <button type="button" onClick={() => setRevealKey((r) => !r)} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title={revealKey ? "Hide" : "Reveal"}>
                   <Icon name={revealKey ? "visibility_off" : "visibility"} size={16} />
                 </button>
+                <button type="button" onClick={handleTest} disabled={!canTest || connStatus.state === "testing"} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title="Test connection">
+                  {connStatus.state === "testing" ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>…</span> : <Icon name="wifi_find" size={16} />}
+                </button>
               </div>
+              {connStatus.state !== "idle" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: 11, fontFamily: "var(--font-mono)" }}>
+                  {connStatus.state === "testing" && <span style={{ color: "var(--on-surface-variant)" }}>Testing…</span>}
+                  {connStatus.state === "ok" && (
+                    <>
+                      <StatusDot status="up" size={7} />
+                      <span style={{ color: "var(--on-surface)" }}>
+                        Connected{connStatus.version ? ` · v${connStatus.version}` : ""}
+                      </span>
+                    </>
+                  )}
+                  {connStatus.state === "err" && (
+                    <>
+                      <StatusDot status="down" size={7} />
+                      <span style={{ color: "var(--on-surface-variant)" }}>Could not connect — check host and API key</span>
+                    </>
+                  )}
+                </div>
+              )}
             </Field>
           </div>
         </section>

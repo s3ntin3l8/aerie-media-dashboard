@@ -6,7 +6,7 @@ import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
-import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists } from "@/app/(portal)/admin/actions";
+import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
@@ -226,7 +226,7 @@ export function Admin() {
       icon: isIconName(form.icon) ? form.icon : "dns",
       logoSlug: form.logoSlug || null,
       host: form.host.trim(),
-      baseUrl: `https://${form.host.trim()}`,
+      baseUrl: `${form.scheme}://${form.host.trim()}`,
       embeddable: form.embeddable,
       central: form.central,
       centralLabel: form.central ? form.centralLabel || null : null,
@@ -240,6 +240,15 @@ export function Admin() {
     for (const g of groups) await setVisibility(id, g.name, g.name === adminGroup ? true : Boolean(vis[g.name]));
     setSvcModal(null);
     refresh();
+    // Auto-detect version when none was manually entered and a key is available.
+    if (!form.version && (form.apiKey.trim() || editing)) {
+      const detected = await detectServiceVersion(id);
+      if (detected) {
+        refresh();
+        flash(editing ? `Saved — v${detected} detected` : `${form.name} added — v${detected} detected`);
+        return;
+      }
+    }
     flash(editing ? `Saved changes to ${form.name}` : `${form.name} added to the portal`);
   };
 
@@ -303,6 +312,20 @@ export function Admin() {
           onClose={() => setSvcModal(null)}
           onSave={onSave}
           onDelete={onDelete}
+          onDetectVersion={async (baseUrl, apiKey, name) => {
+            if (svcModal.mode === "edit" && svcModal.service && !apiKey) {
+              const v = await detectServiceVersion(svcModal.service.id);
+              if (v) refresh();
+              return v;
+            }
+            return probeServiceVersion(baseUrl, apiKey, slug(name));
+          }}
+          onTestConnection={async (baseUrl, apiKey, name) => {
+            if (svcModal.mode === "edit" && svcModal.service && !apiKey) {
+              return testStoredConnection(svcModal.service.id);
+            }
+            return probeServiceVersion(baseUrl, apiKey, slug(name));
+          }}
         />
       )}
       <Toast message={toast} />
