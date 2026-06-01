@@ -270,11 +270,15 @@ export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; on
 
   return (
     <PanelShell title="Services" icon="apps" count={`${list.length}`} action={onAll ? <SeeAll onClick={onAll} /> : undefined} bodyStyle={{ padding: 14 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 11 }}>
-        {list.map((s) => (
-          <Tile key={s.id} s={s} />
-        ))}
-      </div>
+      {list.length === 0 ? (
+        <Empty icon="apps" line="No services yet" sub="Add services in Admin to launch them here." />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 11 }}>
+          {list.map((s) => (
+            <Tile key={s.id} s={s} />
+          ))}
+        </div>
+      )}
     </PanelShell>
   );
 }
@@ -414,6 +418,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
 export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void }) {
   const { services } = useData();
   const list = services.filter((s) => s.central);
+  if (list.length === 0) return null;
   const down = list.filter((s) => s.status === "down");
   const deg = list.filter((s) => s.status === "degraded");
   const allGood = down.length === 0 && deg.length === 0;
@@ -473,6 +478,9 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
         </span>
       }
     >
+      {list.length === 0 ? (
+        <Empty icon="favorite_border" line="No services" sub="Add services in Admin." />
+      ) : (
       <div style={{ display: "flex", flexDirection: "column" }}>
         {list.map((s, i) => (
           <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
@@ -489,6 +497,7 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
           </div>
         ))}
       </div>
+      )}
     </PanelShell>
   );
 }
@@ -567,6 +576,7 @@ export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => voi
 // ── LIBRARY STAT STRIP ─────────────────────────────────────
 export function LibraryStats() {
   const { library } = useData();
+  if (library.length === 0) return null;
   return (
     <div className="aerie-lib-grid">
       {library.map((l) => (
@@ -588,6 +598,9 @@ export function RecentlyAdded() {
   const { recent } = useData();
   return (
     <PanelShell title="Recently Added" icon="new_releases" accent="var(--primary)">
+      {recent.length === 0 ? (
+        <Empty icon="new_releases" line="Nothing added yet" sub="Recently added media will appear here." />
+      ) : (
       <div className="custom-scrollbar" style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
         {recent.map((r) => (
           <div key={r.id} style={{ width: 76, flexShrink: 0 }}>
@@ -597,6 +610,7 @@ export function RecentlyAdded() {
           </div>
         ))}
       </div>
+      )}
     </PanelShell>
   );
 }

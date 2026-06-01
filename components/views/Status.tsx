@@ -3,7 +3,7 @@
 // AERIE — Status / uptime dashboard (Gatus + Prometheus)
 // ============================================================
 import React from "react";
-import { catColor } from "@/lib/mock/data";
+import { catColor } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline } from "@/components/primitives";

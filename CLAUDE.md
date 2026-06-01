@@ -7,11 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **AERIE** (package name `aerie`) is a private media command-center portal for self-hosted
 services (Plex, Jellyfin, Overseerr, the *arr suite, Tautulli/Jellystat, Gatus, Prometheus).
 It's a Next.js 16 App Router app (React 19, TypeScript) that sits behind Traefik and
-authenticates via Authentik (OIDC). It's a faithful recreation of the design in `design/`.
+authenticates via **any OIDC provider** (or a local admin account when OIDC is off). It's a
+faithful recreation of the design in `design/`.
 
-The central design principle is **graceful degradation**: the app runs with zero config on
-mock data, and lights up real data purely through env vars + secrets stored in the DB — no
-code changes. Understand this before touching the data path.
+Two principles drive the data path:
+- **Real data only.** Panels show live upstream data, or a graceful **empty state** until that
+  service's API key is stored in the DB — there is no mock fallback. (There used to be; it was
+  removed. `lib/mock/data.ts` is gone; its static taxonomy lives in `lib/categories.ts`.)
+- **Auth is always required.** Either real OIDC, or a local credentials account created via the
+  first-run setup screen at `/login`. Both unlock real data the same way (per-service secrets).
 
 ## Commands
 
@@ -44,40 +48,49 @@ Only run `db:generate` when you change `lib/db/schema.ts`.
 
 ## Architecture
 
-### The dev-mode / real-mode duality (most important concept)
+### Real-data-or-empty (most important concept)
 
-Almost every server-side data source has the same shape: try the real upstream, fall back to
-mock on any failure or missing config. Two gates decide which mode a given concern is in:
+Almost every server-side data source has the same shape: try the real upstream, return an
+**empty result** on any failure or missing config (no mock fallback). Two gates matter:
 
-- **`authConfigured`** (`lib/env.ts`) — true only when Authentik issuer + client id + secret
-  are all set. Drives auth: real OIDC vs. a dev-mode mock admin user.
+- **`authConfigured`** (`lib/env.ts`) — true only when the OIDC issuer + client id + secret are
+  all set. Drives auth mode: real OIDC vs. local credentials (see Auth & session).
 - **Per-service stored secret** — a service only makes a live network call once an API key is
-  stored (encrypted) in the DB. No secret → that panel shows mock/placeholder data. This means
-  the dev/mock server never touches the network.
+  stored (encrypted) in the DB. No secret → that panel renders a graceful empty state. The
+  server never touches the network for unconfigured services.
 
 `lib/env.ts` is the single, typed, **server-only** source of env config. Missing values
-degrade gracefully rather than throwing. Nothing in `env` is exposed to the client.
+degrade gracefully rather than throwing. Nothing in `env` is exposed to the client. Generic
+OIDC config lives here too (`oidcProviderId/Name/Icon`, `oidcScopes`, `oidcGroupsClaim`,
+`adminEmails`), with the legacy `AUTH_AUTHENTIK_*` names read as a fallback.
 
 ### Auth & session
 
-- `auth.ts` — Auth.js v5 config. The Authentik OIDC provider is only registered when
-  `authConfigured`; otherwise `providers` is empty. Role is derived from the OIDC `groups`
-  claim: membership in `AERIE_ADMIN_GROUP` (default `admins`) → `admin`, else `user`. JWT
-  session strategy; role/groups are threaded through the `jwt` and `session` callbacks.
-  The `groups` scope is non-default and requires an Authentik scope mapping.
-- `proxy.ts` — middleware route protection. No-op when `!authConfigured`. Otherwise redirects
-  unauthenticated requests to `/login` and blocks non-admins from `/admin` (defence in depth;
-  also re-checked in the page).
-- `lib/session.ts` — `getSessionUser()` is the server-side entry point. Returns a hardcoded
-  dev admin (`Dev User`) in mock mode; otherwise the real session user, and best-effort
-  **mirrors** the user into the `users` table on each request.
+- `auth.ts` — Auth.js v5 config. When `authConfigured`, a **provider-agnostic OIDC** provider is
+  registered (`id`/`name`/`scopes`/groups-claim all from env). Otherwise a **Credentials**
+  provider authenticates local accounts (password verified via `lib/auth/password.ts`, loaded by
+  lazy import so DB code stays out of the edge bundle). Role = membership in `AERIE_ADMIN_GROUP`
+  **or** email in `AERIE_ADMIN_EMAILS` → `admin`, else `user`. JWT strategy; role/groups are
+  threaded through the `jwt` (from `profile` for OIDC, `user` for credentials) and `session`
+  callbacks. The `groups` scope is non-default and may need an IdP scope mapping (see `docs/OIDC.md`).
+- `app/login/` — `page.tsx` resolves the auth **mode** server-side (`oidc` | `credentials` |
+  `setup`, the last when no local admin exists yet) and renders `components/views/Login.tsx`.
+  `actions.ts` has `signInWithPassword` and `createInitialAdmin` (the latter guarded: only when
+  `!authConfigured` and no admin exists). Registry helpers: `getUserByEmail`, `localAdminExists`,
+  `createLocalAdmin`.
+- `proxy.ts` — middleware route protection. Auth is **always** required: redirects
+  unauthenticated requests to `/login` (except `/login` + `/api/auth`) and blocks non-admins from
+  `/admin` (defence in depth; also re-checked in the page).
+- `lib/session.ts` — `getSessionUser()` is the server-side entry point. Always reads the real
+  session (OIDC or credentials), best-effort **mirrors** the user into the `users` table, and
+  falls back to a guest only if (defensively) no session exists.
 
 ### Data flow: server snapshot → client polling
 
 1. `lib/data/snapshot.ts` — `getSnapshot()` is the **data facade**. It aggregates every
-   upstream into one `Snapshot` object. Each section is wrapped in `safe()` and falls back to
-   mock (`lib/mock/data.ts`) independently, so one dead upstream only degrades its own panel.
-   Live calls only fire for services that have a stored secret.
+   upstream into one `Snapshot` object. Each section is wrapped in `safe()` and returns an
+   **empty array** on failure/missing config, so one dead upstream only degrades its own panel
+   (which renders an empty state). Live calls only fire for services that have a stored secret.
 2. `app/(portal)/layout.tsx` — server component; fetches `getSessionUser()` + `getSnapshot()`
    in parallel and seeds the client `DataProvider`. `dynamic = "force-dynamic"` (never
    prerendered).
@@ -98,8 +111,9 @@ on the `Snapshot` type.
 - `clients.ts` — one normalizing function per upstream (Gatus, Tautulli, Jellyfin, Overseerr,
   Sonarr/Radarr, Prometheus). They **throw** on missing config/errors; the facade catches.
 - `registry.ts` — bridges DB config ↔ runtime. `getServiceConfigs()`, `getServiceCredentials()`,
-  `getServiceSecret()` (decrypts), `isConfigured()`, visibility/groups/members helpers. Every
-  reader falls back to mock when the DB is unavailable.
+  `getServiceSecret()` (decrypts), `isConfigured()`, visibility/groups/members helpers, plus the
+  local-account helpers (`getUserByEmail`, `localAdminExists`, `createLocalAdmin`). Readers
+  return empty results when the DB is unavailable.
 
 ### Persistence (`lib/db/`, Drizzle + libSQL/SQLite)
 
@@ -107,8 +121,9 @@ on the `Snapshot` type.
   mirrored users, account links, prefs). Runtime health/stats are read live and **never**
   stored. Default DB is `file:./data/aerie.db` (gitignored).
 - `client.ts` — Drizzle client + `schema` re-export. `bootstrap.ts` — lazy migrate, then apply
-  the optional config file, then seed (`ensureDb()`, cached per process). `seed.ts` — seeds from
-  mock data (the fallback when neither a config file nor existing rows populate the table).
+  the optional config file, then seed (`ensureDb()`, cached per process). `seed.ts` — seeds only
+  the minimal structural defaults (visibility groups, from `defaults.ts`); services and users
+  come from the YAML config and the Admin UI, not a mock seed.
 - Migrations live in `drizzle/` (generated SQL + meta). Edit `schema.ts`, then `db:generate`.
 
 ### Declarative config file (`lib/config/`, optional)
@@ -170,7 +185,8 @@ stored in `service_secrets`.
 ## Deployment
 
 Standalone `Dockerfile` + `docker-compose.yml` behind Traefik. Production setup:
-`cp .env.example .env` (Authentik OIDC creds, `AUTH_SECRET`, `ENCRYPTION_KEY`) →
-`db:migrate && db:seed` (or rely on runtime bootstrap) → enter each service's API key in
-**Admin → Services** to light up live data → `docker compose up -d`. Embedding/forward-auth
-middleware details are in `docs/EMBEDDING.md`.
+`cp .env.example .env` (OIDC creds **or** leave them blank for the first-run local-admin setup;
+`AUTH_SECRET`, `ENCRYPTION_KEY`) → `db:migrate` (or rely on runtime bootstrap) → sign in (OIDC or
+create the local admin at `/login`) → add services and enter each API key in **Admin → Services**
+to light up live data → `docker compose up -d`. Auth details are in `docs/OIDC.md`; embedding/
+forward-auth middleware in `docs/EMBEDDING.md`.

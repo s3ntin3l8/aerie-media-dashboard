@@ -4,11 +4,11 @@
 // back to the design's mock services when the DB is unavailable.
 // ============================================================
 import "server-only";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { decrypt } from "@/lib/crypto";
-import { SERVICES as MOCK_SERVICES } from "@/lib/mock/data";
+import { hashPassword } from "@/lib/auth/password";
 import type { Category } from "@/lib/types";
 
 export interface ServiceConfig {
@@ -26,28 +26,10 @@ export interface ServiceConfig {
   sortOrder: number;
 }
 
-function mockConfigs(): ServiceConfig[] {
-  return MOCK_SERVICES.map((s, i) => ({
-    id: s.id,
-    name: s.name,
-    cat: s.cat,
-    icon: s.icon,
-    embeddable: s.embeddable,
-    central: Boolean(s.central),
-    centralLabel: s.centralLabel ?? null,
-    host: s.host,
-    baseUrl: `https://${s.host}`,
-    version: s.version,
-    note: s.note,
-    sortOrder: i,
-  }));
-}
-
 export async function getServiceConfigs(): Promise<ServiceConfig[]> {
   try {
     await ensureDb();
     const rows = await db.select().from(schema.services).orderBy(schema.services.sortOrder);
-    if (rows.length === 0) return mockConfigs();
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
@@ -63,7 +45,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       sortOrder: r.sortOrder,
     }));
   } catch {
-    return mockConfigs();
+    return [];
   }
 }
 
@@ -112,24 +94,12 @@ export interface VisibilityRow {
   visible: boolean;
 }
 
-const MOCK_GROUPS: GroupRow[] = [
-  { name: "admins", label: "Admins" },
-  { name: "friends", label: "Friends" },
-  { name: "guests", label: "Guests" },
-];
-const MOCK_VIS_RULE: Record<string, (cat: string, id: string) => boolean> = {
-  admins: () => true,
-  friends: (cat, id) => cat !== "infra" && id !== "prometheus",
-  guests: (cat, id) => cat === "stream" || id === "overseerr",
-};
-
 export async function getGroups(): Promise<GroupRow[]> {
   try {
     await ensureDb();
-    const rows = await db.select().from(schema.groups);
-    return rows.length ? rows : MOCK_GROUPS;
+    return await db.select().from(schema.groups);
   } catch {
-    return MOCK_GROUPS;
+    return [];
   }
 }
 
@@ -137,12 +107,10 @@ export async function getVisibility(): Promise<VisibilityRow[]> {
   try {
     await ensureDb();
     const rows = await db.select().from(schema.serviceVisibility);
-    if (rows.length) return rows.map((r) => ({ serviceId: r.serviceId, groupName: r.groupName, visible: r.visible }));
+    return rows.map((r) => ({ serviceId: r.serviceId, groupName: r.groupName, visible: r.visible }));
   } catch {
-    /* fall through to mock */
+    return [];
   }
-  const configs = await getServiceConfigs();
-  return configs.flatMap((c) => MOCK_GROUPS.map((g) => ({ serviceId: c.id, groupName: g.name, visible: MOCK_VIS_RULE[g.name](c.cat, c.id) })));
 }
 
 export interface MemberRow {
@@ -154,7 +122,7 @@ export interface MemberRow {
   linked: boolean;
 }
 
-/** Portal members mirrored from the DB. Empty array → facade falls back to mock. */
+/** Portal members mirrored from the DB. */
 export async function getMembers(): Promise<MemberRow[]> {
   try {
     await ensureDb();
@@ -194,5 +162,63 @@ export async function mirrorUser(u: { id: string; name: string; email: string; r
   } catch {
     /* mirroring is best-effort */
   }
+}
+
+// ── Local-credentials accounts (fallback when OIDC is not configured) ──
+
+export interface LocalUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  passwordHash: string | null;
+}
+
+/** Look up a user (incl. password hash) by email, case-insensitively. */
+export async function getUserByEmail(email: string): Promise<LocalUser | null> {
+  try {
+    await ensureDb();
+    const target = email.trim().toLowerCase();
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        name: schema.users.name,
+        email: schema.users.email,
+        role: schema.users.role,
+        passwordHash: schema.users.passwordHash,
+      })
+      .from(schema.users);
+    const row = rows.find((r) => r.email.toLowerCase() === target);
+    if (!row) return null;
+    return { id: row.id, name: row.name, email: row.email, role: (row.role as "admin" | "user") ?? "user", passwordHash: row.passwordHash };
+  } catch {
+    return null;
+  }
+}
+
+/** True once at least one local admin account (password set) exists. */
+export async function localAdminExists(): Promise<boolean> {
+  try {
+    await ensureDb();
+    const rows = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(and(eq(schema.users.role, "admin"), isNotNull(schema.users.passwordHash)))
+      .limit(1);
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Create the first-run local admin account. Caller must enforce the setup guard. */
+export async function createLocalAdmin(u: { name: string; email: string; password: string }): Promise<void> {
+  await ensureDb();
+  const id = u.email.trim().toLowerCase();
+  await db
+    .insert(schema.users)
+    .values({ id, name: u.name, email: id, role: "admin", reqQuota: 5, passwordHash: hashPassword(u.password), createdAt: new Date() })
+    .onConflictDoUpdate({ target: schema.users.id, set: { name: u.name, email: id, role: "admin", passwordHash: hashPassword(u.password) } });
+  await db.insert(schema.accountLinks).values({ portalUserId: id, linked: false }).onConflictDoNothing();
 }
 

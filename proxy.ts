@@ -1,16 +1,14 @@
 // ============================================================
 // AERIE — route protection
-// When Authentik OIDC is configured, unauthenticated requests are
-// redirected to /login. When it isn't (dev/mock), all routes pass.
-// Admin-only routes are additionally re-checked server-side.
+// Authentication is always required (generic OIDC, or the local
+// credentials/setup flow when OIDC is off). Unauthenticated requests
+// are redirected to /login; admin-only routes are re-checked here as
+// defence in depth (also enforced server-side in the page).
 // ============================================================
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { authConfigured } from "@/lib/env";
 
 export default auth((req) => {
-  if (!authConfigured) return NextResponse.next();
-
   const { pathname } = req.nextUrl;
   const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth");
   if (isPublic) return NextResponse.next();

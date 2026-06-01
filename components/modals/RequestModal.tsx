@@ -3,15 +3,16 @@
 // AERIE — Request modal (ported from RequestModal.jsx)
 //   mode 'request': member discovers a title → quality/seasons → submit
 //   mode 'review' : admin approves/declines a pending request with a note
-// Catalog (DISCOVER) + quality profiles are mock; approve/decline reuse the
-// optimistic path in the Requests view.
+// Search hits /api/discover (real Overseerr when keyed, else empty results);
+// quality profiles are a static list (lib/categories.ts). Approve/decline reuse
+// the optimistic path in the Requests view.
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
 import type { DiscoverItem, MediaRequest, RequestStatus, User } from "@/lib/types";
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { useData } from "@/components/portal/DataProvider";
-import { QUALITY_PROFILES } from "@/lib/mock/data";
+import { QUALITY_PROFILES } from "@/lib/categories";
 
 const RQ_TONE: Record<string, string> = { available: "originator-own", approved: "originator-court", pending: "amber", declined: "error" };
 const RQ_LABEL: Record<string, string> = { available: "In library", approved: "Approved", pending: "Requested", declined: "Declined" };

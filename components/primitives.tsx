@@ -7,7 +7,7 @@
 // ============================================================
 import React, { useId, useMemo, useState } from "react";
 import type { Category, MediaKind, ServiceStatus } from "@/lib/types";
-import { CAT, catColor } from "@/lib/mock/data";
+import { CAT, catColor } from "@/lib/categories";
 
 type CSS = React.CSSProperties;
 

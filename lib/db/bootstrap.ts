@@ -1,12 +1,13 @@
 // ============================================================
 // AERIE — runtime DB bootstrap (server-only)
-// Lazily applies migrations and seeds from mock data on first use,
-// so a fresh deployment has a working config DB without manual steps.
+// Lazily applies migrations, then the declarative YAML config, then
+// seeds the minimal structural defaults (visibility groups). Services
+// and users come from the YAML config + the Admin UI, not a mock seed.
 // Runs once per process.
 // ============================================================
 import "server-only";
 import { migrate } from "drizzle-orm/libsql/migrator";
-import { db, schema } from "./client";
+import { db } from "./client";
 import { seed } from "./seed";
 import { loadServiceConfigFile } from "@/lib/config/services";
 import { applyServiceConfig } from "@/lib/config/apply";
@@ -27,9 +28,8 @@ async function init(): Promise<void> {
     }
   }
 
-  // Fall back to the mock seed only when nothing else populated the table.
-  const existing = await db.select({ id: schema.services.id }).from(schema.services).limit(1);
-  if (existing.length === 0) await seed(db);
+  // Ensure the default visibility groups exist (idempotent).
+  await seed(db);
 }
 
 /** Ensure the schema exists and is seeded. Cached after first success. */

@@ -17,6 +17,7 @@ import {
   StatusPanel,
   RecentlyAdded,
   QueuePanel,
+  Empty,
 } from "@/components/panels";
 
 // 40px aggregate health ticker
@@ -98,6 +99,7 @@ function GreetingHeader({ role, userName, onOpenPalette, onRequest }: { role: st
 export function Home() {
   const router = useRouter();
   const { role, setPaletteOpen, user } = usePortal();
+  const { services } = useData();
   const openService = (s: Service) => router.push(`/s/${s.id}`);
 
   return (
@@ -106,6 +108,18 @@ export function Home() {
       <HealthTicker onOpenStatus={() => router.push("/status")} />
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
         <div className="aerie-page-pad" style={{ maxWidth: 1320, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+          {services.length === 0 && (
+            <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)", paddingBottom: 12 }}>
+              <Empty icon="dashboard_customize" line="No services configured yet" sub="Add your services and their API keys to light up live data." />
+              {role === "admin" && (
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <a href="/admin" className="btn btn-primary btn-sm">
+                    <Icon name="settings" size={15} /> Go to Admin
+                  </a>
+                </div>
+              )}
+            </section>
+          )}
           <CentralServices role={role} onOpen={openService} onAll={() => router.push("/status")} />
 
           <LibraryStats />

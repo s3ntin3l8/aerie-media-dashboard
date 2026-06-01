@@ -1,106 +1,74 @@
-# Authentik OIDC setup
+# Authentication
 
-AERIE authenticates via Authentik using OIDC (Auth.js v5). Auth is **off by default** — the
-app runs as a dev-mode admin ("Dev User") until all three auth env vars are set. There is
-nothing to break by skipping this for local development.
+AERIE **always requires authentication**. There are two modes:
 
-## 1. Create an Authentik application + OAuth2 provider
+- **OIDC** — any OpenID Connect provider (Authentik, Keycloak, Google, Pocket-ID, Zitadel, …).
+  Enabled when `OIDC_ISSUER` + `OIDC_CLIENT_ID` + `OIDC_CLIENT_SECRET` are all set.
+- **Local admin** — when OIDC is not configured, the first visit to `/login` shows a
+  **create-admin** setup form. After that, `/login` is an email + password sign-in. Passwords
+  are hashed (scrypt) at rest. See [Local admin](#local-admin-no-oidc) below.
 
-In your Authentik admin UI (**Applications → Providers → Create**):
+---
 
-1. **Provider type**: OAuth2/OpenID Connect
-2. **Name**: `aerie` (or anything — the slug matters, not the display name)
-3. **Client type**: Confidential
-4. **Client ID**: copy this → `AUTH_AUTHENTIK_ID`
-5. **Client Secret**: copy this → `AUTH_AUTHENTIK_SECRET`
-6. **Redirect URIs**:
-   ```
-   https://<AERIE_PORTAL_URL>/api/auth/callback/authentik
-   ```
-   e.g. `https://media.example.com/api/auth/callback/authentik`
-7. **Signing Key**: any RS256 key from your Authentik setup
-8. **Scopes**: leave at the defaults for now — the groups scope is added separately below
+## OIDC setup (generic)
 
-Then create an **Application** that points at this provider. Note the application **slug** —
-it appears in the issuer URL.
+### 1. Create an OAuth2 / OpenID client in your provider
 
-## 2. Add the `groups` scope mapping
+- **Client type**: Confidential
+- **Grant**: Authorization Code (PKCE)
+- **Redirect URI**:
+  ```
+  https://<AERIE_PORTAL_URL>/api/auth/callback/<OIDC_PROVIDER_ID>
+  ```
+  With the default `OIDC_PROVIDER_ID=oidc` that is
+  `https://media.example.com/api/auth/callback/oidc`.
+- Copy the **Issuer URL**, **Client ID** and **Client Secret**.
 
-The `groups` claim is not emitted by default. Without it, role derivation silently falls back
-to `user` for everyone (including admins).
+### 2. Emit a groups claim (for the admin role)
 
-1. Go to **Customisation → Property Mappings → Create**
-2. **Type**: Scope Mapping
-3. **Name**: `groups`
-4. **Scope name**: `groups`
-5. **Expression**:
-   ```python
-   return list(request.user.ak_groups.values_list("name", flat=True))
-   ```
-6. Back in your OAuth2 provider → **Advanced settings → Scopes**: add the `groups` mapping
+Role is derived from group membership. Configure your IdP to emit a `groups` claim (the claim
+name is configurable via `OIDC_GROUPS_CLAIM`). Members of `AERIE_ADMIN_GROUP` (default `admins`)
+get the `admin` role; everyone else is `user`.
 
-## 3. Set env vars
+If your IdP can't emit groups (e.g. Google), use `AERIE_ADMIN_EMAILS` instead — a comma-separated
+allow-list of emails that get admin.
 
-Add to your `.env`:
+> **Authentik example.** The `groups` claim isn't emitted by default. Create a **Scope Mapping**
+> (Customisation → Property Mappings) named `groups`, scope name `groups`, expression:
+> ```python
+> return list(request.user.ak_groups.values_list("name", flat=True))
+> ```
+> then add it under the provider's **Advanced settings → Scopes**.
 
-```dotenv
-AUTH_AUTHENTIK_ISSUER=https://authentik.example.com/application/o/<app-slug>/
-AUTH_AUTHENTIK_ID=<client-id-from-step-1>
-AUTH_AUTHENTIK_SECRET=<client-secret-from-step-1>
-AUTH_SECRET=<run: openssl rand -base64 32>
-
-# Optional: which Authentik group gets the admin role (default: admins)
-AERIE_ADMIN_GROUP=admins
-```
-
-The issuer URL format is always `https://<authentik-host>/application/o/<app-slug>/` — the
-trailing slash is required.
-
-### Behind a reverse proxy: `AUTH_URL` is mandatory
-
-Auth.js builds the OIDC `redirect_uri` and callback URLs from the request host. Behind a
-reverse proxy (Traefik) the app only sees its **internal** address, so without a pin Auth.js
-mis-detects the origin as `http://0.0.0.0:3000` — the login redirect lands on a dead
-`0.0.0.0:3000` URL and the Authentik callback fails (it surfaces as `error=Configuration` /
-`invalid_client`, because the token-exchange `redirect_uri` no longer matches the authorize
-step). Pin the public origin:
-
-```dotenv
-AUTH_URL=https://media.example.com   # must equal AERIE_PORTAL_URL, no trailing slash
-```
-
-With the provided `docker-compose.yml` this is **auto-derived from `AERIE_PORTAL_URL`**
-(and `AUTH_TRUST_HOST=true` is set), so you don't normally set it by hand — just make sure
-`AERIE_PORTAL_URL` is your real external origin. Set `AUTH_URL` explicitly only when running
-outside compose.
-
-`AUTH_SECRET` is mandatory once OIDC is on — Auth.js throws `MissingSecret` without it.
-Generate one with:
+### 3. Set AERIE env vars
 
 ```bash
-openssl rand -base64 32
+OIDC_ISSUER=https://idp.example.com/application/o/aerie/
+OIDC_CLIENT_ID=<client id>
+OIDC_CLIENT_SECRET=<client secret>
+OIDC_PROVIDER_NAME=Authentik          # login button: "Continue with Authentik"
+OIDC_PROVIDER_ID=oidc                 # callback path segment
+AUTH_SECRET=$(openssl rand -base64 32)
+AERIE_ADMIN_GROUP=admins
+# AERIE_ADMIN_EMAILS=you@example.com  # alternative to groups
 ```
 
-## 4. Verify
+### Migrating an existing Authentik deployment
 
-Restart the container (or `npm run dev`) and navigate to the portal. You should be redirected
-to the Authentik login page. After signing in, the session role is derived from group
-membership:
+Older deployments used `AUTH_AUTHENTIK_ISSUER` / `_ID` / `_SECRET` and a provider id of
+`authentik` (callback `…/api/auth/callback/authentik`). Rename those to `OIDC_ISSUER` /
+`OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET`. To keep the old callback working without touching your
+IdP, also set `OIDC_PROVIDER_ID=authentik`; otherwise add the new `…/callback/oidc` redirect URI
+to your Authentik provider.
 
-- Member of `AERIE_ADMIN_GROUP` → `admin` (full Admin UI access)
-- Everyone else → `user` (portal view only)
+---
 
-If you land as a `user` when you expect `admin`, the groups scope mapping is not emitting — go
-back to step 2.
+## Local admin (no OIDC)
 
-## How the gate works
+Leave the `OIDC_*` vars unset. On first run, any route redirects to `/login`, which shows a
+**Create admin account** form (name, email, password). Submitting it creates an `admin` user with
+a hashed password and signs you in. Subsequent visits show an email + password login.
 
-`lib/env.ts` exports `authConfigured`, which is `true` only when all three of
-`AUTH_AUTHENTIK_ISSUER`, `AUTH_AUTHENTIK_ID`, and `AUTH_AUTHENTIK_SECRET` are set. Until then:
-
-- `auth.ts` registers no providers (Auth.js is effectively off)
-- `proxy.ts` passes all routes through without checking the session
-- `lib/session.ts` returns a hardcoded dev admin user
-
-Setting any two of the three vars (but not all three) leaves the app in mock mode — there is
-no partial-auth state.
+- Still set `AUTH_SECRET` in production (stable JWT signing) and `ENCRYPTION_KEY` (service-secret
+  encryption).
+- The create-admin form is only available while OIDC is off **and** no admin exists yet.

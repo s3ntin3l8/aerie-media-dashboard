@@ -6,7 +6,7 @@
 import React, { useEffect } from "react";
 import type { Category } from "@/lib/types";
 import { Icon, Eyebrow } from "@/components/primitives";
-import { CAT, catColor } from "@/lib/mock/data";
+import { CAT, catColor } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
 
 type CSS = React.CSSProperties;

@@ -1,25 +1,16 @@
 // ============================================================
 // AERIE — server-side session access
-// Returns the signed-in user, or a dev-mode mock when OIDC is off.
+// Returns the signed-in user. Auth is always required (generic OIDC
+// or local credentials), so middleware normally guarantees a session
+// here; the guest fallback is purely defensive.
 // ============================================================
 import "server-only";
 import { auth } from "@/auth";
-import { authConfigured, env } from "@/lib/env";
 import { mirrorUser } from "@/lib/integrations/registry";
 import type { AppUser } from "@/lib/types";
 
-const DEV_USER: AppUser = {
-  id: "you",
-  name: "Dev User",
-  email: "dev@aerie.tv",
-  role: "admin",
-  groups: [env.adminGroup],
-};
-
-/** The current user. In dev/mock mode (no OIDC) this is an admin. */
+/** The current signed-in user, or a guest if (defensively) no session exists. */
 export async function getSessionUser(): Promise<AppUser> {
-  if (!authConfigured) return DEV_USER;
-
   const session = await auth();
   if (!session?.user) {
     // middleware should have redirected; fall back defensively.

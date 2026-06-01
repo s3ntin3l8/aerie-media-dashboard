@@ -5,10 +5,11 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
-import { CAT, catColor } from "@/lib/mock/data";
+import { CAT, catColor } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { Icon, StatusDot, Divider, SearchField } from "@/components/primitives";
+import { Empty } from "@/components/panels";
 import { PageHeader } from "@/components/views/shared";
 
 const CAT_ORDER = ["stream", "request", "automation", "monitor", "infra"] as const;
@@ -104,6 +105,11 @@ export function Launcher() {
 
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
         <div className="aerie-page-pad" style={{ maxWidth: 1180, margin: "0 auto", display: "flex", flexDirection: "column", gap: 26 }}>
+          {grouped.length === 0 && (
+            <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)" }}>
+              <Empty icon="apps" line="No services available" sub="Ask an admin to add services in Admin → Services." />
+            </section>
+          )}
           {grouped.map((g) => (
             <div key={g.cat}>
               <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 13 }}>

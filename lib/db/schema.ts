@@ -51,13 +51,16 @@ export const serviceVisibility = sqliteTable("service_visibility", {
   visible: integer("visible", { mode: "boolean" }).notNull().default(true),
 }, (t) => [primaryKey({ columns: [t.serviceId, t.groupName] })]);
 
-// Portal users mirrored from Authentik.
+// Portal users. Mirrored from the OIDC provider, or created locally
+// (with a password hash) via the first-run admin setup when OIDC is off.
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(), // sub or email
   name: text("name").notNull(),
   email: text("email").notNull(),
   role: text("role").notNull().default("user"), // admin | user
   reqQuota: integer("req_quota").notNull().default(5),
+  /** scrypt hash for local-credentials accounts; null for OIDC users. */
+  passwordHash: text("password_hash"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 

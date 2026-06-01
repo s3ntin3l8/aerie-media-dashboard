@@ -7,6 +7,11 @@ declare module "next-auth" {
       groups: string[];
     } & DefaultSession["user"];
   }
+
+  interface User {
+    role?: "admin" | "user";
+    groups?: string[];
+  }
 }
 
 declare module "next-auth/jwt" {

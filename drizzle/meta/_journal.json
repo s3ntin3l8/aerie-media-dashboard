@@ -8,6 +8,13 @@
       "when": 1780186384900,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1780271680552,
+      "tag": "0001_futuristic_kate_bishop",
+      "breakpoints": true
     }
   ]
 }
