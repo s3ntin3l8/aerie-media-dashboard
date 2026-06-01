@@ -471,6 +471,12 @@ function serviceKind(id: string): ServiceKind | null {
   return null;
 }
 
+/** Strip a leading "v"/"V" so stored versions are bare (the UI prepends its own "v"). */
+function normalizeVersion(v: string | undefined | null): string | null {
+  if (!v) return null;
+  return v.trim().replace(/^v/i, "") || null;
+}
+
 async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKind): Promise<string | null> {
   const b = base.replace(/\/$/, "");
   if (kind === "jellyfin") {
@@ -478,35 +484,35 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
       service: "version-detect",
       headers: apiKey ? { Authorization: `MediaBrowser Token="${apiKey}"` } : {},
     });
-    return d.Version ?? null;
+    return normalizeVersion(d.Version);
   }
   if (kind === "overseerr") {
     const d = await fetchJson<{ version?: string }>(`${b}/api/v1/status`, {
       service: "version-detect",
       headers: apiKey ? { "X-Api-Key": apiKey } : {},
     });
-    return d.version ?? null;
+    return normalizeVersion(d.version);
   }
   if (kind === "arr") {
     const d = await fetchJson<{ version?: string }>(`${b}/api/v3/system/status`, {
       service: "version-detect",
       headers: apiKey ? { "X-Api-Key": apiKey } : {},
     });
-    return d.version ?? null;
+    return normalizeVersion(d.version);
   }
   if (kind === "tautulli") {
     const d = await fetchJson<{ response?: { data?: { tautulli_version?: string } } }>(
       `${b}/api/v2?apikey=${encodeURIComponent(apiKey)}&cmd=get_tautulli_info`,
       { service: "version-detect" },
     );
-    return d.response?.data?.tautulli_version ?? null;
+    return normalizeVersion(d.response?.data?.tautulli_version);
   }
   // prometheus
   const d = await fetchJson<{ data?: { version?: string } }>(`${b}/api/v1/status/buildinfo`, {
     service: "version-detect",
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
   });
-  return d.data?.version ?? null;
+  return normalizeVersion(d.data?.version);
 }
 
 /** Detect version for a saved service using its stored credentials. Returns null on failure or unknown type. */

@@ -440,7 +440,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
       <HeartbeatStrip beats={s.beats} h={24} />
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
-        <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>Last 30 days · v{s.version}</span>
+        <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>Last 30 days · v{String(s.version).replace(/^v/i, "")}</span>
         {s.embeddable ? (
           <a onClick={() => onOpen?.(s)} style={{ fontSize: 11.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3, color: "var(--primary)", cursor: "pointer" }}>
             Open <Icon name="arrow_right_alt" size={14} />
