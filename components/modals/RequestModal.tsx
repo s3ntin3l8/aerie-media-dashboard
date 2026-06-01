@@ -272,26 +272,28 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
           </div>
         </div>
       </div>
-      {u && (
+      {(u || req.requesterName) && (
         <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 14px", borderRadius: 12, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
-          <Avatar name={u.name} size={36} color={REQ_C} />
+          <Avatar name={u?.name ?? req.requesterName} size={36} color={REQ_C} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-              <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 13.5, color: "var(--on-surface)" }}>{u.name}</span>
-              {(u.groups || []).map((g) => (
+              <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 13.5, color: "var(--on-surface)" }}>{u?.name ?? req.requesterName}</span>
+              {(u?.groups || []).map((g) => (
                 <Chip key={g} icon="group">
                   {g}
                 </Chip>
               ))}
             </div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 1 }}>{u.email}</div>
+            {u?.email && <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 1 }}>{u.email}</div>}
           </div>
-          <div style={{ textAlign: "right" }}>
-            <Eyebrow>Quota</Eyebrow>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: u.reqUsed >= u.reqQuota ? "var(--amber)" : "var(--on-surface)", marginTop: 3 }}>
-              {u.reqUsed}/{u.reqQuota}
+          {u && (
+            <div style={{ textAlign: "right" }}>
+              <Eyebrow>Quota</Eyebrow>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: u.reqUsed >= u.reqQuota ? "var(--amber)" : "var(--on-surface)", marginTop: 3 }}>
+                {u.reqUsed}/{u.reqQuota}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, padding: "13px 15px", borderRadius: 12, background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>

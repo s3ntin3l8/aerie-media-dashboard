@@ -42,8 +42,8 @@ function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; admin
         <div style={{ marginTop: "auto", paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
           {adminMode ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Avatar name={u?.name} size={18} color="var(--originator-court)" />
-              <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>{u?.name}</span>
+              <Avatar name={u?.name ?? r.requesterName} size={18} color="var(--originator-court)" />
+              <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>{u?.name ?? r.requesterName}</span>
             </span>
           ) : (
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{r.id}</span>

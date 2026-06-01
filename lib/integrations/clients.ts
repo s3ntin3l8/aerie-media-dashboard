@@ -240,7 +240,7 @@ interface OverseerrRequest {
   type: "movie" | "tv";
   status: number; // 1 pending, 2 approved, 3 declined
   media?: { status?: number; tmdbId?: number; mediaType?: string };
-  requestedBy?: { id: number; displayName?: string; email?: string };
+  requestedBy?: { id: number; displayName?: string; plexUsername?: string; email?: string };
   createdAt?: string;
 }
 
@@ -326,6 +326,7 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       status: r.media?.status === 5 ? "available" : (OVERSEERR_STATUS[r.status] ?? "pending"),
       requested: r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
       art: posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(posterPath)}` : undefined,
+      requesterName: r.requestedBy?.displayName || r.requestedBy?.plexUsername || r.requestedBy?.email?.split("@")[0],
     };
   });
 }

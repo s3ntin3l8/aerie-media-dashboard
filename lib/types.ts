@@ -66,6 +66,7 @@ export interface MediaRequest {
   requested: string;
   eta?: string;
   art?: string;
+  requesterName?: string;
 }
 
 export interface User {
