@@ -134,6 +134,21 @@ export function Launcher() {
 // placeholder (EmbeddedMock). The real <iframe src="https://{host}">
 // is wired in the integration phase once Traefik forward-auth +
 // frame-ancestors are in place (see plan §Embedding).
+export function ServiceViewById({ serviceId }: { serviceId: string }) {
+  const { services } = useData();
+  const s = services.find((x) => x.id === serviceId);
+  if (!s) {
+    return (
+      <section style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface)" }}>
+        <div style={{ textAlign: "center", color: "var(--on-surface-variant)", fontFamily: "var(--font-mono)", fontSize: 13 }}>
+          Service not found.
+        </div>
+      </section>
+    );
+  }
+  return <ServiceView s={s} />;
+}
+
 export function ServiceView({ s }: { s: Service }) {
   const router = useRouter();
   const { paletteOpen, modalOpen } = usePortal();
