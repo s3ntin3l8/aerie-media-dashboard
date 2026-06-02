@@ -31,6 +31,10 @@ export interface Service {
   ms: number;
   /** 30-point heartbeat: 1 = up, 0.5 = degraded, 0 = down, -1 = no data (unknown) */
   beats: number[];
+  /** ISO timestamp of the most recent failed health check, if any (from Gatus) */
+  lastIncidentAt?: string;
+  /** last ≤30 response times in ms, for a latency trend sparkline (from Gatus) */
+  msHistory?: number[];
   note: string;
   monitoringKey?: string;
 }
@@ -62,12 +66,17 @@ export interface MediaRequest {
   title: string;
   kind: MediaKind;
   year: number;
+  /** Overseerr's numeric user id (string), the raw requester. */
   user: string;
   status: RequestStatus;
   requested: string;
   eta?: string;
   art?: string;
   requesterName?: string;
+  /** The requester's Overseerr email (used to resolve `portalUser`). */
+  requesterEmail?: string;
+  /** Portal account id resolved from `requesterEmail`, set in the snapshot. */
+  portalUser?: string;
 }
 
 export interface User {
@@ -120,6 +129,8 @@ export interface DiscoverItem {
   seasons?: number;
   state: RequestStatus | null;
   overview: string;
+  /** proxied cover-art URL (/api/artwork?…), if available */
+  art?: string;
 }
 
 /** A request quality profile option. */
@@ -129,6 +140,60 @@ export interface QualityProfile {
   sub: string;
   icon: string;
   def?: boolean;
+}
+
+/** A storage mount reported by an *arr (de-duplicated by path in the snapshot). */
+export interface StorageMount {
+  path: string;
+  label: string;
+  freeBytes: number;
+  totalBytes: number;
+}
+
+/** A minimal Overseerr issue (we mainly surface the open count). */
+export interface IssueItem {
+  id: number;
+  issueType: number;
+  status: number;
+}
+
+/** A health warning/error reported by an *arr's /health endpoint. */
+export interface HealthIssue {
+  svc: string;
+  type: string;
+  message: string;
+  source?: string;
+  wikiUrl?: string;
+}
+
+/** An upcoming release from an *arr calendar (Sonarr episode / Radarr movie). */
+export interface UpcomingItem {
+  id: string;
+  title: string;
+  kind: MediaKind;
+  /** ISO date the item airs / releases */
+  when: string;
+  /** episode label, e.g. "S02E05 · Title" (series only) */
+  ep?: string;
+  svc: string;
+  art?: string;
+}
+
+/** A recently grabbed/imported download event from an *arr history feed. */
+export interface DownloadEvent {
+  id: string;
+  title: string;
+  svc: string;
+  /** ISO timestamp of the event */
+  when: string;
+  /** "grabbed" | "imported" */
+  event: string;
+}
+
+/** Weekly leaderboard from Tautulli home stats. */
+export interface TopStats {
+  users: { name: string; plays: number }[];
+  media: { title: string; plays: number; art?: string }[];
 }
 
 /** The signed-in portal user (from the auth session, or a dev-mode mock). */

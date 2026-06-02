@@ -18,7 +18,7 @@ type RequestStatusFilter = "all" | "pending" | "approved" | "available";
 
 function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; adminMode: boolean; onAct: (id: string, action: "approve" | "decline") => void; onReview: (r: MediaRequest) => void }) {
   const { users } = useData();
-  const u = users.find((x) => x.id === r.user);
+  const u = users.find((x) => x.id === r.portalUser);
   return (
     <div
       className={adminMode ? "req-card" : undefined}
@@ -69,11 +69,11 @@ function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; admin
 
 export function Requests() {
   const router = useRouter();
-  const { role } = usePortal();
-  const { requests, users } = useData();
+  const { role, user } = usePortal();
+  const { requests, users, issues } = useData();
   const refresh = useRefresh();
   const adminMode = role === "admin";
-  const me = users.find((u) => u.id === "you") ?? users[0];
+  const me = users.find((u) => u.id === user.id) ?? users[0];
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
   const [acted, setActed] = useState<Record<string, string>>({});
   const [reqModal, setReqModal] = useState<{ mode: "request" | "review"; request?: MediaRequest } | null>(null);
@@ -83,7 +83,7 @@ export function Requests() {
     setTimeout(() => setToast(null), 2600);
   };
 
-  const base = adminMode ? requests : requests.filter((r) => r.user === "you");
+  const base = adminMode ? requests : requests.filter((r) => r.portalUser === user.id);
   const filtered = base
     .filter((r) => (filter === "all" ? true : r.status === filter))
     .map((r) => (acted[r.id] ? { ...r, status: acted[r.id] as MediaRequest["status"] } : r));
@@ -133,7 +133,11 @@ export function Requests() {
                 <StatTile label="Pending" value={counts.pending} color="var(--amber)" icon="pending" />
                 <StatTile label="Approved" value={counts.approved} color="var(--originator-court)" icon="check_circle" />
                 <StatTile label="Available" value={counts.available} color="var(--originator-own)" icon="download_done" />
-                <StatTile label="Members" value={users.length - 1} color="var(--on-surface)" icon="group" />
+                {issues && issues.open > 0 ? (
+                  <StatTile label="Open issues" value={issues.open} color="var(--error)" icon="report" />
+                ) : (
+                  <StatTile label="Members" value={users.length - 1} color="var(--on-surface)" icon="group" />
+                )}
               </>
             ) : (
               <>
