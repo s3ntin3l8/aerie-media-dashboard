@@ -9,6 +9,7 @@ import type { Service } from "@/lib/types";
 import { Icon, Divider, Heartbeat, StatusDot, catColor } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, ToggleRow, Toggle, CatPicker, fieldInput } from "@/components/modals/ModalShell";
 import { IconPicker } from "@/components/modals/IconPicker";
+import { usePortal } from "@/components/portal/PortalProvider";
 
 export interface ServiceForm {
   name: string;
@@ -128,6 +129,7 @@ export function ServiceModal({
   onTestConnection?: (baseUrl: string, apiKey: string, name: string) => Promise<string | null>;
 }) {
   const editing = mode === "edit";
+  const { favorites, toggleFavorite } = usePortal();
 
   const blank = (): ServiceForm => ({
     name: "",
@@ -384,6 +386,16 @@ export function ServiceModal({
         <section>
           <SectionLabel>Central-services spotlight</SectionLabel>
           <ToggleRow on={f.central} onChange={(v) => set("central", v)} color="var(--primary)" icon="bolt" title="Feature on the dashboard spotlight" desc="Pin this service to the top-of-portal quick-launch row." />
+          {editing && service && (
+            <ToggleRow
+              on={favorites.includes(service.id)}
+              onChange={() => toggleFavorite(service.id)}
+              color="var(--amber)"
+              icon="star"
+              title="Pin to rail"
+              desc="Show as a quick-launch icon in your side rail."
+            />
+          )}
           {f.central && (
             <div className="fade-in" style={{ marginTop: 10 }}>
               <Field label="Spotlight label" hint="short verb — e.g. Stream, Requests">
