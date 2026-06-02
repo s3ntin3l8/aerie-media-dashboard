@@ -5,9 +5,9 @@
 // admin "preview as member" toggle flips it client-side.
 // ============================================================
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import type { AppUser, Role } from "@/lib/types";
-import { signOutAction } from "@/app/(portal)/actions";
+import { signOutAction, setFavoritesAction } from "@/app/(portal)/actions";
 
 type Theme = "dark" | "light";
 
@@ -22,6 +22,12 @@ interface PortalState {
   /** effective role after admin "preview as member" toggle */
   role: Role;
   toggleRole: () => void;
+  /** pinned-favorite service ids (rail quick-launch) */
+  favorites: string[];
+  /** pin/unpin a service; persists to the DB optimistically */
+  toggleFavorite: (id: string) => void;
+  /** id of the most-recently-opened service (rail jump-back slot), or null */
+  lastOpened: string | null;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
   /** true while any modal (service/request) is open — suppresses portal shortcuts */
@@ -46,11 +52,14 @@ const NAV: Record<string, string> = {
   a: "/admin",
 };
 
-export function PortalProvider({ user, children }: { user: AppUser; children: React.ReactNode }) {
+export function PortalProvider({ user, favorites: initialFavorites = [], children }: { user: AppUser; favorites?: string[]; children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const realRole = user.role;
   const [theme, setTheme] = useState<Theme>("dark");
   const [role, setRole] = useState<Role>(realRole);
+  const [favorites, setFavorites] = useState<string[]>(initialFavorites);
+  const [lastOpened, setLastOpened] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   // Ref mirror so the (stable) keydown listener always sees the latest value.
@@ -79,6 +88,31 @@ export function PortalProvider({ user, children }: { user: AppUser; children: Re
     }
   }, [theme]);
 
+  // Restore the last-opened service on mount (transient, per-device — like theme).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("aerie.lastService");
+      if (saved) setLastOpened(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Record the open whenever we land on a service page (/s/{id}). Navigating
+  // away to Status/Requests intentionally leaves it set, so the rail keeps the
+  // jump-back shortcut around.
+  useEffect(() => {
+    if (!pathname?.startsWith("/s/")) return;
+    const id = pathname.slice(3).split("/")[0];
+    if (!id) return;
+    setLastOpened(id);
+    try {
+      localStorage.setItem("aerie.lastService", id);
+    } catch {
+      /* ignore */
+    }
+  }, [pathname]);
+
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
   // Only a real admin may preview the member experience; members can't elevate.
   const toggleRole = () => {
@@ -87,6 +121,14 @@ export function PortalProvider({ user, children }: { user: AppUser; children: Re
   };
   const signOut = () => {
     void signOutAction();
+  };
+  // Optimistic pin/unpin; persist the full array to avoid server-side races.
+  const toggleFavorite = (id: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      void setFavoritesAction(next);
+      return next;
+    });
   };
 
   // Keyboard shortcuts: ⌘K palette, ⌘D theme, g-then-key navigate, Esc close.
@@ -132,7 +174,7 @@ export function PortalProvider({ user, children }: { user: AppUser; children: Re
   }, [router]);
 
   return (
-    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, realRole, role, toggleRole, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
+    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, realRole, role, toggleRole, favorites, toggleFavorite, lastOpened, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
       {children}
     </Ctx.Provider>
   );

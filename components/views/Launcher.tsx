@@ -17,6 +17,8 @@ const CAT_ORDER = ["stream", "request", "automation", "monitor", "infra"] as con
 
 function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
   const c = catColor(s.cat);
+  const { favorites, toggleFavorite } = usePortal();
+  const pinned = favorites.includes(s.id);
   return (
     <a
       onClick={onOpen}
@@ -45,12 +47,46 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
       }}
     >
       <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c }} />
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleFavorite(s.id);
+        }}
+        title={pinned ? "Unpin from rail" : "Pin to rail"}
+        style={{
+          position: "absolute",
+          top: 10,
+          right: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 26,
+          height: 26,
+          borderRadius: 8,
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          color: pinned ? "var(--primary)" : "var(--on-surface-variant)",
+          opacity: pinned ? 1 : 0.55,
+          transition: "color .15s, opacity .15s, background .15s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = "1";
+          e.currentTarget.style.background = "color-mix(in srgb, var(--surface-container-high) 70%, transparent)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = pinned ? "1" : "0.55";
+          e.currentTarget.style.background = "transparent";
+        }}
+      >
+        <Icon name={pinned ? "star" : "star_border"} size={17} fill={pinned} />
+      </button>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <ServiceLogo service={s} size={44} radius={12} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)" }}>{s.name}</span>
-            <Icon name={s.embeddable ? "open_in_full" : "open_in_new"} size={14} color="var(--on-surface-variant)" style={{ marginLeft: "auto" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 7, paddingRight: 22 }}>
+            <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
           </div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.host}</div>
         </div>
@@ -151,7 +187,8 @@ export function ServiceViewById({ serviceId }: { serviceId: string }) {
 
 export function ServiceView({ s }: { s: Service }) {
   const router = useRouter();
-  const { paletteOpen, modalOpen } = usePortal();
+  const { paletteOpen, modalOpen, favorites, toggleFavorite } = usePortal();
+  const pinned = favorites.includes(s.id);
   const c = catColor(s.cat);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -175,6 +212,9 @@ export function ServiceView({ s }: { s: Service }) {
             <StatusDot status={s.status} size={7} />
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{s.ms}ms</span>
           </span>
+          <button onClick={() => toggleFavorite(s.id)} className="btn btn-secondary btn-sm" title={pinned ? "Unpin from rail" : "Pin to rail"} style={pinned ? { color: "var(--primary)" } : undefined}>
+            <Icon name={pinned ? "star" : "star_border"} size={15} fill={pinned} /> {pinned ? "Pinned" : "Pin"}
+          </button>
           <a href={`https://${s.host}`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
             <Icon name="open_in_new" size={15} /> New tab
           </a>

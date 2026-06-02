@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- AERIE peak monogram — geometry mirrors components/brand/Brand.tsx -->
+  <rect width="32" height="32" rx="7" fill="#0b1326"/>
+  <g transform="translate(16 16) scale(0.86) translate(-16 -16)" fill="none" stroke="#57f1db" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 6 25 L 16 7 L 26 25"/>
+    <path d="M 11 18.5 L 21 18.5"/>
+  </g>
+</svg>

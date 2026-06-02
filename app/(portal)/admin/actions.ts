@@ -27,6 +27,15 @@ export async function setVisibility(serviceId: string, groupName: string, visibl
   revalidatePath("/admin");
 }
 
+/** Set a member's request quota (portal-side cap). */
+export async function setUserQuota(userId: string, quota: number) {
+  await requireAdmin();
+  await ensureDb();
+  const n = Math.max(0, Math.floor(Number(quota) || 0));
+  await db.update(schema.users).set({ reqQuota: n }).where(eq(schema.users.id, userId));
+  revalidatePath("/admin");
+}
+
 /** Store (encrypted) or clear a service's API key. */
 export async function setServiceSecret(serviceId: string, plaintext: string) {
   await requireAdmin();

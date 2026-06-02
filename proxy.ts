@@ -10,7 +10,14 @@ import { auth } from "@/auth";
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
-  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth");
+  // Public metadata routes (favicon, social share cards) must be reachable
+  // without a session — browser tabs on /login and social scrapers fetch them.
+  const isBrandAsset =
+    pathname === "/icon.svg" ||
+    pathname === "/apple-icon" ||
+    pathname === "/opengraph-image" ||
+    pathname === "/twitter-image";
+  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || isBrandAsset;
   if (isPublic) return NextResponse.next();
 
   if (!req.auth) {

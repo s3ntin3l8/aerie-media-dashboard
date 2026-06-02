@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
+import { env } from "@/lib/env";
 
 // Design-system foundations (ported verbatim from the AERIE design bundle).
 import "../styles/fonts.css";
@@ -17,6 +18,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  // Required so the auto-discovered icon / opengraph-image / twitter-image
+  // routes resolve to absolute URLs.
+  metadataBase: new URL(env.portalUrl),
   title: "AERIE — Media Command Center",
   description: "Private media portal — every service, one vantage point.",
 };

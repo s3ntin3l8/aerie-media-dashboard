@@ -5,29 +5,14 @@
 import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Icon, Avatar, RailTip } from "@/components/primitives";
+import { ServiceLogo } from "@/components/ServiceLogo";
+import { BrandBadge } from "@/components/brand/Brand";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
+import type { Service } from "@/lib/types";
 
-export function BrandBadge({ size = 28 }: { size?: number }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: size,
-        height: size,
-        background: "color-mix(in srgb, var(--primary) 16%, var(--surface-container))",
-        border: "1px solid color-mix(in srgb, var(--primary) 30%, transparent)",
-        boxShadow: "var(--shadow-sm)",
-        clipPath: "polygon(0% 0%, 100% 0%, 100% 70%, 50% 100%, 0% 70%)",
-      }}
-    >
-      <Icon name="play_arrow" size={Math.round(size * 0.56)} fill color="var(--primary)" />
-    </div>
-  );
-}
+// Re-exported for existing importers (e.g. the Login view).
+export { BrandBadge };
 
 function RailNav({
   icon,
@@ -106,6 +91,61 @@ function RailNav({
   );
 }
 
+// A pinned-favorite (or last-opened "recent") service: same 40×40 active-aware
+// button as RailNav, but renders the service's brand logo so it reads as distinct
+// from the nav icons. `recent` adds a small history corner badge so a transient
+// jump-back slot is visually distinguishable from a deliberate pin.
+function RailServiceNav({ s, active, recent = false, onNavigate }: { s: Service; active: boolean; recent?: boolean; onNavigate: (href: string) => void }) {
+  return (
+    <RailTip label={recent ? `${s.name} — recently opened` : s.name}>
+      <a
+        onClick={() => onNavigate(`/s/${s.id}`)}
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          cursor: "pointer",
+          background: active ? "color-mix(in srgb, var(--primary) 12%, transparent)" : "transparent",
+          transition: "background .2s",
+        }}
+        onMouseEnter={(e) => {
+          if (!active) e.currentTarget.style.background = "color-mix(in srgb, var(--surface-container-high) 70%, transparent)";
+        }}
+        onMouseLeave={(e) => {
+          if (!active) e.currentTarget.style.background = "transparent";
+        }}
+      >
+        {active && <span style={{ position: "absolute", left: -8, top: 9, bottom: 9, width: 2.5, borderRadius: 9999, background: "var(--primary)" }} />}
+        <ServiceLogo service={s} size={30} radius={8} />
+        {recent && (
+          <span
+            style={{
+              position: "absolute",
+              bottom: -2,
+              right: -2,
+              width: 15,
+              height: 15,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "var(--surface-container-high)",
+              color: "var(--on-surface-variant)",
+              borderRadius: 9999,
+              border: "2px solid var(--surface-lowest)",
+            }}
+          >
+            <Icon name="history" size={9} />
+          </span>
+        )}
+      </a>
+    </RailTip>
+  );
+}
+
 function RailCtrl({ icon, label, onClick, kbd, active }: { icon: string; label: string; onClick: () => void; kbd?: string; active?: boolean }) {
   return (
     <RailTip label={label} kbd={kbd}>
@@ -142,13 +182,25 @@ function RailCtrl({ icon, label, onClick, kbd, active }: { icon: string; label: 
 export function Rail() {
   const router = useRouter();
   const pathname = usePathname();
-  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut } = usePortal();
+  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut, favorites, lastOpened } = usePortal();
   const { services, requests } = useData();
 
   const me = user;
   const downCount = services.filter((s) => s.status === "down").length;
   const pendingCount = requests.filter((r) => r.status === "pending").length;
   const go = (href: string) => router.push(href);
+
+  // Resolve pinned ids to live services, dropping any deleted / not-visible ones.
+  const favoriteServices = favorites
+    .map((id) => services.find((s) => s.id === id))
+    .filter((s): s is Service => Boolean(s));
+
+  // The last-opened service gets a transient jump-back slot — unless it's already
+  // pinned (no duplicate) or no longer a visible service.
+  const recentService =
+    lastOpened && !favorites.includes(lastOpened)
+      ? services.find((s) => s.id === lastOpened) ?? null
+      : null;
 
   const isActive = (id: string) => {
     if (id === "home") return pathname === "/";
@@ -193,8 +245,23 @@ export function Rail() {
           onNavigate={go}
         />
         <RailNav icon="favorite" label="Status" href="/status" active={isActive("status")} onNavigate={go} />
-        <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
-        {role === "admin" && <RailNav icon="tune" label="Admin" href="/admin" active={isActive("admin")} badge={downCount} onNavigate={go} />}
+        {(favoriteServices.length > 0 || recentService) && (
+          <>
+            <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
+            {favoriteServices.map((s) => (
+              <RailServiceNav key={s.id} s={s} active={pathname === `/s/${s.id}`} onNavigate={go} />
+            ))}
+            {recentService && (
+              <RailServiceNav key={recentService.id} s={recentService} recent active={pathname === `/s/${recentService.id}`} onNavigate={go} />
+            )}
+          </>
+        )}
+        {role === "admin" && (
+          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
+            <RailNav icon="tune" label="Admin" href="/admin" active={isActive("admin")} badge={downCount} onNavigate={go} />
+          </div>
+        )}
       </nav>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingBottom: 14 }}>
         <RailCtrl icon="search" label="Search & Commands" onClick={() => setPaletteOpen(true)} kbd="⌘K" />
