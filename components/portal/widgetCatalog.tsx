@@ -1,7 +1,7 @@
 "use client";
 // ============================================================
 // AERIE — widget catalog (registry for the modular homescreen)
-// Maps each widget `type` to its size bounds + a render(ctx) that
+// Maps each widget `type` to its size bounds + a render(ctx, settings) that
 // returns the REAL, fill-aware panel/widget for a grid tile.
 //
 // The catalog is a SUPERSET of the classic hard-coded home: every
@@ -35,6 +35,22 @@ export interface WidgetCtx {
   onAct?: (id: string, action: "approve" | "decline") => void;
 }
 
+export type WidgetSettingType = "count" | "text" | "toggle" | "select";
+
+export interface WidgetSettingSpec {
+  key: string;
+  label: string;
+  type: WidgetSettingType;
+  hint?: string;
+  /** Default value. For count: omit or undefined = "auto" (adaptive behavior). */
+  default?: string | number | boolean;
+  /** For count type: min/max inclusive */
+  min?: number;
+  max?: number;
+  /** For select type */
+  options?: { value: string; label: string }[];
+}
+
 export interface CatalogEntry extends WidgetMeta {
   name: string;
   icon: string;
@@ -44,7 +60,8 @@ export interface CatalogEntry extends WidgetMeta {
   defaultW: number;
   defaultH: number;
   adminOnly?: boolean;
-  render: (ctx: WidgetCtx) => React.ReactNode;
+  settings?: WidgetSettingSpec[];
+  render: (ctx: WidgetCtx, settings: Record<string, unknown>) => React.ReactNode;
 }
 
 export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
@@ -52,91 +69,140 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     type: "centralServices", name: "Central Services", icon: "verified", accent: "var(--originator-own)", group: "Overview",
     desc: "Big-figure uptime + heartbeat for your core streaming services.",
     defaultW: 12, defaultH: 6, minW: 5, minH: 4, maxW: 12, maxH: 10,
-    render: (c) => <CentralServices fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/status")} />,
+    render: (c, _s) => <CentralServices fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/status")} />,
   },
   libraryStats: {
     type: "libraryStats", name: "Library Stats", icon: "video_library", accent: "var(--primary)", group: "Overview",
     desc: "Movie, show and music counts with weekly deltas.",
     defaultW: 12, defaultH: 3, minW: 3, minH: 2, maxW: 12, maxH: 4,
-    render: () => <LibraryStats fill />,
+    render: (_c, _s) => <LibraryStats fill />,
   },
   nowPlaying: {
     type: "nowPlaying", name: "Now Playing", icon: "play_circle", accent: "var(--primary)", group: "Streaming",
     desc: "Live sessions — progress, device, codec and transcode state.",
     defaultW: 8, defaultH: 11, minW: 4, minH: 5, maxW: 12, maxH: 18,
-    render: (c) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} />,
+    render: (c, _s) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} />,
   },
   serviceTiles: {
     type: "serviceTiles", name: "Services", icon: "apps", accent: "var(--on-surface-variant)", group: "Services",
     desc: "Launcher grid of every service with status and latency.",
     defaultW: 8, defaultH: 8, minW: 3, minH: 4, maxW: 12, maxH: 18,
-    render: (c) => <ServiceTiles fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} />,
+    render: (c, _s) => <ServiceTiles fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} />,
   },
   status: {
     type: "status", name: "System Status", icon: "favorite", accent: "var(--originator-own)", group: "Monitoring",
     desc: "Per-service uptime — heartbeat strip per monitored service.",
     defaultW: 4, defaultH: 9, minW: 3, minH: 4, maxW: 12, maxH: 18,
-    render: (c) => <StatusPanel fill role={c.role} onAll={() => c.onNavigate("/status")} />,
+    render: (c, _s) => <StatusPanel fill role={c.role} onAll={() => c.onNavigate("/status")} />,
   },
   myRequests: {
     type: "myRequests", name: "Requests", icon: "bookmark_added", accent: "var(--originator-court)", group: "Requests",
     desc: "Your requests — or the pending approval queue for admins.",
     defaultW: 4, defaultH: 8, minW: 3, minH: 4, maxW: 12, maxH: 16,
-    render: (c) => <MyRequestsPanel fill role={c.role} onAll={() => c.onNavigate("/requests")} onAct={c.onAct} />,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 15, hint: "Auto = 5 items" },
+      { key: "view", label: "View mode", type: "select", options: [
+        { value: "", label: "Auto (by role)" },
+        { value: "mine", label: "My requests" },
+        { value: "queue", label: "Approval queue" },
+      ]},
+      { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
+    ],
+    // @ts-expect-error — limit/view/dense/title added to MyRequestsPanel in Task 3
+    render: (c, s) => <MyRequestsPanel fill role={c.role} onAll={() => c.onNavigate("/requests")} onAct={c.onAct} limit={s.limit as number | undefined} view={s.view as string | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   recentlyAdded: {
     type: "recentlyAdded", name: "Recently Added", icon: "new_releases", accent: "var(--primary)", group: "Streaming",
     desc: "Newest titles across your libraries.",
     defaultW: 4, defaultH: 6, minW: 3, minH: 5, maxW: 12, maxH: 16,
-    render: () => <RecentlyAdded fill />,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 24, hint: "Auto = fill to card height" },
+      { key: "mediaKind", label: "Filter by type", type: "select", options: [
+        { value: "", label: "All types" },
+        { value: "movie", label: "Movies" },
+        { value: "series", label: "TV Shows" },
+        { value: "track", label: "Music" },
+      ]},
+    ],
+    // @ts-expect-error — limit/mediaKind/title added to RecentlyAdded in Task 3
+    render: (_c, s) => <RecentlyAdded fill limit={s.limit as number | undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} />,
   },
   upcoming: {
     type: "upcoming", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Streaming",
     desc: "Upcoming releases from your *arr calendars (next 7 days).",
     defaultW: 12, defaultH: 10, minW: 4, minH: 4, maxW: 12, maxH: 14,
-    render: () => <UpcomingPanel fill />,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 30, hint: "Auto = show all upcoming items" },
+      { key: "window", label: "Time window", type: "select", options: [
+        { value: "7", label: "Next 7 days" },
+        { value: "14", label: "Next 14 days" },
+        { value: "30", label: "Next 30 days" },
+      ]},
+    ],
+    // @ts-expect-error — limit/window/title added to UpcomingPanel in Task 3
+    render: (_c, s) => <UpcomingPanel fill limit={s.limit as number | undefined} window={s.window as number | undefined} title={s.title as string | undefined} />,
   },
   leaderboard: {
     type: "leaderboard", name: "Top Streamers", icon: "leaderboard", accent: "var(--originator-own)", group: "Monitoring",
     desc: "Most active users and titles this week (Tautulli).",
     defaultW: 4, defaultH: 7, minW: 3, minH: 4, maxW: 8, maxH: 14,
-    render: () => <LeaderboardPanel fill />,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Users to show", type: "count", min: 3, max: 15, hint: "Auto = show all" },
+    ],
+    // @ts-expect-error — limit/title added to LeaderboardPanel in Task 3
+    render: (_c, s) => <LeaderboardPanel fill limit={s.limit as number | undefined} title={s.title as string | undefined} />,
   },
   bandwidth: {
     type: "bandwidth", name: "Bandwidth", icon: "speed", accent: "var(--primary)", group: "Monitoring",
     desc: "Live streaming throughput plus host network rates.",
     defaultW: 8, defaultH: 6, minW: 4, minH: 4, maxW: 12, maxH: 10,
-    render: () => <BandwidthWidget fill />,
+    render: (_c, _s) => <BandwidthWidget fill />,
   },
   queue: {
     type: "queue", name: "Download Queue", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
     desc: "Active Sonarr / Radarr downloads with progress and ETA.",
     defaultW: 8, defaultH: 6, minW: 4, minH: 3, maxW: 12, maxH: 12,
-    render: () => <QueuePanel fill />,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Items per page", type: "count", min: 3, max: 20, hint: "Auto = fit to card height" },
+      { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
+    ],
+    // @ts-expect-error — limit/dense/title added to QueuePanel in Task 3
+    render: (_c, s) => <QueuePanel fill limit={s.limit as number | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   downloads: {
     type: "downloads", name: "Recently Downloaded", icon: "download_done", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
     desc: "Recently grabbed / imported downloads from *arr history.",
     defaultW: 8, defaultH: 6, minW: 4, minH: 3, maxW: 12, maxH: 12,
-    render: () => <DownloadsPanel fill />,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Items per page", type: "count", min: 3, max: 20, hint: "Auto = fit to card height" },
+      { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
+    ],
+    // @ts-expect-error — limit/dense/title added to DownloadsPanel in Task 3
+    render: (_c, s) => <DownloadsPanel fill limit={s.limit as number | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   shortcuts: {
     type: "shortcuts", name: "Shortcuts", icon: "bolt", accent: "var(--primary)", group: "Overview",
     desc: "Custom quick-launch links (configurable soon).",
     defaultW: 4, defaultH: 5, minW: 3, minH: 3, maxW: 12, maxH: 10,
-    render: () => <ShortcutsWidget fill />,
+    render: (_c, _s) => <ShortcutsWidget fill />,
   },
   announcements: {
     type: "announcements", name: "Announcements", icon: "campaign", accent: "var(--amber)", group: "Overview",
     desc: "Broadcast notices and maintenance windows (configurable soon).",
     defaultW: 4, defaultH: 6, minW: 3, minH: 3, maxW: 12, maxH: 12,
-    render: () => <AnnouncementsWidget fill />,
+    render: (_c, _s) => <AnnouncementsWidget fill />,
   },
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",
     desc: "Local time, date and monitored-host uptime.",
     defaultW: 3, defaultH: 4, minW: 2, minH: 3, maxW: 6, maxH: 6,
-    render: () => <ClockWidget fill />,
+    render: (_c, _s) => <ClockWidget fill />,
   },
 };
 
@@ -144,6 +210,35 @@ const META_FALLBACK: WidgetMeta = { type: "__unknown", minW: 2, minH: 2, maxW: 1
 
 export function widgetMeta(type: string): WidgetMeta {
   return WIDGET_CATALOG[type] ?? { ...META_FALLBACK, type };
+}
+
+/** All setting specs for a widget type; empty array if none. */
+export function widgetSettings(type: string): WidgetSettingSpec[] {
+  return WIDGET_CATALOG[type]?.settings ?? [];
+}
+
+/** True if the widget type has any configurable settings. */
+export function hasSettings(type: string): boolean {
+  return widgetSettings(type).length > 0;
+}
+
+/**
+ * Merge stored per-tile settings over each spec's default.
+ * Returns a plain object — render() functions read from it.
+ * Keys absent from raw fall back to the spec's default (or undefined).
+ */
+export function resolveSettings(
+  type: string,
+  raw?: Record<string, string | number | boolean>
+): Record<string, unknown> {
+  const specs = widgetSettings(type);
+  const out: Record<string, unknown> = {};
+  for (const spec of specs) {
+    const stored = raw?.[spec.key];
+    // Treat empty string (saved "auto") or missing value as "use default"
+    out[spec.key] = stored !== undefined && stored !== "" ? stored : spec.default;
+  }
+  return out;
 }
 
 // Default arrangement — mirrors the classic hard-coded home, authored on the

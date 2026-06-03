@@ -15,7 +15,7 @@ import { Empty } from "@/components/panels";
 import { GridDashboard } from "@/components/portal/GridDashboard";
 import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
 import { compactAll, type Tile } from "@/components/portal/gridLayout";
-import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, type WidgetCtx } from "@/components/portal/widgetCatalog";
+import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, resolveSettings, type WidgetCtx } from "@/components/portal/widgetCatalog";
 import { setDashboardsAction } from "@/app/(portal)/actions";
 
 // 40px aggregate health ticker
@@ -182,7 +182,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   const renderWidget = (item: Tile) => {
     const m = WIDGET_CATALOG[item.type];
     if (!m) return <Empty icon="error" line="Unknown widget" sub={item.type} />;
-    return m.render(ctx);
+    return m.render(ctx, resolveSettings(item.type, item.settings));
   };
 
   return (
