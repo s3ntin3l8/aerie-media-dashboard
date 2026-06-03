@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { env } from "@/lib/env";
 
@@ -16,6 +16,13 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500", "700"],
   display: "swap",
 });
+
+// Critical for mobile: without this, browsers render at ~980px and every
+// breakpoint is dead. mobile-web-app-capable gives the portal a native feel.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   // Required so the auto-discovered icon / opengraph-image / twitter-image

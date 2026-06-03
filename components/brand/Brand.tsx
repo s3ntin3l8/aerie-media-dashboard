@@ -1,10 +1,10 @@
 // ============================================================
 // AERIE — brand mark (single source of truth)
 // ------------------------------------------------------------
-// A "peak monogram": an angular /\ chevron + crossbar that reads
-// as both the letter A and a mountain summit — the high vantage
-// point the name (aerie = an eagle's nest) and the product
-// ("every service, one vantage point") are built around.
+// A "layered ridge" mark: two offset mountain ridgelines that
+// read as depth and elevation — the high vantage point the name
+// (aerie = an eagle's nest) and the product ("every service,
+// one vantage point") are built around.
 //
 // Pure presentational, theme-aware via the --primary token. The
 // static assets that can't read CSS vars (app/icon.svg,
@@ -13,17 +13,17 @@
 // ============================================================
 import React from "react";
 
-// ── Canonical geometry (viewBox 0 0 32 32) ──────────────────
-export const BRAND_VIEWBOX = "0 0 32 32";
-export const BRAND_PEAK_PATH = "M 6 25 L 16 7 L 26 25"; // /\ summit
-export const BRAND_BAR_PATH = "M 11 18.5 L 21 18.5"; // crossbar
-export const BRAND_STROKE = 3.4;
+// ── Canonical geometry (viewBox 0 0 120 120) ─────────────────
+export const BRAND_VIEWBOX = "0 0 120 120";
+export const BRAND_RIDGE_FRONT = "16,86 50,40 70,66"; // front ridge (full opacity)
+export const BRAND_RIDGE_BACK = "58,74 80,50 100,80"; // back ridge (0.55 opacity)
+export const BRAND_RIDGE_STROKE = 7.5;
 
-/** The bare peak-A mark (no container). Stroke uses `color`. */
+/** The bare ridge mark (no container). Stroke uses `color`. */
 export function BrandMark({
   size = 24,
   color = "var(--primary)",
-  strokeWidth = BRAND_STROKE,
+  strokeWidth = BRAND_RIDGE_STROKE,
 }: {
   size?: number;
   color?: string;
@@ -38,15 +38,16 @@ export function BrandMark({
       aria-hidden
       focusable="false"
     >
-      <path
-        d={BRAND_PEAK_PATH}
+      <polyline
+        points={BRAND_RIDGE_BACK}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
+        strokeOpacity={0.55}
       />
-      <path
-        d={BRAND_BAR_PATH}
+      <polyline
+        points={BRAND_RIDGE_FRONT}
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
@@ -56,7 +57,7 @@ export function BrandMark({
   );
 }
 
-/** The mark inside the tinted, rounded brand tile. */
+/** The mark inside the tinted, circular brand disc. */
 export function BrandBadge({ size = 28 }: { size?: number }) {
   return (
     <div
@@ -67,9 +68,11 @@ export function BrandBadge({ size = 28 }: { size?: number }) {
         justifyContent: "center",
         width: size,
         height: size,
-        borderRadius: Math.round(size * 0.28),
-        background: "color-mix(in srgb, var(--primary) 16%, var(--surface-container))",
-        border: "1px solid color-mix(in srgb, var(--primary) 30%, transparent)",
+        borderRadius: "50%",
+        background:
+          "color-mix(in srgb, var(--primary) 9%, var(--surface-container-lowest))",
+        border:
+          "1px solid color-mix(in srgb, var(--primary) 32%, transparent)",
         boxShadow: "var(--shadow-sm)",
       }}
     >
@@ -78,7 +81,7 @@ export function BrandBadge({ size = 28 }: { size?: number }) {
   );
 }
 
-/** Horizontal lockup: brand tile + AERIE wordmark. */
+/** Horizontal lockup: brand disc + AERIE wordmark. */
 export function BrandLockup({
   size = 28,
   wordmark = true,

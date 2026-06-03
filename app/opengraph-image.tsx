@@ -7,12 +7,13 @@ export const alt = "AERIE — Media Command Center";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const TILE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="148" height="148" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#0f1d33" stroke="#57f1db" stroke-opacity="0.35" stroke-width="0.6"/>
-  <g transform="translate(16 16) scale(0.84) translate(-16 -16)" fill="none" stroke="#57f1db" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 6 25 L 16 7 L 26 25"/>
-    <path d="M 11 18.5 L 21 18.5"/>
+const TILE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="148" height="148" viewBox="0 0 120 120">
+  <circle cx="60" cy="60" r="60" fill="#0b1326"/>
+  <g fill="none" stroke="#57f1db" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16,86 50,40 70,66"/>
+    <polyline points="58,74 80,50 100,80" stroke-opacity="0.55"/>
   </g>
+  <circle cx="60" cy="60" r="59" fill="none" stroke="#57f1db" stroke-opacity="0.32" stroke-width="2"/>
 </svg>`;
 
 export default function OpengraphImage() {

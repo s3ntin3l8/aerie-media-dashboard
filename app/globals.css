@@ -170,3 +170,46 @@ textarea.input {
   min-width: 640px;
 }
 
+/* ── Mobile shell foundations ──────────────────────────────
+   These classes are applied by the mobile shell (MobileShell.tsx).
+   100dvh = dynamic viewport height (avoids iOS browser chrome
+   pushing content under the home indicator). */
+
+/* Root shell when the mobile layout is active */
+.aerie-mobile-shell {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Respect the iPhone home indicator area */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Bottom nav safe-area spacing */
+.aerie-bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Hide scrollbars on mobile scroll containers while keeping scrollability */
+.aerie-mobile-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.aerie-mobile-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Unlock body scroll for pages that need it on mobile (e.g. Login).
+   The portal shell uses overflow: hidden; the login page is outside it. */
+@media (max-width: 768px) {
+  body:has(.aerie-mobile-login) {
+    overflow: auto;
+  }
+}
+
+/* Mobile app bar top safe area padding */
+.aerie-app-bar {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+

@@ -1,11 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="300" height="64" viewBox="0 0 300 64" role="img" aria-label="AERIE">
   <!-- AERIE lockup (dark backgrounds) — geometry mirrors components/brand/Brand.tsx -->
-  <rect x="2" y="4" width="56" height="56" rx="14" fill="#0f1d33" stroke="#57f1db" stroke-opacity="0.32"/>
-  <g transform="translate(2 4) scale(1.75)">
-    <g transform="translate(16 16) scale(0.86) translate(-16 -16)" fill="none" stroke="#57f1db" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M 6 25 L 16 7 L 26 25"/>
-      <path d="M 11 18.5 L 21 18.5"/>
-    </g>
+  <circle cx="30" cy="32" r="28" fill="#0f1d33" stroke="#57f1db" stroke-opacity="0.32" stroke-width="1"/>
+  <g transform="translate(2 4) scale(0.4667)" fill="none" stroke="#57f1db" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16,86 50,40 70,66"/>
+    <polyline points="58,74 80,50 100,80" stroke-opacity="0.55"/>
   </g>
   <text x="78" y="43" font-family="Manrope, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="38" font-weight="800" letter-spacing="3" fill="#e6f7fb">AERIE</text>
 </svg>
