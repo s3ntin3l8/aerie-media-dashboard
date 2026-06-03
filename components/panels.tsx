@@ -996,8 +996,11 @@ export function UpcomingPanel({ fill, limit, window: windowDays, title }: { fill
     ? upcoming.filter((u) => new Date(u.when) <= cutoff)
     : upcoming;
   const sliceCap = limit ?? 20;
+  const countDisplay = windowFiltered.length > sliceCap
+    ? `${sliceCap} of ${windowFiltered.length}`
+    : windowFiltered.length > 0 ? `${windowFiltered.length}` : undefined;
   return (
-    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Coming Soon"} icon="event_upcoming" accent="var(--originator-court)" count={windowFiltered.length ? `${windowFiltered.length}` : undefined}>
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Coming Soon"} icon="event_upcoming" accent="var(--originator-court)" count={countDisplay}>
       {windowFiltered.length === 0 ? (
         <Empty icon="event_upcoming" line="Nothing upcoming" sub="Upcoming episodes and releases will appear here." />
       ) : (

@@ -99,7 +99,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       ]},
       { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
     ],
-    render: (c, s) => <MyRequestsPanel fill role={c.role} onAll={() => c.onNavigate("/requests")} onAct={c.onAct} limit={s.limit as number | undefined} view={s.view as string | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
+    render: (c, s) => <MyRequestsPanel fill role={c.role} onAll={() => c.onNavigate("/requests")} onAct={c.onAct} limit={s.limit != null ? Number(s.limit) : undefined} view={s.view as string | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   recentlyAdded: {
     type: "recentlyAdded", name: "Recently Added", icon: "new_releases", accent: "var(--primary)", group: "Streaming",
@@ -115,7 +115,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "track", label: "Music" },
       ]},
     ],
-    render: (_c, s) => <RecentlyAdded fill limit={s.limit as number | undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} />,
+    render: (_c, s) => <RecentlyAdded fill limit={s.limit != null ? Number(s.limit) : undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} />,
   },
   upcoming: {
     type: "upcoming", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Streaming",
@@ -130,7 +130,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "30", label: "Next 30 days" },
       ]},
     ],
-    render: (_c, s) => <UpcomingPanel fill limit={s.limit as number | undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} />,
+    render: (_c, s) => <UpcomingPanel fill limit={s.limit != null ? Number(s.limit) : undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} />,
   },
   leaderboard: {
     type: "leaderboard", name: "Top Streamers", icon: "leaderboard", accent: "var(--originator-own)", group: "Monitoring",
@@ -140,7 +140,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
       { key: "limit", label: "Users to show", type: "count", min: 3, max: 15, hint: "Auto = show all" },
     ],
-    render: (_c, s) => <LeaderboardPanel fill limit={s.limit as number | undefined} title={s.title as string | undefined} />,
+    render: (_c, s) => <LeaderboardPanel fill limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
   },
   bandwidth: {
     type: "bandwidth", name: "Bandwidth", icon: "speed", accent: "var(--primary)", group: "Monitoring",
@@ -157,7 +157,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "limit", label: "Items per page", type: "count", min: 3, max: 20, hint: "Auto = fit to card height" },
       { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
     ],
-    render: (_c, s) => <QueuePanel fill limit={s.limit as number | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
+    render: (_c, s) => <QueuePanel fill limit={s.limit != null ? Number(s.limit) : undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   downloads: {
     type: "downloads", name: "Recently Downloaded", icon: "download_done", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
@@ -168,7 +168,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "limit", label: "Items per page", type: "count", min: 3, max: 20, hint: "Auto = fit to card height" },
       { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
     ],
-    render: (_c, s) => <DownloadsPanel fill limit={s.limit as number | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
+    render: (_c, s) => <DownloadsPanel fill limit={s.limit != null ? Number(s.limit) : undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   shortcuts: {
     type: "shortcuts", name: "Shortcuts", icon: "bolt", accent: "var(--primary)", group: "Overview",
