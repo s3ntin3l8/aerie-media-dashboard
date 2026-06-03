@@ -797,7 +797,7 @@ export function LeaderboardPanel() {
   const maxUser = Math.max(1, ...topStats.users.map((u) => u.plays));
   return (
     <PanelShell title="Most Active · 7d" icon="leaderboard" accent="var(--originator-own)">
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, paddingBottom: topStats.media.length > 0 ? 0 : 16 }}>
         {topStats.users.length > 0 && (
           <div>
             <Eyebrow style={{ marginBottom: 8 }}>Top viewers</Eyebrow>
@@ -818,7 +818,7 @@ export function LeaderboardPanel() {
         {topStats.media.length > 0 && (
           <div>
             <Eyebrow style={{ marginBottom: 8 }}>Top media</Eyebrow>
-            <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto" }}>
+            <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 16 }}>
               {topStats.media.map((m, i) => (
                 <div key={`${m.title}-${i}`} style={{ width: 64, flexShrink: 0 }}>
                   <PosterTile title={m.title} kind="movie" cat="stream" w={64} art={m.art} />
