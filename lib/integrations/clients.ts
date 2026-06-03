@@ -1047,3 +1047,185 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
     filesystems,
   };
 }
+
+// ── Beszel — host metrics (PocketBase) ─────────────────────
+// Beszel's hub is PocketBase. The `systems`/`system_stats` collections are locked
+// to superusers in the base schema and relaxed at runtime to authenticated-and-member,
+// so we authenticate as a SUPERUSER to read every system without per-system sharing
+// (matches the Homepage Beszel-widget v2 convention). The stored apiKey secret holds
+// "email:password" (split on the first ":"). The token is JWT and expires, so it's
+// cached in-process (keyed by baseUrl) and re-fetched on a 401.
+const BESZEL_GIB = 1073741824; // bytes per GiB — Beszel reports mem/disk/swap in GiB
+
+interface BeszelToken { token: string; expMs: number; }
+const beszelTokenCache = new Map<string, BeszelToken>();
+const beszelAuthInflight = new Map<string, Promise<string>>();
+
+function splitBeszelCreds(apiKey: string): { identity: string; password: string } {
+  const i = apiKey.indexOf(":");
+  if (i < 0) throw new IntegrationError("beszel", "apiKey must be 'email:password'");
+  return { identity: apiKey.slice(0, i), password: apiKey.slice(i + 1) };
+}
+
+/** Decode a JWT's `exp` claim (no signature check) → epoch ms; fall back to +30min. */
+function beszelTokenExpMs(token: string): number {
+  try {
+    const payload = token.split(".")[1];
+    if (payload) {
+      const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: number };
+      if (typeof json.exp === "number") return json.exp * 1000;
+    }
+  } catch {
+    /* unparsable — use the conservative fallback below */
+  }
+  return Date.now() + 30 * 60_000;
+}
+
+/** Authenticate as a Beszel superuser, caching the token until ~30s before expiry. */
+async function beszelAuth(base: string, apiKey: string, force = false): Promise<string> {
+  if (!force) {
+    const hit = beszelTokenCache.get(base);
+    if (hit && Date.now() < hit.expMs - 30_000) return hit.token;
+    const inflight = beszelAuthInflight.get(base);
+    if (inflight) return inflight;
+  }
+  const { identity, password } = splitBeszelCreds(apiKey);
+  const p = (async () => {
+    const data = await fetchJson<{ token?: string }>(
+      `${base}/api/collections/_superusers/auth-with-password`,
+      { service: "beszel", method: "POST", headers: { "Content-Type": "application/json" }, body: { identity, password } },
+    );
+    if (!data.token) throw new IntegrationError("beszel", "auth returned no token");
+    beszelTokenCache.set(base, { token: data.token, expMs: beszelTokenExpMs(data.token) });
+    return data.token;
+  })();
+  beszelAuthInflight.set(base, p);
+  try {
+    return await p;
+  } finally {
+    beszelAuthInflight.delete(base);
+  }
+}
+
+/** Authenticated GET against the Beszel PocketBase API, with one re-auth retry on 401. */
+async function beszelGet<T>(base: string, apiKey: string, path: string): Promise<T> {
+  const token = await beszelAuth(base, apiKey);
+  try {
+    return await fetchJson<T>(`${base}${path}`, { service: "beszel", headers: { Authorization: token } });
+  } catch (e) {
+    if (e instanceof IntegrationError && e.status === 401) {
+      const fresh = await beszelAuth(base, apiKey, true);
+      return await fetchJson<T>(`${base}${path}`, { service: "beszel", headers: { Authorization: fresh } });
+    }
+    throw e;
+  }
+}
+
+interface BeszelListResponse<T> { items: T[]; }
+interface BeszelSystemRecord { id: string; name: string; status: string; info?: { u?: number }; }
+interface BeszelStats {
+  cpu?: number;
+  m?: number; mu?: number;            // memory total / used (GiB)
+  s?: number; su?: number;            // swap total / used (GiB)
+  d?: number; du?: number;            // disk total / used (GiB)
+  ns?: number; nr?: number;           // legacy network sent / recv (MiB/s)
+  b?: [number, number];               // network [sent, recv] (bytes/s)
+  la?: [number, number, number];      // load average [1m, 5m, 15m]
+  efs?: Record<string, { d?: number; du?: number }>; // extra filesystems (GiB)
+}
+interface BeszelStatRecord { created: string; stats: BeszelStats; }
+
+/** List Beszel-monitored systems (for the system picker). Cached ~30s. */
+export async function beszelSystems(): Promise<{ id: string; name: string; status: string }[]> {
+  const { baseUrl, apiKey } = await creds("beszel");
+  return cached("beszel:systems", 30_000, async () => {
+    const data = await beszelGet<BeszelListResponse<{ id: string; name: string; status: string }>>(
+      baseUrl, apiKey, `/api/collections/systems/records?perPage=100&sort=name&fields=id,name,status`,
+    );
+    return (data.items ?? []).map((r) => ({ id: r.id, name: r.name, status: r.status }));
+  });
+}
+
+/** Beszel host metrics for the selected system, normalized into NodeMetrics (live; not cached). */
+export async function beszelMetrics(): Promise<NodeMetrics> {
+  const { baseUrl, apiKey } = await creds("beszel");
+  const stored = await getDeploymentSetting("beszelSystem");
+  let systemId = stored && stored.trim() ? stored.trim() : null;
+  if (!systemId) {
+    const systems = await beszelSystems();
+    if (systems.length === 0) throw new IntegrationError("beszel", "no systems");
+    systemId = systems[0].id;
+  }
+
+  // Systems record → name (instance), uptime (info.u), status. Fall back to the
+  // first system if the persisted id was deleted (404).
+  const recordPath = (id: string) => `/api/collections/systems/records/${id}?fields=id,name,status,info`;
+  let record: BeszelSystemRecord;
+  try {
+    record = await beszelGet<BeszelSystemRecord>(baseUrl, apiKey, recordPath(systemId));
+  } catch (e) {
+    if (e instanceof IntegrationError && e.status === 404) {
+      const systems = await beszelSystems();
+      if (systems.length === 0) throw new IntegrationError("beszel", "no systems");
+      systemId = systems[0].id;
+      record = await beszelGet<BeszelSystemRecord>(baseUrl, apiKey, recordPath(systemId));
+    } else {
+      throw e;
+    }
+  }
+
+  // Recent 1m stats, newest first → reverse to oldest→newest for the history sparklines.
+  const filter = encodeURIComponent(`system='${systemId}' && type='1m'`);
+  const statsResp = await beszelGet<BeszelListResponse<BeszelStatRecord>>(
+    baseUrl, apiKey, `/api/collections/system_stats/records?filter=${filter}&sort=-created&perPage=40&fields=created,stats`,
+  );
+  const points = (statsResp.items ?? []).map((r) => r.stats).reverse();
+  const latest: BeszelStats | undefined = points[points.length - 1];
+
+  // Network: prefer b[] (bytes/s) → bits/s ×8; fall back to legacy ns/nr (MiB/s) → bits/s.
+  const netOut = (s: BeszelStats): number | undefined =>
+    s.b && (s.b[0] || s.b[1]) ? s.b[0] * 8 : s.ns != null ? s.ns * 1048576 * 8 : undefined;
+  const netIn = (s: BeszelStats): number | undefined =>
+    s.b && (s.b[0] || s.b[1]) ? s.b[1] * 8 : s.nr != null ? s.nr * 1048576 * 8 : undefined;
+
+  // Front-pad each series to 40 points (mirror prometheusRange).
+  const series = (sel: (s: BeszelStats) => number | undefined): number[] => {
+    const arr = points.map((s) => { const v = sel(s); return typeof v === "number" && isFinite(v) ? v : 0; });
+    if (arr.length === 0) return new Array<number>(40).fill(0);
+    return arr.length >= 40 ? arr.slice(-40) : [...new Array<number>(40 - arr.length).fill(arr[0]), ...arr];
+  };
+  const gib = (v: number | undefined): number | null => (v != null && isFinite(v) ? v * BESZEL_GIB : null);
+  const finite = (v: number | null | undefined): number | null => (v != null && isFinite(v) ? v : null);
+
+  // Filesystems: synthesized root + each efs mount (GiB → bytes), largest first, capped 8.
+  const filesystems: { mount: string; usedBytes: number; totalBytes: number }[] = [];
+  if (latest?.d != null) filesystems.push({ mount: "/", usedBytes: (latest.du ?? 0) * BESZEL_GIB, totalBytes: latest.d * BESZEL_GIB });
+  for (const [mount, fs] of Object.entries(latest?.efs ?? {})) {
+    if (fs?.d != null) filesystems.push({ mount, usedBytes: (fs.du ?? 0) * BESZEL_GIB, totalBytes: fs.d * BESZEL_GIB });
+  }
+  filesystems.sort((a, b) => b.totalBytes - a.totalBytes);
+
+  return {
+    instance: record.name,
+    cpuPct: finite(latest?.cpu),
+    cpuHistory: series((s) => s.cpu),
+    memUsedBytes: gib(latest?.mu),
+    memTotalBytes: gib(latest?.m),
+    memHistory: series((s) => (s.mu != null ? s.mu * BESZEL_GIB : undefined)),
+    netOutBps: finite(latest ? netOut(latest) : null),
+    netHistory: series((s) => netOut(s)),
+    netInBps: finite(latest ? netIn(latest) : null),
+    netInHistory: series((s) => netIn(s)),
+    diskUsedBytes: gib(latest?.du),
+    diskTotalBytes: gib(latest?.d),
+    diskHistory: series((s) => (s.du != null ? s.du * BESZEL_GIB : undefined)),
+    sysLoad: finite(latest?.la?.[0]),
+    sysLoadHistory: series((s) => s.la?.[0]),
+    load5: finite(latest?.la?.[1]),
+    load15: finite(latest?.la?.[2]),
+    uptimeSec: finite(record.info?.u),
+    swapUsedBytes: gib(latest?.su),
+    swapTotalBytes: gib(latest?.s),
+    filesystems: filesystems.slice(0, 8),
+  };
+}

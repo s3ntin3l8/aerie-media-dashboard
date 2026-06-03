@@ -5,13 +5,14 @@
 // Encapsulates the three distinct service-visibility filter
 // shapes that were copy-pasted across six call sites:
 //
-//   "launcher" — exclude infra category + prometheus id +
-//                isVisible check (ServiceTiles, Launcher,
-//                CommandPalette). Admins bypass the filter.
+//   "launcher" — exclude infra category + prometheus/beszel ids
+//                (metrics-only sources, not launchable) + isVisible
+//                check (ServiceTiles, Launcher, CommandPalette).
+//                Admins bypass the filter.
 //
-//   "status"   — exclude infra category + isVisible check,
-//                but prometheus is visible in the status list
-//                since it's a monitored service. Admins bypass.
+//   "status"   — exclude infra category + isVisible check, but
+//                prometheus/beszel stay visible in the status list
+//                since they're monitored services. Admins bypass.
 //
 //   "bare"     — only the isVisible visibility-matrix check
 //                (Rail favorites, Rail recent slot).
@@ -40,10 +41,10 @@ export function useVisibleServices(mode: VisibilityMode): Service[] {
   if (role === "admin") return services;
 
   if (mode === "launcher") {
-    // Exclude infra category, exclude prometheus by id, then apply
-    // the visibility matrix (opt-out per group).
+    // Exclude infra category, exclude the metrics-only sources (prometheus,
+    // beszel) by id, then apply the visibility matrix (opt-out per group).
     return services.filter(
-      (s) => s.cat !== "infra" && s.id !== "prometheus" && isVisible(s.id, role, visibility)
+      (s) => s.cat !== "infra" && s.id !== "prometheus" && s.id !== "beszel" && isVisible(s.id, role, visibility)
     );
   }
 

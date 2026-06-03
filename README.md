@@ -13,7 +13,7 @@
 </p>
 
 A private media portal for self-hosted services (Plex, Jellyfin, Overseerr, the *arr suite,
-Tautulli/Jellystat, Gatus, Prometheus), exposed behind Traefik and authenticated via **any
+Tautulli/Jellystat, Gatus, Prometheus, Beszel), exposed behind Traefik and authenticated via **any
 OIDC provider** (or a local admin account when OIDC is off). One vantage point to reach
 every service, see unified media stats, manage per-user requests, and watch uptime.
 
@@ -27,7 +27,7 @@ Built with **Next.js (App Router, TypeScript)**.
 | Auth | Auth.js v5; any OIDC provider or local credentials; role from `groups` claim or `AERIE_ADMIN_EMAILS`; route protection |
 | Persistence | SQLite + Drizzle (services, secrets, groups, visibility, users, links, prefs); migrations + seed |
 | Secrets | AES-256-GCM at rest (`ENCRYPTION_KEY`) |
-| Integrations | Gatus, Tautulli, Jellyfin, Overseerr, Sonarr/Radarr, Prometheus clients; real-data-or-empty per panel |
+| Integrations | Gatus, Tautulli, Jellyfin, Overseerr, Sonarr/Radarr, Prometheus, Beszel clients; real-data-or-empty per panel |
 | Live data | `/api/snapshot` polled by the client; now-playing/status stay fresh |
 | Cover art | Tautulli/Jellyfin proxy (`/api/artwork`) with placeholder fallback |
 | Embedding | Real `<iframe>` + Traefik `frame-ancestors` middleware + OIDC forward-auth (`docs/EMBEDDING.md`) |
@@ -44,6 +44,22 @@ Built with **Next.js (App Router, TypeScript)**.
    data; services without a key show an empty state until configured.
 4. Deploy with `docker compose up -d` behind Traefik; apply the embed + forward-auth
    middlewares to embeddable services (see `docs/EMBEDDING.md`).
+
+### Host metrics: Prometheus or Beszel
+
+The admin **System Status** page renders host metric cards (CPU, memory, network, disk, load,
+uptime, filesystems). Two interchangeable sources can fill them:
+
+- **Prometheus** — `apiKey` optional (only for bearer auth); a node/instance picker scopes the query.
+- **Beszel** — its hub is PocketBase, so it needs credentials. Set the `beszel` service's **API key to
+  `email:password`** (packed; split on the first `:`) for a Beszel **superuser** — that reads every
+  monitored system without per-system sharing, matching the Homepage widget convention. Create one with
+  `docker exec beszel /beszel superuser upsert you@example.com 'your-password'`. A system picker chooses
+  which host to display.
+
+When **both** are configured, a **Prometheus ⇄ Beszel toggle** appears in the section header (default
+Prometheus). The active source and selected system/instance persist as deployment settings
+(`metricsSource`, `beszelSystem`, `prometheusInstance`).
 
 ## Develop
 
