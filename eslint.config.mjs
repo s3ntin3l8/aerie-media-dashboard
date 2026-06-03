@@ -20,8 +20,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Reference design bundle (prototype source kept for provenance only).
-    "design/**",
     "drizzle/**",
     "data/**",
     // Local agent state — may contain git worktrees with full repo copies and

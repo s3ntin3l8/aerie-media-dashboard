@@ -7,8 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **AERIE** (package name `aerie`) is a private media command-center portal for self-hosted
 services (Plex, Jellyfin, Overseerr, the *arr suite, Tautulli/Jellystat, Gatus, Prometheus).
 It's a Next.js 16 App Router app (React 19, TypeScript) that sits behind Traefik and
-authenticates via **any OIDC provider** (or a local admin account when OIDC is off). It's a
-faithful recreation of the design in `design/`.
+authenticates via **any OIDC provider** (or a local admin account when OIDC is off).
 
 Two principles drive the data path:
 - **Real data only.** Panels show live upstream data, or a graceful **empty state** until that
@@ -177,8 +176,8 @@ stored in `service_secrets`.
   adding server modules; never import them into client components.
 - Import alias is `@/*` → repo root (e.g. `@/lib/env`, `@/components/views/Home`).
 - The locked design defaults (dark theme, command layout, spotlight central, stripe tiles,
-  heartbeat status viz) are intentional — the design-time "Tweaks" panel was dropped. Compare
-  visual work against `design/screenshots/`. The `design/` and `drizzle/` dirs are eslint-ignored.
+  heartbeat status viz) are intentional — the design-time "Tweaks" panel was dropped.
+  The `drizzle/` dir is eslint-ignored.
 - `react-hooks/set-state-in-effect` is intentionally a **warning**, not an error, for idiomatic
   mount-time effects (localStorage restore, interval ticks). Don't fight it.
 

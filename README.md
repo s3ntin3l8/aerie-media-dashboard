@@ -12,50 +12,38 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-informational.svg" alt="License: MIT"></a>
 </p>
 
-A private media portal for self-hosted services (Plex, Jellyfin, Overseerr, the
-*arr suite, Tautulli/Jellystat, Gatus, Prometheus), exposed behind Traefik and
-authenticated through Authentik (OIDC). One vantage point to reach every service,
-see unified media stats, manage per-user requests, and watch uptime.
+A private media portal for self-hosted services (Plex, Jellyfin, Overseerr, the *arr suite,
+Tautulli/Jellystat, Gatus, Prometheus), exposed behind Traefik and authenticated via **any
+OIDC provider** (or a local admin account when OIDC is off). One vantage point to reach
+every service, see unified media stats, manage per-user requests, and watch uptime.
 
-Built with **Next.js (App Router, TypeScript)**, faithfully recreating the AERIE
-design (see `design/`).
+Built with **Next.js (App Router, TypeScript)**.
 
 ## Status
 
-**All plan milestones implemented.** The app runs today on mock data with zero
-config (dev mode), and switches to real services + OIDC purely via env + stored
-secrets — no code changes.
-
 | Area | State |
 |---|---|
-| Frontend | Pixel-faithful AERIE recreation; dark/light, ⌘K palette, keyboard nav, admin/member preview, responsive |
-| Auth | Auth.js v5 ↔ Authentik OIDC; role from `groups` claim (`admins`→admin); route protection; dev bypass |
+| Frontend | Dark/light, ⌘K palette, keyboard nav, admin/member preview, responsive |
+| Auth | Auth.js v5; any OIDC provider or local credentials; role from `groups` claim or `AERIE_ADMIN_EMAILS`; route protection |
 | Persistence | SQLite + Drizzle (services, secrets, groups, visibility, users, links, prefs); migrations + seed |
 | Secrets | AES-256-GCM at rest (`ENCRYPTION_KEY`) |
-| Integrations | Gatus, Tautulli, Jellyfin, Overseerr, Sonarr/Radarr, Prometheus clients; `Promise.allSettled` facade with per-panel mock fallback |
+| Integrations | Gatus, Tautulli, Jellyfin, Overseerr, Sonarr/Radarr, Prometheus clients; real-data-or-empty per panel |
 | Live data | `/api/snapshot` polled by the client; now-playing/status stay fresh |
 | Cover art | Tautulli/Jellyfin proxy (`/api/artwork`) with placeholder fallback |
-| Embedding | Real `<iframe>` + Traefik `frame-ancestors` middleware + Authentik forward-auth (`docs/EMBEDDING.md`) |
+| Embedding | Real `<iframe>` + Traefik `frame-ancestors` middleware + OIDC forward-auth (`docs/EMBEDDING.md`) |
 | Admin | Add/edit/remove **service modal** (wired to `upsertService`/`setServiceSecret`/`deleteService`), persisted visibility matrix |
 | Requests | **Request modal** (member discover→confirm→submit) + **review modal** (admin approve/decline); real Overseerr search/create/review when configured |
 | Deploy | Standalone Dockerfile + `docker-compose.yml` behind Traefik; `.env.example` |
 
-**Remaining / coded-not-verified:** the integration clients (Tautulli, Jellyfin,
-Overseerr search/request/review, Gatus, Prometheus, *arr) are implemented but only
-exercised against the **mock fallback** — they're unverified against live upstreams
-until you point them at real hosts. Per-user request **attribution** in Overseerr
-needs `account_links.overseerrUserId` populated (set up the Plex source in Authentik
-first), and the member "My Requests" filter assumes the mock `you` id. Finally, the
-live **embedding spike** (`docs/EMBEDDING.md`) must run on your infra.
-
 ## Configure for production
 
-1. `cp .env.example .env` and fill in Authentik OIDC creds, `AUTH_SECRET`, `ENCRYPTION_KEY`.
+1. `cp .env.example .env` and fill in OIDC provider creds (or leave `OIDC_*` unset for
+   local-admin mode), `AUTH_SECRET`, `ENCRYPTION_KEY`.
 2. `npm run db:migrate && npm run db:seed` (or let the runtime bootstrap do it).
-3. Enter each service's API key in **Admin → Services** (stored encrypted) to light
-   up live data; services without a key keep showing mock/placeholder data.
-4. Deploy with `docker compose up -d` behind Traefik; apply the embed +
-   forward-auth middlewares to embeddable services (see `docs/EMBEDDING.md`).
+3. Enter each service's API key in **Admin → Services** (stored encrypted) to light up live
+   data; services without a key show an empty state until configured.
+4. Deploy with `docker compose up -d` behind Traefik; apply the embed + forward-auth
+   middlewares to embeddable services (see `docs/EMBEDDING.md`).
 
 ## Develop
 
@@ -75,7 +63,7 @@ app/
     services/          service launcher
     s/[service]/       embed / launch service view
     requests/  status/  admin/
-  login/               Authentik OIDC handoff (mock)
+  login/               OIDC handoff or local-admin sign-in
 components/
   primitives.tsx       Icon, Btn, Pill, Heartbeat, Sparkline, PosterTile, …
   panels.tsx           NowPlaying, ServiceTiles, CentralServices, Status, …
@@ -83,21 +71,9 @@ components/
   views/               Home, Launcher, Requests, Status, Admin, Login, shared
 lib/
   types.ts             domain types
-  mock/data.ts         mock data (ported from the design prototype)
+  categories.ts        static service category taxonomy
 styles/                colors_and_type.css · components.css · fonts.css + fonts
-design/                source design bundle (prototype, chats, screenshots)
 ```
-
-## Design fidelity
-
-Components are ported from the design prototype with identical dimensions, colors,
-and the verbatim token system. Compare against `design/screenshots/` —
-`01-light-home.png`, `01-home-dark-admin.png`, `status.png`, `embed.png`,
-`requests.png`, `02-services.png`, `login.png`.
-
-The design-time "Tweaks" panel was intentionally dropped; the committed defaults
-are locked (dark theme, command layout, spotlight central, stripe tiles, heartbeat
-status viz).
 
 ## Contributing / quality gates
 
