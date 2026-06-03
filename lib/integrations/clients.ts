@@ -705,7 +705,7 @@ interface ArrCalendarRecord {
   id: number;
   title?: string;        // Radarr movie title
   seriesTitle?: string;  // sometimes present on Sonarr records
-  series?: { title?: string };
+  series?: { title?: string; images?: { coverType: string; remoteUrl?: string; url?: string }[] };
   seasonNumber?: number;
   episodeNumber?: number;
   airDateUtc?: string;   // Sonarr
@@ -716,7 +716,9 @@ interface ArrCalendarRecord {
 }
 
 function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefined {
-  const img = rec.images?.find((i) => i.coverType === "poster") ?? rec.images?.[0];
+  // Sonarr episodes: poster lives on rec.series.images; Radarr movies: rec.images
+  const imgs = (rec.series?.images?.length ? rec.series.images : rec.images) ?? [];
+  const img = imgs.find((i) => i.coverType === "poster") ?? imgs[0];
   const ref = img?.remoteUrl || img?.url;
   return ref ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(ref)}` : undefined;
 }

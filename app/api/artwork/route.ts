@@ -18,6 +18,11 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
       // ref is a TMDB poster_path (e.g. "/b8VtW6I.jpg"); proxy through to avoid
       // exposing the TMDB CDN directly and to apply our cache headers.
       return `https://image.tmdb.org/t/p/w342${ref}`;
+    case "sonarr":
+    case "radarr":
+      // ref is either a full external URL (remoteUrl) or a local path (/MediaCover/…)
+      if (ref.startsWith("http")) return ref;
+      return `${base}${ref}?apikey=${apiKey ?? ""}`;
     default:
       return null;
   }
