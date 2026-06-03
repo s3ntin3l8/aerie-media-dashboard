@@ -777,10 +777,17 @@ export function RecentlyAdded() {
 // ── DOWNLOAD QUEUE (admin) ─────────────────────────────────
 export function QueuePanel() {
   const { queue } = useData();
+  const { page, totalPages, slice, setPage } = usePagination(queue, 10);
   return (
-    <PanelShell title="Download Queue" icon="downloading" accent="var(--originator-third-party)" count={`${queue.length} active`}>
+    <PanelShell
+      title="Download Queue"
+      icon="downloading"
+      accent="var(--originator-third-party)"
+      count={`${queue.length} active`}
+      action={totalPages > 1 ? <PageControls page={page} totalPages={totalPages} setPage={setPage} /> : undefined}
+    >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {queue.map((q, i) => (
+        {slice.map((q, i) => (
           <div key={q.id} style={{ padding: "11px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
               <Icon name={q.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
