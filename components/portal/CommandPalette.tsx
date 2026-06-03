@@ -9,6 +9,7 @@ import { ServiceLogo } from "@/components/ServiceLogo";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import type { Service } from "@/lib/types";
+import { isVisible } from "@/lib/visibility";
 
 function PaletteRow({
   icon,
@@ -56,7 +57,7 @@ function PaletteRow({
 export function CommandPalette() {
   const router = useRouter();
   const { paletteOpen, setPaletteOpen, role } = usePortal();
-  const { services } = useData();
+  const { services, visibility } = useData();
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -80,7 +81,7 @@ export function CommandPalette() {
 
   const ql = q.toLowerCase();
   const navMatches = nav.filter((n) => n[0].toLowerCase().includes(ql));
-  const visibleServices = role === "admin" ? services : services.filter((s) => s.cat !== "infra" && s.id !== "prometheus");
+  const visibleServices = role === "admin" ? services : services.filter((s) => s.cat !== "infra" && s.id !== "prometheus" && isVisible(s.id, role, visibility));
   const svcMatches = visibleServices.filter((s) => s.name.toLowerCase().includes(ql) || s.host.includes(ql));
 
   return (
