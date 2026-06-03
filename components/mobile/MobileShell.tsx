@@ -1,7 +1,7 @@
 "use client";
 // Switches between desktop shell and mobile shell based on viewport width.
-// Returns a neutral 100dvh background while the measurement is pending
-// (prevents hydration mismatch).
+// SSR defaults to desktop so the server render matches first paint exactly on
+// desktop (no flash). On a narrow viewport the hook corrects after mount.
 import React from "react";
 import { Rail } from "@/components/portal/Rail";
 import { CommandPalette } from "@/components/portal/CommandPalette";
@@ -11,18 +11,11 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 export function MobileShell({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
 
-  // Neutral loading frame — same background as the app, no flash
-  if (isMobile === null) {
-    return (
-      <div style={{ height: "100dvh", background: "var(--background)" }} />
-    );
-  }
-
   if (isMobile) {
     return <MobilePortal />;
   }
 
-  // Desktop shell (current layout)
+  // Desktop shell (SSR default — no null guard needed)
   return (
     <div style={{ height: "100vh", display: "flex", overflow: "hidden" }}>
       <Rail />

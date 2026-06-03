@@ -175,14 +175,14 @@ textarea.input {
    100dvh = dynamic viewport height (avoids iOS browser chrome
    pushing content under the home indicator). */
 
-/* Root shell when the mobile layout is active */
+/* Root shell when the mobile layout is active.
+   No padding-bottom here — the bottom nav handles its own safe-area inset
+   so we don't double-apply env(safe-area-inset-bottom). */
 .aerie-mobile-shell {
   height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Respect the iPhone home indicator area */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Bottom nav safe-area spacing */

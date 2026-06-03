@@ -2,13 +2,17 @@
 import { useEffect, useState } from "react";
 
 /**
- * Returns true if the viewport is <= 768px (mobile), false if desktop,
- * or null while the first measurement is pending (SSR / before mount).
- * Return null on first render to avoid hydration mismatches — render a
- * neutral frame while null.
+ * Returns true if the viewport is <= 768px (mobile), false otherwise.
+ *
+ * SSR strategy: defaults to `false` (desktop) so the server renders the
+ * full desktop shell and it matches the client's first paint on desktop.
+ * On a narrow viewport the hook corrects to `true` after mount (one-frame
+ * transition), which is far less jarring than a blank→content flash that
+ * `null` caused on every desktop load. Mobile users see a brief correction;
+ * desktop users see no flash at all.
  */
-export function useIsMobile(): boolean | null {
-  const [isMobile, setIsMobile] = useState<boolean | null>(null);
+export function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState<boolean>(false);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
     setIsMobile(mq.matches);
