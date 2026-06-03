@@ -318,7 +318,7 @@ export function Admin() {
           <Icon name="add" size={15} /> Add service
         </button>
       </PageHeader>
-      <div style={{ display: "flex", gap: 4, padding: "12px 32px 0", borderBottom: "1px solid var(--outline-variant)", flexShrink: 0, overflowX: "auto" }}>
+      <div style={{ display: "flex", gap: 4, padding: "12px 32px 0", borderBottom: "1px solid var(--outline-variant)", flexShrink: 0 }}>
         {tabs.map(([id, label, icon]) => (
           <button
             key={id}
