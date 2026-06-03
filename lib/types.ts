@@ -223,6 +223,8 @@ export interface DashboardTile {
   y: number;
   w: number;
   h: number;
+  /** Per-card user settings (item count, title override, filters). Absent = catalog defaults. */
+  settings?: Record<string, string | number | boolean>;
 }
 
 /** Per-role saved homescreen arrangements, persisted to preferences.dashboards. */
