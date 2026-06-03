@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from "react";
 import type { Role, Service, ServiceStatus } from "@/lib/types";
 import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
+import { usePortal } from "@/components/portal/PortalProvider";
 import {
   Icon,
   Pill,
@@ -31,6 +32,42 @@ export function useTick(ms = 1000) {
     return () => clearInterval(t);
   }, [ms]);
   return now;
+}
+
+/** Human-readable byte size ("1.4 TB", "820 GB", "512 MB", "—" for null). */
+export function fmtBytes(b: number | null | undefined): string {
+  if (b == null) return "—";
+  const tb = b / 1_099_511_627_776;
+  if (tb >= 1) return `${tb.toFixed(1)} TB`;
+  const gb = b / 1_073_741_824;
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(b / 1_048_576).toFixed(0)} MB`;
+}
+
+/** Relative day label for an upcoming ISO date ("Today", "Tomorrow", "Mon 5"). */
+export function fmtDay(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const d = new Date(t);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const days = Math.round((d.getTime() - startOfToday.getTime()) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return d.toLocaleDateString("en-US", { weekday: "short", day: "numeric" });
+}
+
+/** Compact "time ago" for an ISO timestamp (e.g. "3h ago", "2d ago"). */
+export function timeAgo(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return null;
+  const sec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
 }
 
 export function fmtTime(totalSec: number) {
@@ -125,13 +162,17 @@ const SeeAll = ({ onClick }: { onClick?: () => void }) => (
 // ── NOW PLAYING ───────────────────────────────────────────
 export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolean; onAll?: () => void }) {
   const { nowPlaying, services: allServices, users } = useData();
+  const { user } = usePortal();
   const now = useTick(1000);
   const fetchedAt = useSnapshotTime();
   // elapsed is relative to when this snapshot was fetched — resets on every poll
   // so the clock stays in sync with Tautulli rather than drifting from mount time.
   const elapsed = (now - fetchedAt) / 1000;
   let streams = nowPlaying;
-  if (role !== "admin") streams = streams.filter((s) => s.user === "you");
+  // NOTE: NowPlaying uses Plex/Jellyfin identity, not portal ids — this filter is a
+  // placeholder until that identity is linked (see plan "Out of scope"). Currently
+  // matches nothing for non-admins, same as before.
+  if (role !== "admin") streams = streams.filter((s) => s.user === user.id);
   const visible = streams;
   return (
     <PanelShell
@@ -201,7 +242,7 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
                       {s.bitrate} Mbps · {s.codec}
                     </span>
                     <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
-                      <Icon name={(svc?.icon && svc.icon.length > 2) ? svc.icon : "play_circle"} size={12} color={catColor("stream")} />
+                      {svc ? <ServiceLogo service={svc} size={14} radius={3} /> : <Icon name="play_circle" size={12} color={catColor("stream")} />}
                       {svc?.name ?? s.src}
                     </span>
                   </div>
@@ -440,7 +481,9 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
       <HeartbeatStrip beats={s.beats} h={24} />
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
-        <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>Last 30 days · v{s.version}</span>
+        <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+          {s.lastIncidentAt ? `Last incident ${timeAgo(s.lastIncidentAt)}` : "Last 30 days"} · v{String(s.version).replace(/^v/i, "")}
+        </span>
         {s.embeddable ? (
           <a onClick={() => onOpen?.(s)} style={{ fontSize: 11.5, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 3, color: "var(--primary)", cursor: "pointer" }}>
             Open <Icon name="arrow_right_alt" size={14} />
@@ -553,8 +596,9 @@ export const REQ_LABEL: Record<string, string> = { available: "Available", appro
 
 export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => void }) {
   const { users, requests } = useData();
-  const me = users.find((u) => u.id === "you") ?? users[0];
-  const mine = requests.filter((r) => r.user === "you");
+  const { user } = usePortal();
+  const me = users.find((u) => u.id === user.id) ?? users[0];
+  const mine = requests.filter((r) => r.portalUser === user.id);
   const queue = requests.filter((r) => r.status === "pending");
   const adminMode = role === "admin";
   const items = adminMode ? queue : mine;
@@ -570,7 +614,7 @@ export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => voi
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" }}>
           <Eyebrow>Quota</Eyebrow>
           <div style={{ flex: 1 }}>
-            <ProgressBar pct={(me.reqUsed / me.reqQuota) * 100} color="var(--originator-court)" h={6} />
+            <ProgressBar pct={me.reqQuota ? (me.reqUsed / me.reqQuota) * 100 : 0} color="var(--originator-court)" h={6} />
           </div>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
             {me.reqUsed}/{me.reqQuota}
@@ -579,10 +623,10 @@ export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => voi
       )}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {items.map((r, i) => {
-          const u = users.find((x) => x.id === r.user);
+          const u = users.find((x) => x.id === r.portalUser);
           return (
             <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
-              <PosterTile title={r.title} kind={r.kind} cat="request" w={32} />
+              <PosterTile title={r.title} kind={r.kind} cat="request" w={32} art={r.art} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {r.title} <span style={{ fontWeight: 400, color: "var(--on-surface-variant)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{r.year}</span>
@@ -680,6 +724,127 @@ export function QueuePanel() {
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, fontWeight: 600, color: "var(--on-surface)" }}>{q.pct}%</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{q.eta}</span>
             </div>
+          </div>
+        ))}
+      </div>
+    </PanelShell>
+  );
+}
+
+// ── STORAGE (per-mount disk usage) ─────────────────────────
+export function StoragePanel() {
+  const { storage } = useData();
+  if (storage.length === 0) return null;
+  return (
+    <PanelShell title="Storage" icon="hard_drive" accent="var(--amber)" count={`${storage.length} ${storage.length === 1 ? "mount" : "mounts"}`}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {storage.map((m, i) => {
+          const used = m.totalBytes - m.freeBytes;
+          const pct = m.totalBytes > 0 ? (used / m.totalBytes) * 100 : 0;
+          const color = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
+          return (
+            <div key={m.path} style={{ padding: "11px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                <Icon name="folder" size={14} color="var(--on-surface-variant)" />
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.label}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{fmtBytes(m.freeBytes)} free</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <ProgressBar pct={pct} color={color} h={5} />
+                </div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, fontWeight: 600, color }}>{Math.round(pct)}%</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{fmtBytes(m.totalBytes)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </PanelShell>
+  );
+}
+
+// ── COMING SOON (upcoming *arr calendar) ───────────────────
+export function UpcomingPanel() {
+  const { upcoming } = useData();
+  return (
+    <PanelShell title="Coming Soon" icon="event_upcoming" accent="var(--originator-court)" count={upcoming.length ? `${upcoming.length}` : undefined}>
+      {upcoming.length === 0 ? (
+        <Empty icon="event_upcoming" line="Nothing upcoming" sub="Upcoming episodes and releases will appear here." />
+      ) : (
+        <div className="custom-scrollbar" style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
+          {upcoming.slice(0, 20).map((u) => (
+            <div key={u.id} style={{ width: 84, flexShrink: 0 }}>
+              <PosterTile title={u.title} kind={u.kind} cat="request" w={84} art={u.art} />
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.title}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={u.ep || ""}>
+                {fmtDay(u.when)}{u.ep ? ` · ${u.ep}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── LEADERBOARD (Tautulli weekly home stats) ───────────────
+export function LeaderboardPanel() {
+  const { topStats } = useData();
+  if (!topStats || (topStats.users.length === 0 && topStats.media.length === 0)) return null;
+  const maxUser = Math.max(1, ...topStats.users.map((u) => u.plays));
+  return (
+    <PanelShell title="Most Active · 7d" icon="leaderboard" accent="var(--originator-own)">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16 }}>
+        {topStats.users.length > 0 && (
+          <div>
+            <Eyebrow style={{ marginBottom: 8 }}>Top viewers</Eyebrow>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {topStats.users.map((u) => (
+                <div key={u.name} style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <Avatar name={u.name} size={20} color="var(--originator-own)" />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: "0 0 110px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</span>
+                  <div style={{ flex: 1 }}>
+                    <ProgressBar pct={(u.plays / maxUser) * 100} color="var(--originator-own)" h={5} />
+                  </div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 48, textAlign: "right" }}>{u.plays} plays</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {topStats.media.length > 0 && (
+          <div>
+            <Eyebrow style={{ marginBottom: 8 }}>Top media</Eyebrow>
+            <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto" }}>
+              {topStats.media.map((m, i) => (
+                <div key={`${m.title}-${i}`} style={{ width: 64, flexShrink: 0 }}>
+                  <PosterTile title={m.title} kind="movie" cat="stream" w={64} art={m.art} />
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--on-surface)", marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)" }}>{m.plays} plays</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </PanelShell>
+  );
+}
+
+// ── RECENTLY DOWNLOADED (*arr history) ─────────────────────
+export function DownloadsPanel() {
+  const { downloads } = useData();
+  if (downloads.length === 0) return null;
+  return (
+    <PanelShell title="Recently Downloaded" icon="download_done" accent="var(--originator-third-party)" count={`${downloads.length}`}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {downloads.map((d, i) => (
+          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+            <Icon name={d.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
+            <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</span>
+            <Pill tone={d.event === "imported" ? "originator-own" : "on-surface-variant"}>{d.event}</Pill>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", minWidth: 52, textAlign: "right" }}>{timeAgo(d.when)}</span>
           </div>
         ))}
       </div>

@@ -88,6 +88,29 @@ export async function isConfigured(serviceId: string): Promise<boolean> {
   return (await getServiceSecret(serviceId)) != null;
 }
 
+/** Per-user pinned-favorite service ids. Returns [] on no row / parse error / DB unavailable. */
+export async function getFavorites(userId: string): Promise<string[]> {
+  try {
+    await ensureDb();
+    const rows = await db.select({ favorites: schema.preferences.favorites }).from(schema.preferences).where(eq(schema.preferences.userId, userId)).limit(1);
+    if (rows.length === 0 || !rows[0].favorites) return [];
+    const parsed = JSON.parse(rows[0].favorites);
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist a user's pinned favorites. Targeted upsert so `theme` (NOT NULL) is never clobbered. */
+export async function setFavorites(userId: string, ids: string[]): Promise<void> {
+  await ensureDb();
+  const favorites = JSON.stringify(ids);
+  await db
+    .insert(schema.preferences)
+    .values({ userId, favorites })
+    .onConflictDoUpdate({ target: schema.preferences.userId, set: { favorites } });
+}
+
 /** Read a deployment-wide setting. Returns null if the key has no row (not the same as ""). */
 export async function getDeploymentSetting(key: string): Promise<string | null> {
   try {

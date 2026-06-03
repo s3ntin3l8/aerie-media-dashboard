@@ -12,6 +12,7 @@ import type { DiscoverItem, MediaRequest, RequestStatus, User } from "@/lib/type
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { useData } from "@/components/portal/DataProvider";
+import { usePortal } from "@/components/portal/PortalProvider";
 import { QUALITY_PROFILES } from "@/lib/categories";
 
 const RQ_TONE: Record<string, string> = { available: "originator-own", approved: "originator-court", pending: "amber", declined: "error" };
@@ -64,7 +65,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
           <Icon name="data_usage" size={14} color={atQuota ? "var(--amber)" : REQ_C} />
           <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>Request quota</span>
           <div style={{ flex: 1, maxWidth: 130 }}>
-            <ProgressBar pct={(me.reqUsed / me.reqQuota) * 100} color={atQuota ? "var(--amber)" : REQ_C} h={5} />
+            <ProgressBar pct={me.reqQuota ? (me.reqUsed / me.reqQuota) * 100 : 0} color={atQuota ? "var(--amber)" : REQ_C} h={5} />
           </div>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: atQuota ? "var(--amber)" : "var(--on-surface-variant)", fontWeight: atQuota ? 700 : 400 }}>
             {me.reqUsed}/{me.reqQuota} used
@@ -94,7 +95,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
                 className="req-result"
                 style={{ width: "100%", display: "flex", alignItems: "center", gap: 13, padding: "9px 10px", borderRadius: 11, border: "none", background: "transparent", cursor: blocked ? "default" : "pointer", textAlign: "left", opacity: atQuota && !blocked ? 0.5 : 1 }}
               >
-                <PosterTile title={d.title} kind={d.kind} cat="request" w={42} />
+                <PosterTile title={d.title} kind={d.kind} cat="request" w={42} art={d.art} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 13.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>
@@ -139,7 +140,7 @@ function ConfirmStep({
           <Icon name="arrow_back" size={15} /> Back to results
         </button>
         <div style={{ display: "flex", gap: 15 }}>
-          <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} />
+          <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>
@@ -326,7 +327,8 @@ export function RequestModal({
   onAct: (id: string, action: "approve" | "decline") => void;
 }) {
   const { users } = useData();
-  const me = users.find((u) => u.id === "you") ?? users[0];
+  const { user } = usePortal();
+  const me = users.find((u) => u.id === user.id) ?? users[0];
   const review = mode === "review";
 
   const [q, setQ] = useState("");

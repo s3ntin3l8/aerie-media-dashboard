@@ -5,18 +5,21 @@
 import React, { useEffect, useState, useTransition } from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
-import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline } from "@/components/primitives";
-import { PanelShell } from "@/components/panels";
+import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
+import { PanelShell, StoragePanel, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { setPrometheusInstance } from "@/app/(portal)/admin/actions";
 
-function fmtBytes(b: number | null): string {
-  if (b == null) return "—";
-  const tb = b / 1_099_511_627_776;
-  if (tb >= 1) return `${tb.toFixed(1)} TB`;
-  const gb = b / 1_073_741_824;
-  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(b / 1_048_576).toFixed(0)} MB`;
+/** seconds → compact uptime ("12d 4h", "4h 12m", "12m"). */
+function fmtUptime(sec: number | null): string {
+  if (sec == null) return "—";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 function MetricCard({ title, value, unit, color, data }: { title: string; value: string; unit: string; color: string; data: number[] }) {
@@ -97,7 +100,7 @@ function useSecondsAgo(dep: unknown): string {
 
 export function Status() {
   const { role } = usePortal();
-  const { services, metrics } = useData();
+  const { services, metrics, arrHealth } = useData();
   const metricsAge = useSecondsAgo(metrics);
   const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
   const up = list.filter((s) => s.status === "up").length;
@@ -148,11 +151,18 @@ export function Status() {
                       <StatusDot status={s.status} size={7} />
                       <span style={{ fontWeight: 700, fontSize: 13, color: "var(--on-surface)" }}>{s.name}</span>
                     </div>
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", marginTop: 2 }}>{s.host}</div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", marginTop: 2 }}>
+                      {s.lastIncidentAt ? `incident ${timeAgo(s.lastIncidentAt)}` : s.host}
+                    </div>
                   </div>
                   <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
                     <Heartbeat beats={s.beats} h={24} barW={5} />
                   </div>
+                  {s.msHistory && s.msHistory.length > 1 && (
+                    <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }} title="response time, last 30 checks">
+                      <Sparkline data={s.msHistory} w={64} h={24} color="var(--primary)" strokeW={1.25} />
+                    </div>
+                  )}
                   <div style={{ flex: "0 0 60px", textAlign: "right" }}>
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: s.status === "down" ? "var(--error)" : s.status === "degraded" ? "var(--amber)" : "var(--on-surface)" }}>{s.status === "unknown" ? "—" : `${s.uptime.toFixed(2)}%`}</div>
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{s.status === "unknown" ? "—" : `${s.ms}ms`}</div>
@@ -161,6 +171,31 @@ export function Status() {
               ))}
             </div>
           </PanelShell>
+
+          <StoragePanel />
+
+          {role === "admin" && arrHealth.length > 0 && (
+            <PanelShell title="Service Warnings" icon="warning" accent="var(--amber)" count={`${arrHealth.length}`}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {arrHealth.map((h, i) => {
+                  const isError = h.type.toLowerCase() === "error";
+                  const c = isError ? "var(--error)" : "var(--amber)";
+                  return (
+                    <div key={`${h.svc}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                      <Icon name={isError ? "error" : "warning"} size={15} color={c} />
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", color: c, flex: "0 0 56px" }}>{h.svc}</span>
+                      <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1 }}>{h.message}</span>
+                      {h.wikiUrl && (
+                        <a href={h.wikiUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "var(--primary)", whiteSpace: "nowrap" }}>
+                          docs
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </PanelShell>
+          )}
 
           {role === "admin" && (
             <>
@@ -221,11 +256,53 @@ export function Status() {
                   <MetricCard
                     title="System load"
                     value={metrics.sysLoad != null ? metrics.sysLoad.toFixed(2) : "—"}
-                    unit="1-min avg"
+                    unit={metrics.load5 != null && metrics.load15 != null ? `${metrics.load5.toFixed(2)} · ${metrics.load15.toFixed(2)} (5m·15m)` : "1-min avg"}
                     color="var(--originator-own)"
                     data={metrics.sysLoadHistory}
                   />
+                  {metrics.swapTotalBytes != null && metrics.swapTotalBytes > 0 && (
+                    <MetricCard
+                      title="Swap"
+                      value={fmtBytes(metrics.swapUsedBytes)}
+                      unit={`of ${fmtBytes(metrics.swapTotalBytes)}`}
+                      color="var(--originator-third-party)"
+                      data={[]}
+                    />
+                  )}
+                  {metrics.uptimeSec != null && (
+                    <MetricCard
+                      title="Uptime"
+                      value={fmtUptime(metrics.uptimeSec)}
+                      unit="since boot"
+                      color="var(--primary)"
+                      data={[]}
+                    />
+                  )}
                 </div>
+              )}
+              {metrics != null && metrics.filesystems.length > 0 && (
+                <PanelShell title="Filesystems" icon="storage" accent="var(--amber)" count={`${metrics.filesystems.length}`} style={{ marginTop: 4 }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {metrics.filesystems.map((f, i) => {
+                      const pct = f.totalBytes > 0 ? (f.usedBytes / f.totalBytes) * 100 : 0;
+                      const c = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
+                      return (
+                        <div key={f.mount} style={{ padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.mount}</span>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{fmtBytes(f.usedBytes)} / {fmtBytes(f.totalBytes)}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ flex: 1 }}>
+                              <ProgressBar pct={pct} color={c} h={5} />
+                            </div>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, fontWeight: 600, color: c, minWidth: 36, textAlign: "right" }}>{Math.round(pct)}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PanelShell>
               )}
             </>
           )}

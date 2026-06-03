@@ -8,7 +8,7 @@
 // ============================================================
 import React, { useActionState, useState } from "react";
 import { Icon, Eyebrow, Heartbeat } from "@/components/primitives";
-import { BrandBadge } from "@/components/portal/Rail";
+import { BrandLockup } from "@/components/brand/Brand";
 import type { LoginState } from "@/app/login/actions";
 
 type Mode = "oidc" | "credentials" | "setup";
@@ -99,9 +99,8 @@ export function Login({
           overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative", zIndex: 2 }}>
-          <BrandBadge size={34} />
-          <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 19, letterSpacing: "0.04em", color: "var(--on-surface)" }}>AERIE</span>
+        <div style={{ position: "relative", zIndex: 2 }}>
+          <BrandLockup size={34} />
         </div>
 
         <div style={{ position: "relative", zIndex: 2 }}>

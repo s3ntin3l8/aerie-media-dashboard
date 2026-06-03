@@ -2,11 +2,12 @@
 // ============================================================
 // AERIE — Admin area (services · members · visibility)
 // ============================================================
-import React, { useState, useTransition } from "react";
+import React, { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
-import { useData, useRefresh } from "@/components/portal/DataProvider";
-import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists } from "@/app/(portal)/admin/actions";
+import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
+import { usePortal } from "@/components/portal/PortalProvider";
+import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserQuota } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
@@ -15,6 +16,7 @@ import { Toast } from "@/components/modals/Toast";
 
 function AdminServices({ onOpenService, onEdit }: { onOpenService: (s: Service) => void; onEdit: (s: Service) => void }) {
   const { services } = useData();
+  const { favorites, toggleFavorite } = usePortal();
   const cols = "1.6fr 1fr 0.7fr 1.2fr 0.5fr";
   return (
     <div className="aerie-x-scroll">
@@ -24,46 +26,84 @@ function AdminServices({ onOpenService, onEdit }: { onOpenService: (s: Service) 
             <Eyebrow key={i}>{h}</Eyebrow>
           ))}
         </div>
-        {services.map((s, i) => (
-          <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <ServiceLogo service={s} size={28} radius={7} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</div>
-                <div style={{ fontSize: 10 }}>
-                  <CatBadge cat={s.cat} size="xs" />
+        {services.map((s, i) => {
+          const pinned = favorites.includes(s.id);
+          return (
+            <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <ServiceLogo service={s} size={28} radius={7} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</div>
+                  <div style={{ fontSize: 10 }}>
+                    <CatBadge cat={s.cat} size="xs" />
+                  </div>
                 </div>
               </div>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.host}</span>
+              <span>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
+                <Icon name="lock" size={12} color="var(--originator-own)" />
+                ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
+              </span>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
+                <button onClick={() => toggleFavorite(s.id)} className="btn btn-ghost btn-sm" style={{ padding: 6, color: pinned ? "var(--amber)" : undefined }} title={pinned ? "Unpin from rail" : "Pin to rail"}>
+                  <Icon name={pinned ? "star" : "star_border"} size={15} />
+                </button>
+                <button onClick={() => onOpenService(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Open">
+                  <Icon name="open_in_full" size={15} />
+                </button>
+                <button onClick={() => onEdit(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit">
+                  <Icon name="edit" size={15} />
+                </button>
+              </div>
             </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.host}</span>
-            <span>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
-              <Icon name="lock" size={12} color="var(--originator-own)" />
-              ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
-            </span>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
-              <button onClick={() => onOpenService(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Open">
-                <Icon name="open_in_full" size={15} />
-              </button>
-              <button onClick={() => onEdit(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit">
-                <Icon name="edit" size={15} />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
+function QuotaEditor({ userId, used, quota }: { userId: string; used: number; quota: number }) {
+  const refresh = useRefresh();
+  const [val, setVal] = useState(String(quota));
+  const [pending, start] = useTransition();
+  useEffect(() => setVal(String(quota)), [quota]);
+  const save = () => {
+    const n = Math.max(0, Math.floor(Number(val) || 0));
+    if (n === quota) return;
+    start(async () => {
+      await setUserQuota(userId, n);
+      refresh();
+    });
+  };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
+      {used}/
+      <input
+        type="number"
+        min={0}
+        value={val}
+        disabled={pending}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        aria-label="Request quota"
+        style={{ width: 38, padding: "2px 4px", borderRadius: 6, border: "1px solid var(--outline-variant)", background: "var(--surface-container)", color: "var(--on-surface)", fontFamily: "var(--font-mono)", fontSize: 11, textAlign: "center" }}
+      />
+    </span>
+  );
+}
+
 function AdminMembers() {
   const { users } = useData();
+  const { user } = usePortal();
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
       {users.map((u) => (
         <div key={u.id} style={{ padding: 15, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-            <Avatar name={u.name} size={38} color={u.role === "admin" ? "var(--primary)" : "var(--originator-court)"} you={u.id === "you"} />
+            <Avatar name={u.name} size={38} color={u.role === "admin" ? "var(--primary)" : "var(--originator-court)"} you={u.id === user.id} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 14, color: "var(--on-surface)" }}>{u.name}</span>
@@ -87,11 +127,9 @@ function AdminMembers() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 11 }}>
             <Eyebrow>Request quota</Eyebrow>
             <div style={{ flex: 1 }}>
-              <ProgressBar pct={(u.reqUsed / u.reqQuota) * 100} color={u.reqUsed >= u.reqQuota ? "var(--amber)" : "var(--originator-court)"} h={5} />
+              <ProgressBar pct={u.reqQuota ? (u.reqUsed / u.reqQuota) * 100 : 0} color={u.reqUsed >= u.reqQuota ? "var(--amber)" : "var(--originator-court)"} h={5} />
             </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
-              {u.reqUsed}/{u.reqQuota}
-            </span>
+            <QuotaEditor userId={u.id} used={u.reqUsed} quota={u.reqQuota} />
           </div>
         </div>
       ))}
@@ -182,6 +220,7 @@ export function Admin() {
   const router = useRouter();
   const { groups, visibility, adminGroup } = useData();
   const refresh = useRefresh();
+  const patchData = usePatchData();
   const [tab, setTab] = useState("services");
   const [svcModal, setSvcModal] = useState<{ mode: "add" | "edit"; service?: Service } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -226,7 +265,7 @@ export function Admin() {
       icon: isIconName(form.icon) ? form.icon : "dns",
       logoSlug: form.logoSlug || null,
       host: form.host.trim(),
-      baseUrl: `https://${form.host.trim()}`,
+      baseUrl: `${form.scheme}://${form.host.trim()}`,
       embeddable: form.embeddable,
       central: form.central,
       centralLabel: form.central ? form.centralLabel || null : null,
@@ -238,8 +277,29 @@ export function Admin() {
     if (form.apiKey && form.apiKey.trim()) await setServiceSecret(id, form.apiKey.trim());
     // Visibility after the service row exists (FK); admin group is always on.
     for (const g of groups) await setVisibility(id, g.name, g.name === adminGroup ? true : Boolean(vis[g.name]));
+
+    // Optimistically update the local snapshot so the service appears immediately.
+    const optimisticService: Service = editing
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
+      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+    patchData((s) => ({
+      ...s,
+      services: editing
+        ? s.services.map((svc) => svc.id === id ? optimisticService : svc)
+        : [...s.services, optimisticService],
+    }));
+
     setSvcModal(null);
     refresh();
+    // Auto-detect version when none was manually entered and a key is available.
+    if (!form.version && (form.apiKey.trim() || editing)) {
+      const detected = await detectServiceVersion(id);
+      if (detected) {
+        refresh();
+        flash(editing ? `Saved — v${detected} detected` : `${form.name} added — v${detected} detected`);
+        return;
+      }
+    }
     flash(editing ? `Saved changes to ${form.name}` : `${form.name} added to the portal`);
   };
 
@@ -303,6 +363,20 @@ export function Admin() {
           onClose={() => setSvcModal(null)}
           onSave={onSave}
           onDelete={onDelete}
+          onDetectVersion={async (baseUrl, apiKey, name) => {
+            if (svcModal.mode === "edit" && svcModal.service && !apiKey) {
+              const v = await detectServiceVersion(svcModal.service.id);
+              if (v) refresh();
+              return v;
+            }
+            return probeServiceVersion(baseUrl, apiKey, slug(name));
+          }}
+          onTestConnection={async (baseUrl, apiKey, name) => {
+            if (svcModal.mode === "edit" && svcModal.service && !apiKey) {
+              return testStoredConnection(svcModal.service.id);
+            }
+            return probeServiceVersion(baseUrl, apiKey, slug(name));
+          }}
         />
       )}
       <Toast message={toast} />

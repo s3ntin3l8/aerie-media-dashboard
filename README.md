@@ -1,7 +1,16 @@
-# AERIE — Media Command Center
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/assets/aerie-logo-dark.svg">
+    <img alt="AERIE" src="./docs/assets/aerie-logo-light.svg" width="300">
+  </picture>
+</p>
 
-[![CI](https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-informational.svg)](./LICENSE)
+<p align="center"><em>Media Command Center — every service, one vantage point.</em></p>
+
+<p align="center">
+  <a href="https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml"><img src="https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-informational.svg" alt="License: MIT"></a>
+</p>
 
 A private media portal for self-hosted services (Plex, Jellyfin, Overseerr, the
 *arr suite, Tautulli/Jellystat, Gatus, Prometheus), exposed behind Traefik and

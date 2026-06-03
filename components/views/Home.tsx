@@ -17,19 +17,26 @@ import {
   StatusPanel,
   RecentlyAdded,
   QueuePanel,
+  UpcomingPanel,
+  LeaderboardPanel,
+  DownloadsPanel,
   Empty,
 } from "@/components/panels";
 
 // 40px aggregate health ticker
 function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
-  const { services: list, nowPlaying, plays24h } = useData();
+  const { services: list, nowPlaying, plays24h, bandwidth } = useData();
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
   const unknown = list.filter((s) => s.status === "unknown").length;
   const allGood = list.length > 0 && deg === 0 && down === 0 && unknown === 0;
   const active = nowPlaying.length;
-  const totalBitrate = nowPlaying.reduce((a, s) => a + parseFloat(s.bitrate), 0).toFixed(1);
+  // Prefer Tautulli's real aggregate bandwidth (covers WAN/transcode); fall back to summing
+  // per-session stream bitrate when Tautulli isn't reporting it.
+  const totalMbps = bandwidth && bandwidth.totalMbps > 0 ? bandwidth.totalMbps : nowPlaying.reduce((a, s) => a + parseFloat(s.bitrate), 0);
+  const totalBitrate = totalMbps.toFixed(1);
+  const wanMbps = bandwidth && bandwidth.wanMbps > 0 ? bandwidth.wanMbps : 0;
   return (
     <div
       style={{
@@ -67,7 +74,7 @@ function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginLeft: "auto" }}>
         <Icon name="graphic_eq" size={14} color="var(--primary)" />
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
-          {active} streams · {totalBitrate} Mbps
+          {active} streams · {totalBitrate} Mbps{wanMbps > 0 ? ` · ${wanMbps.toFixed(1)} WAN` : ""}
         </span>
         <div style={{ marginLeft: 6 }}>
           <Sparkline data={plays24h} w={92} h={20} color="var(--primary)" />
@@ -134,15 +141,18 @@ export function Home() {
           <CentralServices role={role} onOpen={openService} onAll={() => router.push("/status")} />
 
           <LibraryStats />
+          <UpcomingPanel />
           <div className="aerie-home-grid">
             <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
               <NowPlayingPanel role={role} onAll={() => router.push("/status")} />
               <ServiceTiles role={role} onOpen={openService} onAll={() => router.push("/services")} />
               {role === "admin" && <QueuePanel />}
+              {role === "admin" && <DownloadsPanel />}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <MyRequestsPanel role={role} onAll={() => router.push("/requests")} />
               <StatusPanel role={role} onAll={() => router.push("/status")} />
+              <LeaderboardPanel />
               <RecentlyAdded />
             </div>
           </div>

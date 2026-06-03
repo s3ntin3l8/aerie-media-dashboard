@@ -9,7 +9,7 @@ import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
 import { getSessionUser } from "@/lib/session";
 import { setDeploymentSetting } from "@/lib/integrations/registry";
-import { prometheusInstances } from "@/lib/integrations/clients";
+import { prometheusInstances, detectVersion, probeVersion } from "@/lib/integrations/clients";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -24,6 +24,15 @@ export async function setVisibility(serviceId: string, groupName: string, visibl
     .insert(schema.serviceVisibility)
     .values({ serviceId, groupName, visible })
     .onConflictDoUpdate({ target: [schema.serviceVisibility.serviceId, schema.serviceVisibility.groupName], set: { visible } });
+  revalidatePath("/admin");
+}
+
+/** Set a member's request quota (portal-side cap). */
+export async function setUserQuota(userId: string, quota: number) {
+  await requireAdmin();
+  await ensureDb();
+  const n = Math.max(0, Math.floor(Number(quota) || 0));
+  await db.update(schema.users).set({ reqQuota: n }).where(eq(schema.users.id, userId));
   revalidatePath("/admin");
 }
 
@@ -101,6 +110,39 @@ export async function deleteService(id: string) {
   await ensureDb();
   await db.delete(schema.services).where(eq(schema.services.id, id));
   revalidatePath("/admin");
+}
+
+/**
+ * Detect a service's version from its upstream API using the stored credentials.
+ * Writes the result to the DB if found. Returns the detected version or null.
+ */
+export async function detectServiceVersion(serviceId: string): Promise<string | null> {
+  await requireAdmin();
+  const version = await detectVersion(serviceId);
+  if (version) {
+    await ensureDb();
+    await db.update(schema.services).set({ version }).where(eq(schema.services.id, serviceId));
+    revalidatePath("/admin");
+  }
+  return version;
+}
+
+/**
+ * Transient version probe using explicit credentials — no DB reads or writes.
+ * Used by the add-service modal before the service is saved.
+ */
+export async function probeServiceVersion(baseUrl: string, apiKey: string, idHint: string): Promise<string | null> {
+  await requireAdmin();
+  return probeVersion(baseUrl, apiKey, idHint);
+}
+
+/**
+ * Test the stored connection for a service without modifying any data.
+ * Returns the detected version string on success, null on failure.
+ */
+export async function testStoredConnection(serviceId: string): Promise<string | null> {
+  await requireAdmin();
+  return detectVersion(serviceId);
 }
 
 /**

@@ -18,6 +18,7 @@ const POLL_IDLE_MS = 12_000;
 
 const DataCtx = createContext<Snapshot | null>(null);
 const RefreshCtx = createContext<() => void>(() => {});
+const PatchCtx = createContext<(patch: (s: Snapshot) => Snapshot) => void>(() => {});
 /** Epoch-ms timestamp of the most-recent successful snapshot fetch. */
 const FetchedAtCtx = createContext<number>(Date.now());
 
@@ -39,6 +40,11 @@ export function useRefresh(): () => void {
   return useContext(RefreshCtx);
 }
 
+/** Optimistically update the local snapshot without a network round-trip. */
+export function usePatchData(): (patch: (s: Snapshot) => Snapshot) => void {
+  return useContext(PatchCtx);
+}
+
 export function DataProvider({ initial, children }: { initial: Snapshot; children: React.ReactNode }) {
   const [data, setData] = useState<Snapshot>(initial);
   const [fetchedAt, setFetchedAt] = useState<number>(() => Date.now());
@@ -48,6 +54,16 @@ export function DataProvider({ initial, children }: { initial: Snapshot; childre
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // fetchRef breaks the scheduleNext ↔ fetchSnapshot circular dependency
   const fetchRef = useRef<() => Promise<void>>(async () => {});
+
+  // Keep dataRef in sync with state so timer callbacks always see the latest snapshot.
+  // useLayoutEffect fires synchronously before any timer callback can read stale data.
+  useLayoutEffect(() => {
+    dataRef.current = data;
+  });
+
+  const patchData = useCallback((patch: (s: Snapshot) => Snapshot) => {
+    setData((prev) => patch(prev));
+  }, []);
 
   const scheduleNext = useCallback((snapshot: Snapshot) => {
     if (timerRef.current != null) clearTimeout(timerRef.current);
@@ -66,7 +82,6 @@ export function DataProvider({ initial, children }: { initial: Snapshot; childre
         next.requests.length === 0 && dataRef.current.requests.length > 0
           ? { ...next, requests: dataRef.current.requests }
           : next;
-      dataRef.current = merged;
       setData(merged);
       setFetchedAt(Date.now());
       scheduleNext(merged);
@@ -100,7 +115,9 @@ export function DataProvider({ initial, children }: { initial: Snapshot; childre
   return (
     <FetchedAtCtx.Provider value={fetchedAt}>
       <RefreshCtx.Provider value={fetchSnapshot}>
-        <DataCtx.Provider value={data}>{children}</DataCtx.Provider>
+        <PatchCtx.Provider value={patchData}>
+          <DataCtx.Provider value={data}>{children}</DataCtx.Provider>
+        </PatchCtx.Provider>
       </RefreshCtx.Provider>
     </FetchedAtCtx.Provider>
   );

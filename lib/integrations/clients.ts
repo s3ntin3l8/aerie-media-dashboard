@@ -8,12 +8,26 @@ import "server-only";
 import { fetchJson, IntegrationError } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus } from "@/lib/types";
+import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
   if (!c || !c.apiKey) throw new IntegrationError(serviceId, "not configured (no API key)");
   return { baseUrl: c.baseUrl.replace(/\/$/, ""), apiKey: c.apiKey };
+}
+
+// Generic module-scope TTL cache for slow-changing upstream reads. getSnapshot()
+// polls every 3–12s, but disk space / calendars / leaderboards / issues change on
+// the order of minutes-to-hours — caching avoids hammering self-hosted upstreams.
+// Only successful results are cached (fn throws before we store), so a transient
+// failure (turned into null by the facade's safe()) retries on the next poll.
+const ttlCache = new Map<string, { at: number; value: unknown }>();
+async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = ttlCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
+  const value = await fn();
+  ttlCache.set(key, { at: Date.now(), value });
+  return value;
 }
 
 // ── Gatus — per-service health + heartbeat ─────────────────
@@ -25,6 +39,10 @@ export interface ServiceHealth {
   ms: number;
   uptime: number; // %
   beats: number[]; // 1/0.5/0
+  /** ISO timestamp of the most recent failed result in the window, if any */
+  lastIncidentAt?: string;
+  /** last ≤30 response times in ms, for a latency trend sparkline */
+  msHistory: number[];
 }
 
 interface GatusResult {
@@ -52,11 +70,17 @@ export async function gatusHealth(): Promise<ServiceHealth[]> {
     const results = ep.results ?? [];
     const last = results[results.length - 1];
     const beats = results.slice(-30).map((r) => (r.success ? 1 : 0));
+    const msHistory = results.slice(-30).map((r) => Math.round(r.duration / 1e6));
     const okCount = results.filter((r) => r.success).length;
     const uptime = results.length ? (okCount / results.length) * 100 : 100;
     const ms = last ? Math.round(last.duration / 1e6) : 0;
     const status: ServiceStatus = !last ? "up" : last.success ? "up" : "down";
-    return { key: ep.name.toLowerCase(), name: ep.name, group: ep.group, status, ms, uptime, beats };
+    // Most recent failure in the window → "last incident" age. Undefined when all-clear.
+    let lastIncidentAt: string | undefined;
+    for (let i = results.length - 1; i >= 0; i--) {
+      if (!results[i].success) { lastIncidentAt = results[i].timestamp; break; }
+    }
+    return { key: ep.name.toLowerCase(), name: ep.name, group: ep.group, status, ms, uptime, beats, msHistory, lastIncidentAt };
   });
 }
 
@@ -83,35 +107,50 @@ interface TautulliSession {
   grandparent_thumb?: string;
 }
 
-export async function tautulliNowPlaying(): Promise<NowPlaying[]> {
+function mapTautulliSession(s: TautulliSession): NowPlaying {
+  const kind: MediaKind = s.media_type === "episode" ? "series" : s.media_type === "track" ? "track" : "movie";
+  const thumb = kind === "series" ? s.grandparent_thumb || s.thumb : s.thumb;
+  return {
+    id: `tt-${s.session_key}`,
+    title: kind === "series" ? s.grandparent_title || s.full_title : s.title || s.full_title,
+    kind,
+    year: s.year ? Number(s.year) : undefined,
+    ep: kind === "series" ? s.title : undefined,
+    user: s.user,
+    src: "plex",
+    device: s.player,
+    res: s.video_full_resolution || "—",
+    play: s.transcode_decision === "transcode" ? "transcode" : "direct",
+    bitrate: s.stream_bitrate ? (Number(s.stream_bitrate) / 1000).toFixed(1) : "0",
+    codec: s.video_codec?.toUpperCase() || "—",
+    pos: s.progress_percent ? Number(s.progress_percent) / 100 : 0,
+    dur: s.duration ? Math.round(Number(s.duration) / 60000) : 0,
+    paused: s.state === "paused",
+    art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
+  };
+}
+
+export interface TautulliActivity {
+  sessions: NowPlaying[];
+  /** aggregate stream bandwidth across all sessions (kbps) */
+  totalKbps: number;
+  /** WAN-only portion of that bandwidth (kbps) */
+  wanKbps: number;
+}
+
+/** Now-playing sessions + aggregate bandwidth from a single `get_activity` call. */
+export async function tautulliActivity(): Promise<TautulliActivity> {
   const { baseUrl, apiKey } = await creds("tautulli");
-  const data = await fetchJson<{ response: { data: { sessions: TautulliSession[] } } }>(
+  const data = await fetchJson<{ response: { data: { sessions: TautulliSession[]; total_bandwidth?: number | string; wan_bandwidth?: number | string } } }>(
     `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_activity`,
     { service: "tautulli" },
   );
-  const sessions = data.response?.data?.sessions ?? [];
-  return sessions.map((s) => {
-    const kind: MediaKind = s.media_type === "episode" ? "series" : s.media_type === "track" ? "track" : "movie";
-    const thumb = kind === "series" ? s.grandparent_thumb || s.thumb : s.thumb;
-    return {
-      id: `tt-${s.session_key}`,
-      title: kind === "series" ? s.grandparent_title || s.full_title : s.title || s.full_title,
-      kind,
-      year: s.year ? Number(s.year) : undefined,
-      ep: kind === "series" ? s.title : undefined,
-      user: s.user,
-      src: "plex",
-      device: s.player,
-      res: s.video_full_resolution || "—",
-      play: s.transcode_decision === "transcode" ? "transcode" : "direct",
-      bitrate: s.stream_bitrate ? (Number(s.stream_bitrate) / 1000).toFixed(1) : "0",
-      codec: s.video_codec?.toUpperCase() || "—",
-      pos: s.progress_percent ? Number(s.progress_percent) / 100 : 0,
-      dur: s.duration ? Math.round(Number(s.duration) / 60000) : 0,
-      paused: s.state === "paused",
-      art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
-    };
-  });
+  const d = data.response?.data;
+  return {
+    sessions: (d?.sessions ?? []).map(mapTautulliSession),
+    totalKbps: n(d?.total_bandwidth),
+    wanKbps: n(d?.wan_bandwidth),
+  };
 }
 
 // ── Tautulli — library counts ──────────────────────────────
@@ -127,28 +166,59 @@ const n = (v: string | number | undefined) => (v == null ? 0 : Number(v));
 const fmt = (v: number) => v.toLocaleString("en-US");
 
 export async function tautulliLibraries(): Promise<LibraryStat[]> {
-  const { baseUrl, apiKey } = await creds("tautulli");
-  const data = await fetchJson<{ response: { data: TautulliLibrary[] } }>(`${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_libraries`, { service: "tautulli" });
-  const libs = data.response?.data ?? [];
-  const out: LibraryStat[] = [];
-  const movie = libs.find((l) => l.section_type === "movie");
-  const show = libs.find((l) => l.section_type === "show");
-  const artist = libs.find((l) => l.section_type === "artist");
-  if (movie) out.push({ id: "movies", label: "Movies", count: fmt(n(movie.count)), icon: "movie", delta: `${fmt(n(movie.count))} titles` });
-  if (show) out.push({ id: "shows", label: "TV Shows", count: fmt(n(show.count)), icon: "live_tv", delta: `${fmt(n(show.child_count))} episodes` });
-  if (artist) out.push({ id: "music", label: "Music", count: fmt(n(artist.child_count)), icon: "library_music", delta: `${fmt(n(artist.parent_count))} albums` });
-  return out;
+  // Library counts change rarely → cache to avoid a fetch on every 3–12s poll.
+  return cached("tautulli:libraries", 10 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("tautulli");
+    const data = await fetchJson<{ response: { data: TautulliLibrary[] } }>(`${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_libraries`, { service: "tautulli" });
+    const libs = data.response?.data ?? [];
+    const out: LibraryStat[] = [];
+    const movie = libs.find((l) => l.section_type === "movie");
+    const show = libs.find((l) => l.section_type === "show");
+    const artist = libs.find((l) => l.section_type === "artist");
+    if (movie) out.push({ id: "movies", label: "Movies", count: fmt(n(movie.count)), icon: "movie", delta: `${fmt(n(movie.count))} titles` });
+    if (show) out.push({ id: "shows", label: "TV Shows", count: fmt(n(show.count)), icon: "live_tv", delta: `${fmt(n(show.child_count))} episodes` });
+    if (artist) out.push({ id: "music", label: "Music", count: fmt(n(artist.child_count)), icon: "library_music", delta: `${fmt(n(artist.parent_count))} albums` });
+    return out;
+  });
 }
 
-/** Total play count in the last 24h (Tautulli history `recordsFiltered`). */
-export async function tautulliPlaysToday(): Promise<number> {
-  const { baseUrl, apiKey } = await creds("tautulli");
-  const after = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const data = await fetchJson<{ response: { data: { recordsFiltered?: number } } }>(
-    `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_history&after=${after}&length=0`,
-    { service: "tautulli" },
-  );
-  return data.response?.data?.recordsFiltered ?? 0;
+export interface TautulliPlays {
+  /** total plays in the last 24h (Tautulli history `recordsFiltered`) */
+  total: number;
+  /** 24 hourly buckets (oldest→newest, ending at the current hour) for a rolling sparkline */
+  hourly: number[];
+}
+
+/**
+ * Plays in the rolling last 24h — a single `get_history` fetch serves both the
+ * total count and an hourly-bucketed sparkline. `after` is a date (so it covers
+ * a little over 24h); we bucket precisely from each record's start timestamp.
+ */
+export async function tautulliPlays24h(): Promise<TautulliPlays> {
+  // Cached: this pulls up to 1000 history rows, and an hourly-bucketed 24h
+  // histogram doesn't change between 3–12s polls. 60s keeps it near-live without
+  // re-fetching the full history every poll (now-playing stays live via tautulliActivity).
+  return cached("tautulli:plays24h", 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("tautulli");
+    const sinceMs = Date.now() - 24 * 3600 * 1000;
+    const afterDate = new Date(sinceMs).toISOString().slice(0, 10);
+    const data = await fetchJson<{ response: { data: { recordsFiltered?: number; data?: { date?: number; started?: number }[] } } }>(
+      `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_history&after=${afterDate}&length=1000`,
+      { service: "tautulli" },
+    );
+    const d = data.response?.data;
+    const records = d?.data ?? [];
+    const hourly = new Array<number>(24).fill(0);
+    const sinceSec = Math.floor(sinceMs / 1000);
+    const nowSec = Math.floor(Date.now() / 1000);
+    for (const r of records) {
+      const t = r.started ?? r.date;
+      if (t == null || t < sinceSec || t > nowSec) continue;
+      const hoursAgo = Math.min(23, Math.floor((nowSec - t) / 3600));
+      hourly[23 - hoursAgo] += 1;
+    }
+    return { total: d?.recordsFiltered ?? records.length, hourly };
+  });
 }
 
 // ── Tautulli — recently added ──────────────────────────────
@@ -162,27 +232,74 @@ interface TautulliRecent {
 }
 
 export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
-  const { baseUrl, apiKey } = await creds("tautulli");
-  const data = await fetchJson<{ response: { data: { recently_added: TautulliRecent[] } } }>(
-    `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_recently_added&count=${count}`,
-    { service: "tautulli" },
-  );
-  const items = data.response?.data?.recently_added ?? [];
-  return items.map((it, i) => {
-    const kind: MediaKind = it.media_type === "movie" ? "movie" : it.media_type === "track" || it.media_type === "album" ? "track" : "series";
-    const thumb = it.grandparent_thumb || it.parent_thumb || it.thumb;
-    return {
-      id: `ra-${i}`,
-      title: it.title,
-      kind,
-      year: it.year ? Number(it.year) : 0,
-      cat: "stream" as const,
-      art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
-    };
+  // Recently-added changes only when new media lands → short cache, not every poll.
+  return cached(`tautulli:recent:${count}`, 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("tautulli");
+    const data = await fetchJson<{ response: { data: { recently_added: TautulliRecent[] } } }>(
+      `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_recently_added&count=${count}`,
+      { service: "tautulli" },
+    );
+    const items = data.response?.data?.recently_added ?? [];
+    return items.map((it, i) => {
+      const kind: MediaKind = it.media_type === "movie" ? "movie" : it.media_type === "track" || it.media_type === "album" ? "track" : "series";
+      const thumb = it.grandparent_thumb || it.parent_thumb || it.thumb;
+      return {
+        id: `ra-${i}`,
+        title: it.title,
+        kind,
+        year: it.year ? Number(it.year) : 0,
+        cat: "stream" as const,
+        art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
+      };
+    });
+  });
+}
+
+// ── Tautulli — weekly leaderboard (cached) ─────────────────
+interface TautulliHomeStatRow {
+  title?: string;
+  friendly_name?: string;
+  user?: string;
+  total_plays?: number;
+  thumb?: string;
+  grandparent_thumb?: string;
+}
+interface TautulliHomeStat {
+  stat_id: string;
+  rows?: TautulliHomeStatRow[];
+}
+
+export async function tautulliHomeStats(): Promise<TopStats> {
+  return cached("tautulli:homestats", 10 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("tautulli");
+    const data = await fetchJson<{ response: { data: TautulliHomeStat[] } }>(
+      `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_home_stats&time_range=7&stats_count=5`,
+      { service: "tautulli" },
+    );
+    const stats = data.response?.data ?? [];
+    const rowsOf = (id: string) => stats.find((s) => s.stat_id === id)?.rows ?? [];
+    const users = rowsOf("top_users")
+      .map((r) => ({ name: r.friendly_name || r.user || "Unknown", plays: n(r.total_plays) }))
+      .slice(0, 5);
+    const media = [...rowsOf("top_movies"), ...rowsOf("top_tv")]
+      .map((r) => {
+        const thumb = r.grandparent_thumb || r.thumb;
+        return { title: r.title || "Untitled", plays: n(r.total_plays), art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined };
+      })
+      .sort((a, b) => b.plays - a.plays)
+      .slice(0, 5);
+    return { users, media };
   });
 }
 
 // ── Jellyfin — now-playing sessions ────────────────────────
+interface JellyfinMediaStream {
+  Type: string; // "Video" | "Audio" | "Subtitle"
+  Codec?: string;
+  Height?: number;
+  Width?: number;
+  BitRate?: number; // bits/s
+}
 interface JellyfinSession {
   Id: string;
   UserId: string;
@@ -196,8 +313,21 @@ interface JellyfinSession {
     SeriesName?: string;
     SeriesId?: string;
     RunTimeTicks?: number;
+    Height?: number;
+    MediaStreams?: JellyfinMediaStream[];
   };
-  PlayState?: { IsPaused?: boolean; PositionTicks?: number };
+  PlayState?: { IsPaused?: boolean; PositionTicks?: number; PlayMethod?: string };
+  TranscodingInfo?: { Bitrate?: number; VideoCodec?: string };
+}
+
+/** Map a pixel height to a friendly resolution label. */
+function heightToRes(h: number | undefined): string {
+  if (!h) return "—";
+  if (h >= 2160) return "4K";
+  if (h >= 1440) return "1440p";
+  if (h >= 1080) return "1080p";
+  if (h >= 720) return "720p";
+  return `${h}p`;
 }
 
 export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
@@ -213,25 +343,77 @@ export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
       const kind: MediaKind = item.Type === "Episode" ? "series" : item.Type === "Audio" ? "track" : "movie";
       const durMin = item.RunTimeTicks ? Math.round(item.RunTimeTicks / 600_000_000) : 0;
       const pos = item.RunTimeTicks && s.PlayState?.PositionTicks ? s.PlayState.PositionTicks / item.RunTimeTicks : 0;
+      const video = item.MediaStreams?.find((m) => m.Type === "Video");
+      const transcoding = s.PlayState?.PlayMethod === "Transcode";
+      const bps = transcoding ? s.TranscodingInfo?.Bitrate : video?.BitRate;
+      const codec = (transcoding ? s.TranscodingInfo?.VideoCodec : video?.Codec)?.toUpperCase();
       return {
         id: `jf-${s.Id}`,
         title: kind === "series" ? item.SeriesName || item.Name : item.Name,
         kind,
         year: item.ProductionYear,
         ep: kind === "series" ? item.Name : undefined,
-        user: s.UserId,
+        user: s.UserName || s.UserId,
         src: "jellyfin",
         device: s.DeviceName,
-        res: "—",
-        play: "direct",
-        bitrate: "0",
-        codec: "—",
+        res: heightToRes(video?.Height ?? item.Height),
+        play: transcoding ? "transcode" : "direct",
+        bitrate: bps ? (bps / 1_000_000).toFixed(1) : "0",
+        codec: codec || "—",
         pos,
         dur: durMin,
         paused: Boolean(s.PlayState?.IsPaused),
         art: item.Id ? `/api/artwork?svc=jellyfin&ref=${encodeURIComponent(kind === "series" && item.SeriesId ? item.SeriesId : item.Id)}` : undefined,
       } satisfies NowPlaying;
     });
+}
+
+// ── Jellyfin — library counts (cached) ─────────────────────
+export async function jellyfinLibraries(): Promise<LibraryStat[]> {
+  return cached("jellyfin:libraries", 10 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("jellyfin");
+    const d = await fetchJson<{ MovieCount?: number; SeriesCount?: number; EpisodeCount?: number; AlbumCount?: number; SongCount?: number }>(
+      `${baseUrl}/Items/Counts`,
+      { service: "jellyfin", headers: { Authorization: `MediaBrowser Token="${apiKey}"` } },
+    );
+    const out: LibraryStat[] = [];
+    if (d.MovieCount) out.push({ id: "movies", label: "Movies", count: fmt(d.MovieCount), icon: "movie", delta: `${fmt(d.MovieCount)} titles` });
+    if (d.SeriesCount) out.push({ id: "shows", label: "TV Shows", count: fmt(d.SeriesCount), icon: "live_tv", delta: `${fmt(d.EpisodeCount ?? 0)} episodes` });
+    if (d.AlbumCount) out.push({ id: "music", label: "Music", count: fmt(d.AlbumCount), icon: "library_music", delta: `${fmt(d.SongCount ?? 0)} tracks` });
+    return out;
+  });
+}
+
+// ── Jellyfin — recently added (cached) ─────────────────────
+interface JellyfinItem {
+  Id: string;
+  Name: string;
+  Type: string;
+  ProductionYear?: number;
+  SeriesName?: string;
+  SeriesId?: string;
+}
+
+export async function jellyfinRecentlyAdded(count = 6): Promise<RecentItem[]> {
+  return cached("jellyfin:recent", 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("jellyfin");
+    const data = await fetchJson<{ Items?: JellyfinItem[] }>(
+      `${baseUrl}/Items?SortBy=DateCreated&SortOrder=Descending&Recursive=true&Limit=${count}&IncludeItemTypes=Movie,Episode,Audio&Fields=ProductionYear`,
+      { service: "jellyfin", headers: { Authorization: `MediaBrowser Token="${apiKey}"` } },
+    );
+    return (data.Items ?? []).map((it) => {
+      const kind: MediaKind = it.Type === "Episode" ? "series" : it.Type === "Audio" ? "track" : "movie";
+      const ref = kind === "series" && it.SeriesId ? it.SeriesId : it.Id;
+      return {
+        id: `jf-${it.Id}`,
+        title: kind === "series" ? it.SeriesName || it.Name : it.Name,
+        kind,
+        year: it.ProductionYear ?? 0,
+        cat: "stream" as const,
+        art: ref ? `/api/artwork?svc=jellyfin&ref=${encodeURIComponent(ref)}` : undefined,
+      };
+    });
+  });
 }
 
 // ── Overseerr — requests ───────────────────────────────────
@@ -327,6 +509,7 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       requested: r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
       art: posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(posterPath)}` : undefined,
       requesterName: r.requestedBy?.displayName || r.requestedBy?.plexUsername || r.requestedBy?.email?.split("@")[0],
+      requesterEmail: r.requestedBy?.email,
     };
   });
 }
@@ -341,6 +524,7 @@ interface OverseerrSearchResult {
   firstAirDate?: string;
   voteAverage?: number;
   overview?: string;
+  posterPath?: string;
   mediaInfo?: { status?: number };
 }
 
@@ -372,6 +556,8 @@ export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
         // season count isn't in search results → leave undefined (picker hidden, submit = all)
         state: mediaStatusToState(r.mediaInfo?.status),
         overview: r.overview || "",
+        // posterPath is a TMDB path (e.g. "/abc.jpg"); proxy it like requests do (see overseerrRequests).
+        art: r.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(r.posterPath)}` : undefined,
       } satisfies DiscoverItem;
     });
 }
@@ -387,6 +573,64 @@ export async function overseerrCreateRequest(input: { tmdbId: number; mediaType:
 export async function overseerrReview(requestId: number, action: "approve" | "decline"): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
   await fetchJson(`${baseUrl}/api/v1/request/${requestId}/${action}`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey } });
+}
+
+// ── Overseerr — users (for portal↔Overseerr identity matching) ──
+export interface OverseerrUser {
+  id: number;
+  email?: string;
+  displayName?: string;
+  plexUsername?: string;
+}
+interface OverseerrUserApi {
+  id: number;
+  email?: string;
+  displayName?: string;
+  plexUsername?: string;
+}
+
+// Cache the user list briefly — getSnapshot polls every 12s and submitRequest may
+// also call this; a short TTL avoids hammering /api/v1/user on every poll.
+let usersCache: { at: number; users: OverseerrUser[] } | null = null;
+const USERS_TTL = 5 * 60 * 1000;
+
+export async function overseerrUsers(): Promise<OverseerrUser[]> {
+  if (usersCache && Date.now() - usersCache.at < USERS_TTL) return usersCache.users;
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const data = await fetchJson<{ results: OverseerrUserApi[] }>(`${baseUrl}/api/v1/user?take=100`, {
+    service: "overseerr",
+    headers: { "X-Api-Key": apiKey },
+  });
+  const users = (data.results ?? []).map((u) => ({ id: u.id, email: u.email, displayName: u.displayName, plexUsername: u.plexUsername }));
+  usersCache = { at: Date.now(), users };
+  return users;
+}
+
+// ── Overseerr — open issues (cached) ───────────────────────
+interface OverseerrIssueApi {
+  id: number;
+  issueType?: number;
+  status?: number;
+}
+
+export async function overseerrIssues(): Promise<{ open: number; items: IssueItem[] }> {
+  return cached("overseerr:issues", 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    const data = await fetchJson<{ pageInfo?: { results?: number }; results?: OverseerrIssueApi[] }>(
+      `${baseUrl}/api/v1/issue?take=20&filter=open&sort=added`,
+      { service: "overseerr", headers: { "X-Api-Key": apiKey } },
+    );
+    const items: IssueItem[] = (data.results ?? []).map((i) => ({ id: i.id, issueType: i.issueType ?? 0, status: i.status ?? 0 }));
+    return { open: data.pageInfo?.results ?? items.length, items };
+  });
+}
+
+/** Pure helper: find the Overseerr user id whose email matches `email` (case-insensitive). */
+export function matchOverseerrUserId(users: OverseerrUser[], email: string | undefined): number | undefined {
+  if (!email) return undefined;
+  const key = email.trim().toLowerCase();
+  if (!key) return undefined;
+  return users.find((u) => u.email?.trim().toLowerCase() === key)?.id;
 }
 
 // ── *arr (Sonarr / Radarr) — download queue ────────────────
@@ -410,6 +654,134 @@ export async function arrQueue(serviceId: "sonarr" | "radarr"): Promise<QueueIte
   });
 }
 
+// ── *arr — disk space (cached; mounts change slowly) ───────
+interface ArrDiskSpace {
+  path: string;
+  label?: string;
+  freeSpace: number;
+  totalSpace: number;
+}
+
+export async function arrDiskSpace(serviceId: "sonarr" | "radarr"): Promise<StorageMount[]> {
+  return cached(`diskspace:${serviceId}`, 10 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds(serviceId);
+    const data = await fetchJson<ArrDiskSpace[]>(`${baseUrl}/api/v3/diskspace`, {
+      service: serviceId,
+      headers: { "X-Api-Key": apiKey },
+    });
+    return (data ?? [])
+      .filter((d) => d.totalSpace > 0)
+      .map((d) => ({ path: d.path, label: d.label || d.path, freeBytes: d.freeSpace, totalBytes: d.totalSpace }));
+  });
+}
+
+// ── *arr — health warnings (cached) ────────────────────────
+interface ArrHealthRecord {
+  source?: string;
+  type?: string;
+  message?: string;
+  wikiUrl?: string;
+}
+
+export async function arrHealth(serviceId: "sonarr" | "radarr"): Promise<HealthIssue[]> {
+  return cached(`health:${serviceId}`, 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds(serviceId);
+    const data = await fetchJson<ArrHealthRecord[]>(`${baseUrl}/api/v3/health`, {
+      service: serviceId,
+      headers: { "X-Api-Key": apiKey },
+    });
+    return (data ?? []).map((h) => ({
+      svc: serviceId,
+      type: h.type || "warning",
+      message: h.message || "",
+      source: h.source,
+      wikiUrl: h.wikiUrl,
+    }));
+  });
+}
+
+// ── *arr — upcoming calendar (cached) ──────────────────────
+interface ArrCalendarRecord {
+  id: number;
+  title?: string;        // Radarr movie title
+  seriesTitle?: string;  // sometimes present on Sonarr records
+  series?: { title?: string };
+  seasonNumber?: number;
+  episodeNumber?: number;
+  airDateUtc?: string;   // Sonarr
+  inCinemas?: string;    // Radarr
+  digitalRelease?: string;
+  physicalRelease?: string;
+  images?: { coverType: string; remoteUrl?: string; url?: string }[];
+}
+
+function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefined {
+  const img = rec.images?.find((i) => i.coverType === "poster") ?? rec.images?.[0];
+  const ref = img?.remoteUrl || img?.url;
+  return ref ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(ref)}` : undefined;
+}
+
+export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<UpcomingItem[]> {
+  return cached(`calendar:${serviceId}`, 15 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds(serviceId);
+    const start = new Date().toISOString();
+    const end = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const data = await fetchJson<ArrCalendarRecord[]>(
+      `${baseUrl}/api/v3/calendar?start=${start}&end=${end}&includeSeries=true`,
+      { service: serviceId, headers: { "X-Api-Key": apiKey } },
+    );
+    const isSeries = serviceId === "sonarr";
+    const out: UpcomingItem[] = [];
+    for (const rec of data ?? []) {
+      const when = isSeries ? rec.airDateUtc : rec.digitalRelease || rec.inCinemas || rec.physicalRelease;
+      if (!when) continue;
+      const seriesTitle = rec.series?.title || rec.seriesTitle || "";
+      const ep = isSeries && rec.seasonNumber != null && rec.episodeNumber != null
+        ? `S${String(rec.seasonNumber).padStart(2, "0")}E${String(rec.episodeNumber).padStart(2, "0")}${rec.title ? ` · ${rec.title}` : ""}`
+        : undefined;
+      out.push({
+        id: `${serviceId}-${rec.id}`,
+        title: isSeries ? seriesTitle || rec.title || "Untitled" : rec.title || "Untitled",
+        kind: isSeries ? "series" : "movie",
+        when,
+        ep,
+        svc: serviceId,
+        art: arrPoster(serviceId, rec),
+      });
+    }
+    return out;
+  });
+}
+
+// ── *arr — recently grabbed/imported history (cached) ──────
+interface ArrHistoryRecord {
+  id: number;
+  eventType?: string;
+  sourceTitle?: string;
+  date?: string;
+  movie?: { title?: string };
+  series?: { title?: string };
+}
+
+export async function arrHistory(serviceId: "sonarr" | "radarr"): Promise<DownloadEvent[]> {
+  return cached(`history:${serviceId}`, 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds(serviceId);
+    const data = await fetchJson<{ records: ArrHistoryRecord[] }>(
+      `${baseUrl}/api/v3/history?pageSize=15&sortKey=date&sortDirection=descending`,
+      { service: serviceId, headers: { "X-Api-Key": apiKey } },
+    );
+    return (data.records ?? [])
+      .filter((r) => r.eventType === "grabbed" || r.eventType === "downloadFolderImported")
+      .map((r) => ({
+        id: `${serviceId}-h${r.id}`,
+        title: r.movie?.title || r.series?.title || r.sourceTitle || "Unknown",
+        svc: serviceId,
+        when: r.date || "",
+        event: r.eventType === "downloadFolderImported" ? "imported" : "grabbed",
+      }));
+  });
+}
+
 // ── Prometheus — generic instant query ─────────────────────
 export async function prometheusQuery(query: string): Promise<number | null> {
   const c = await getServiceCredentials("prometheus");
@@ -421,6 +793,18 @@ export async function prometheusQuery(query: string): Promise<number | null> {
   );
   const v = data.data?.result?.[0]?.value?.[1];
   return v != null ? Number(v) : null;
+}
+
+// ── Prometheus — instant query returning every result (with labels) ──
+export async function prometheusQueryAll(query: string): Promise<{ metric: Record<string, string>; value: number }[]> {
+  const c = await getServiceCredentials("prometheus");
+  if (!c) return [];
+  const base = c.baseUrl.replace(/\/$/, "");
+  const data = await fetchJson<{ data: { result: { metric: Record<string, string>; value: [number, string] }[] } }>(
+    `${base}/api/v1/query?query=${encodeURIComponent(query)}`,
+    { service: "prometheus", headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {} },
+  );
+  return (data.data?.result ?? []).map((r) => ({ metric: r.metric, value: Number(r.value[1]) }));
 }
 
 // ── Prometheus — range query (returns `points` floats) ─────
@@ -456,6 +840,89 @@ export async function prometheusInstances(): Promise<string[]> {
   return data.data ?? [];
 }
 
+// ── Version detection ──────────────────────────────────────
+
+type ServiceKind = "jellyfin" | "overseerr" | "arr" | "tautulli" | "prometheus";
+
+function serviceKind(id: string): ServiceKind | null {
+  const l = id.toLowerCase();
+  if (l.includes("jellyfin") || l.includes("emby")) return "jellyfin";
+  if (l.includes("overseerr") || l.includes("jellyseerr") || l.includes("seerr")) return "overseerr";
+  if (l.includes("sonarr") || l.includes("radarr") || l.includes("lidarr") ||
+      l.includes("readarr") || l.includes("prowlarr") || l.includes("whisparr") || l.includes("bazarr")) return "arr";
+  if (l.includes("tautulli")) return "tautulli";
+  if (l.includes("prometheus")) return "prometheus";
+  return null;
+}
+
+/** Strip a leading "v"/"V" so stored versions are bare (the UI prepends its own "v"). */
+function normalizeVersion(v: string | undefined | null): string | null {
+  if (!v) return null;
+  return v.trim().replace(/^v/i, "") || null;
+}
+
+async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKind): Promise<string | null> {
+  const b = base.replace(/\/$/, "");
+  if (kind === "jellyfin") {
+    const d = await fetchJson<{ Version?: string }>(`${b}/System/Info`, {
+      service: "version-detect",
+      headers: apiKey ? { Authorization: `MediaBrowser Token="${apiKey}"` } : {},
+    });
+    return normalizeVersion(d.Version);
+  }
+  if (kind === "overseerr") {
+    const d = await fetchJson<{ version?: string }>(`${b}/api/v1/status`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-Api-Key": apiKey } : {},
+    });
+    return normalizeVersion(d.version);
+  }
+  if (kind === "arr") {
+    const d = await fetchJson<{ version?: string }>(`${b}/api/v3/system/status`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-Api-Key": apiKey } : {},
+    });
+    return normalizeVersion(d.version);
+  }
+  if (kind === "tautulli") {
+    const d = await fetchJson<{ response?: { data?: { tautulli_version?: string } } }>(
+      `${b}/api/v2?apikey=${encodeURIComponent(apiKey)}&cmd=get_tautulli_info`,
+      { service: "version-detect" },
+    );
+    return normalizeVersion(d.response?.data?.tautulli_version);
+  }
+  // prometheus
+  const d = await fetchJson<{ data?: { version?: string } }>(`${b}/api/v1/status/buildinfo`, {
+    service: "version-detect",
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  });
+  return normalizeVersion(d.data?.version);
+}
+
+/** Detect version for a saved service using its stored credentials. Returns null on failure or unknown type. */
+export async function detectVersion(serviceId: string): Promise<string | null> {
+  try {
+    const kind = serviceKind(serviceId);
+    if (!kind) return null;
+    const c = await getServiceCredentials(serviceId);
+    if (!c) return null;
+    return await fetchServiceVersion(c.baseUrl, c.apiKey ?? "", kind);
+  } catch {
+    return null;
+  }
+}
+
+/** Probe a version endpoint with explicit (transient) credentials — no DB access. */
+export async function probeVersion(baseUrl: string, apiKey: string, idHint: string): Promise<string | null> {
+  try {
+    const kind = serviceKind(idHint);
+    if (!kind) return null;
+    return await fetchServiceVersion(baseUrl, apiKey, kind);
+  } catch {
+    return null;
+  }
+}
+
 // ── Prometheus — node_exporter metrics bundle ───────────────
 export interface NodeMetrics {
   instance: string | null;
@@ -473,6 +940,34 @@ export interface NodeMetrics {
   diskHistory: number[];
   sysLoad: number | null;
   sysLoadHistory: number[];
+  load5: number | null;
+  load15: number | null;
+  uptimeSec: number | null;
+  swapUsedBytes: number | null;
+  swapTotalBytes: number | null;
+  /** per-mount filesystem usage (largest first, capped) */
+  filesystems: { mount: string; usedBytes: number; totalBytes: number }[];
+}
+
+async function prometheusFilesystems(diskFilter: string): Promise<{ mount: string; usedBytes: number; totalBytes: number }[]> {
+  const [sizes, avails] = await Promise.all([
+    prometheusQueryAll(`node_filesystem_size_bytes${diskFilter}`),
+    prometheusQueryAll(`node_filesystem_avail_bytes${diskFilter}`),
+  ]);
+  const availByMount = new Map<string, number>();
+  for (const a of avails) {
+    const m = a.metric.mountpoint;
+    if (m) availByMount.set(m, a.value);
+  }
+  const seen = new Set<string>();
+  const out: { mount: string; usedBytes: number; totalBytes: number }[] = [];
+  for (const s of sizes) {
+    const m = s.metric.mountpoint;
+    if (!m || seen.has(m) || !(s.value > 0)) continue;
+    seen.add(m);
+    out.push({ mount: m, usedBytes: s.value - (availByMount.get(m) ?? 0), totalBytes: s.value });
+  }
+  return out.sort((a, b) => b.totalBytes - a.totalBytes).slice(0, 8);
 }
 
 export async function prometheusMetrics(): Promise<NodeMetrics> {
@@ -491,7 +986,7 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
     try { return await fn(); } catch { return fallback; }
   };
 
-  const [cpuHistory, memHistory, memTotal, netHistory, netInHistory, diskHistory, diskTotal, sysLoadHistory] = await Promise.all([
+  const [cpuHistory, memHistory, memTotal, netHistory, netInHistory, diskHistory, diskTotal, sysLoadHistory, load5, load15, uptimeSec, swapTotal, swapFree, filesystems] = await Promise.all([
     safe(() => prometheusRange(`100 - (avg(rate(node_cpu_seconds_total{mode="idle"${iq}}[5m])) * 100)`), Array<number>(40).fill(0)),
     safe(() => prometheusRange(`node_memory_MemTotal_bytes${isq} - node_memory_MemAvailable_bytes${isq}`), Array<number>(40).fill(0)),
     safe(() => prometheusQuery(`node_memory_MemTotal_bytes${isq}`), null),
@@ -500,10 +995,17 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
     safe(() => prometheusRange(`sum(max by(instance, device) (node_filesystem_size_bytes${diskFilter} - node_filesystem_avail_bytes${diskFilter}))`), Array<number>(40).fill(0)),
     safe(() => prometheusQuery(`sum(max by(instance, device) (node_filesystem_size_bytes${diskFilter}))`), null),
     safe(() => prometheusRange(`node_load1${isq}`), Array<number>(40).fill(0)),
+    safe(() => prometheusQuery(`node_load5${isq}`), null),
+    safe(() => prometheusQuery(`node_load15${isq}`), null),
+    safe(() => prometheusQuery(`node_time_seconds${isq} - node_boot_time_seconds${isq}`), null),
+    safe(() => prometheusQuery(`node_memory_SwapTotal_bytes${isq}`), null),
+    safe(() => prometheusQuery(`node_memory_SwapFree_bytes${isq}`), null),
+    safe(() => prometheusFilesystems(diskFilter), [] as { mount: string; usedBytes: number; totalBytes: number }[]),
   ]);
 
   const last = (h: number[]) => (h.length ? h[h.length - 1] : null);
   const finite = (v: number | null) => (v != null && isFinite(v) ? v : null);
+  const swapUsedBytes = swapTotal != null && swapFree != null ? swapTotal - swapFree : null;
 
   return {
     instance: inst,
@@ -521,5 +1023,11 @@ export async function prometheusMetrics(): Promise<NodeMetrics> {
     diskHistory,
     sysLoad: finite(last(sysLoadHistory)),
     sysLoadHistory,
+    load5: finite(load5),
+    load15: finite(load15),
+    uptimeSec: finite(uptimeSec),
+    swapUsedBytes: finite(swapUsedBytes),
+    swapTotalBytes: finite(swapTotal),
+    filesystems,
   };
 }
