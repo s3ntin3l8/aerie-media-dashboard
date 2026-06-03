@@ -647,7 +647,7 @@ export function MyRequestsPanel({ role, onAll, onAct }: { role: Role; onAll?: ()
   const mine = requests.filter((r) => r.portalUser === user.id);
   const queue = requests.filter((r) => r.status === "pending");
   const adminMode = role === "admin";
-  const items = adminMode ? queue : mine;
+  const items = (adminMode ? queue : mine).slice(0, 5);
   return (
     <PanelShell
       title={adminMode ? "Approval Queue" : "My Requests"}
