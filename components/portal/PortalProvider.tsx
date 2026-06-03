@@ -17,6 +17,8 @@ interface PortalState {
   toggleTheme: () => void;
   /** the signed-in user (real session or dev mock) */
   user: AppUser;
+  /** true when real OIDC is configured (vs. local-credentials mode) */
+  oidc: boolean;
   /** real role of the signed-in user */
   realRole: Role;
   /** effective role after admin "preview as member" toggle */
@@ -52,7 +54,7 @@ const NAV: Record<string, string> = {
   a: "/admin",
 };
 
-export function PortalProvider({ user, favorites: initialFavorites = [], children }: { user: AppUser; favorites?: string[]; children: React.ReactNode }) {
+export function PortalProvider({ user, oidc = false, favorites: initialFavorites = [], children }: { user: AppUser; oidc?: boolean; favorites?: string[]; children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const realRole = user.role;
@@ -174,7 +176,7 @@ export function PortalProvider({ user, favorites: initialFavorites = [], childre
   }, [router]);
 
   return (
-    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, realRole, role, toggleRole, favorites, toggleFavorite, lastOpened, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
+    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, oidc, realRole, role, toggleRole, favorites, toggleFavorite, lastOpened, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
       {children}
     </Ctx.Provider>
   );

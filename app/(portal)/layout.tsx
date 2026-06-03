@@ -6,6 +6,7 @@ import { CommandPalette } from "@/components/portal/CommandPalette";
 import { getSessionUser } from "@/lib/session";
 import { getSnapshot } from "@/lib/data/snapshot";
 import { getFavorites } from "@/lib/integrations/registry";
+import { authConfigured } from "@/lib/env";
 
 // Session + live data are request-scoped; never prerender the shell.
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const [user, snapshot] = await Promise.all([getSessionUser(), getSnapshot()]);
   const favorites = await getFavorites(user.id);
   return (
-    <PortalProvider user={user} favorites={favorites}>
+    <PortalProvider user={user} oidc={authConfigured} favorites={favorites}>
       <DataProvider initial={snapshot}>
         <div style={{ height: "100vh", display: "flex", overflow: "hidden" }}>
           <Rail />
