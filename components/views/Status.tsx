@@ -6,6 +6,7 @@ import React, { useEffect, useState, useTransition } from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { isVisible } from "@/lib/visibility";
+import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
 import { PanelShell, StoragePanel, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
@@ -101,9 +102,9 @@ function useSecondsAgo(dep: unknown): string {
 
 export function Status() {
   const { role } = usePortal();
-  const { services, metrics, arrHealth, visibility } = useData();
+  const { metrics, arrHealth } = useData();
   const metricsAge = useSecondsAgo(metrics);
-  const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra" && isVisible(s.id, role, visibility)));
+  const list = useVisibleServices("status");
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;

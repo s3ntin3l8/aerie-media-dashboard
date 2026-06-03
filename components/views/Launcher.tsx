@@ -2,19 +2,20 @@
 // ============================================================
 // AERIE — Service launcher + embed/launch service view
 // ============================================================
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
-import { CAT, catColor } from "@/lib/categories";
+import { CAT, catColor, CAT_ORDER } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { isVisible } from "@/lib/visibility";
+import { useVisibleServices } from "@/components/hooks/useVisibleServices";
+import { useEmbedProbe } from "@/components/hooks/useEmbedProbe";
 import { Icon, StatusDot, Heartbeat, Divider, SearchField } from "@/components/primitives";
 import { Empty } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
 
-const CAT_ORDER = ["stream", "request", "automation", "monitor", "infra"] as const;
 
 function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
   const c = catColor(s.cat);
@@ -121,10 +122,7 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
 
 export function Launcher() {
   const router = useRouter();
-  const { role } = usePortal();
-  const { services, visibility } = useData();
-  let list = services;
-  if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus" && isVisible(s.id, role, visibility));
+  const list = useVisibleServices("launcher");
   const grouped = CAT_ORDER.map((cat) => ({ cat, items: list.filter((s) => s.cat === cat) })).filter((g) => g.items.length);
 
   return (
@@ -186,20 +184,9 @@ export function ServiceViewById({ serviceId }: { serviceId: string }) {
   return <ServiceView s={s} />;
 }
 
-// How long to wait for the iframe to fire `load` before treating the embed as
-// unconfirmed. The iframe load (an authenticated browser, with the session
-// cookie) is the only reliable embed check — a cookieless server-side probe of
-// these forward-auth hosts just gets bounced to the IdP. Generous so a
-// slow-but-working service isn't falsely flagged.
-const EMBED_LOAD_TIMEOUT_MS = 12_000;
-
-const EMBED_BADGE: Record<"checking" | "ok" | "unverified", { label: string; color: string }> = {
-  checking: { label: "CHECKING…", color: "var(--on-surface-variant)" },
-  // A successful cross-origin load proves the service's frame-ancestors / XFO
-  // headers permit this portal — so the badge is honest once `loaded` is true.
-  ok: { label: "FRAME-ANCESTORS OK", color: "var(--originator-own)" },
-  unverified: { label: "EMBED UNVERIFIED", color: "var(--amber)" },
-};
+// EMBED_LOAD_TIMEOUT_MS and EMBED_BADGE constants live in
+// components/hooks/useEmbedProbe.ts (source of truth).
+// ServiceView consumes the hook; mobile MobileServiceView does the same.
 
 export function ServiceView({ s }: { s: Service }) {
   const router = useRouter();
@@ -209,28 +196,8 @@ export function ServiceView({ s }: { s: Service }) {
   const url = `${s.scheme}://${s.host}`;
   const monitored = s.status !== "unknown";
 
-  const [loaded, setLoaded] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-
-  useEffect(() => {
-    setLoaded(false);
-    setTimedOut(false);
-    if (!s.embeddable) return;
-    let alive = true;
-    const t = setTimeout(() => {
-      if (alive) setTimedOut(true);
-    }, EMBED_LOAD_TIMEOUT_MS);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
-  }, [s.id, s.embeddable]);
-
-  // A loaded iframe means it embeds, full stop. If it never loads within the
-  // timeout we can't tell *why* (frame block vs. just slow), so it stays a soft
-  // "unverified" rather than a hard accusation.
-  const embedState: "checking" | "ok" | "unverified" = loaded ? "ok" : timedOut ? "unverified" : "checking";
-  const badge = EMBED_BADGE[embedState];
+  const { embedState, badge, onLoad, onError } = useEmbedProbe(s);
+  const loaded = embedState === "ok";
   const embedFailed = embedState === "unverified";
   const who = user.name || user.email || "session";
 
@@ -305,10 +272,10 @@ export function ServiceView({ s }: { s: Service }) {
             <iframe
               src={url}
               title={`${s.name} (embedded)`}
-              onLoad={() => setLoaded(true)}
+              onLoad={onLoad}
               // onError rarely fires for cross-origin frame blocks, but when it
               // does, resolve immediately instead of waiting out the timeout.
-              onError={() => setTimedOut(true)}
+              onError={onError}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", opacity: loaded ? 1 : 0, transition: "opacity .2s" }}
             />
             {/* Iframes paint in their own compositing layer and ignore z-index from the
@@ -327,7 +294,7 @@ export function ServiceView({ s }: { s: Service }) {
   );
 }
 
-function LaunchScreen({ s }: { s: Service }) {
+export function LaunchScreen({ s }: { s: Service }) {
   return (
     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32, background: "var(--surface)" }}>
       <div style={{ width: "100%", maxWidth: 440, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>

@@ -18,6 +18,9 @@ export function catColor(cat: Category): string {
   return (CAT[cat] || CAT.infra).token;
 }
 
+/** Canonical display order for service categories. */
+export const CAT_ORDER: Category[] = ["stream", "request", "automation", "monitor", "infra"];
+
 // Request quality profiles (request modal). A future enhancement could
 // fetch real per-instance profiles from Overseerr/the *arr APIs.
 export const QUALITY_PROFILES: QualityProfile[] = [

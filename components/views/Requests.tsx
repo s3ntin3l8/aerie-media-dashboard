@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation";
 import type { DiscoverItem, MediaRequest } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
+import { useRequestReview } from "@/components/hooks/useRequestReview";
 import { Icon, Pill, Avatar, PosterTile, SearchField } from "@/components/primitives";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
 import { RequestModal } from "@/components/modals/RequestModal";
 import { Toast } from "@/components/modals/Toast";
-import { submitRequest, reviewRequest } from "@/app/(portal)/requests/actions";
+import { submitRequest } from "@/app/(portal)/requests/actions";
 
 type RequestStatusFilter = "all" | "pending" | "approved" | "available";
 
@@ -71,33 +72,26 @@ export function Requests() {
   const router = useRouter();
   const { role, user } = usePortal();
   const { requests, users, issues } = useData();
-  const refresh = useRefresh();
   const adminMode = role === "admin";
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
-  const [acted, setActed] = useState<Record<string, string>>({});
   const [reqModal, setReqModal] = useState<{ mode: "request" | "review"; request?: MediaRequest } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const { acted, onAct, applyActed } = useRequestReview();
+  const refresh = useRefresh();
   const flash = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
 
   const base = adminMode ? requests : requests.filter((r) => r.portalUser === user.id);
-  const filtered = base
-    .filter((r) => (filter === "all" ? true : r.status === filter))
-    .map((r) => (acted[r.id] ? { ...r, status: acted[r.id] as MediaRequest["status"] } : r));
+  const filtered = applyActed(base).filter((r) => (filter === "all" ? true : r.status === filter));
 
   const counts: Record<RequestStatusFilter, number> = {
     all: base.length,
     pending: base.filter((r) => r.status === "pending" && !acted[r.id]).length,
     approved: base.filter((r) => (acted[r.id] || r.status) === "approved").length,
     available: base.filter((r) => r.status === "available").length,
-  };
-  const onAct = (id: string, action: "approve" | "decline") => {
-    // optimistic UI, then persist via Overseerr (no-op in mock) and reconcile
-    setActed((a) => ({ ...a, [id]: action === "approve" ? "approved" : "declined" }));
-    void reviewRequest(id, action).then(() => refresh());
   };
 
   return (

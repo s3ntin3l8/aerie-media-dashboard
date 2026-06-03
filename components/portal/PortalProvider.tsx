@@ -8,6 +8,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { useRouter, usePathname } from "next/navigation";
 import type { AppUser, Role } from "@/lib/types";
 import { signOutAction, setFavoritesAction } from "@/app/(portal)/actions";
+import { NAV_ITEMS } from "@/lib/nav";
 
 type Theme = "dark" | "light";
 
@@ -46,13 +47,10 @@ export function usePortal(): PortalState {
   return v;
 }
 
-const NAV: Record<string, string> = {
-  h: "/",
-  s: "/services",
-  r: "/requests",
-  u: "/status",
-  a: "/admin",
-};
+// Derive g-key → href map from the canonical NAV_ITEMS config.
+const NAV: Record<string, string> = Object.fromEntries(
+  NAV_ITEMS.filter((item) => item.gKey).map((item) => [item.gKey!, item.href])
+);
 
 export function PortalProvider({ user, oidc = false, favorites: initialFavorites = [], children }: { user: AppUser; oidc?: boolean; favorites?: string[]; children: React.ReactNode }) {
   const router = useRouter();

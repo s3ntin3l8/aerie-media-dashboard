@@ -9,6 +9,7 @@ import type { Role, Service, ServiceStatus } from "@/lib/types";
 import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { isVisible } from "@/lib/visibility";
+import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import {
   Icon,
   Pill,
@@ -22,6 +23,14 @@ import {
   catColor,
 } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
+import {
+  statusColor as _statusColor,
+  statusWord as _statusWord,
+  uptimeText as _uptimeText,
+  REQ_TONE as _REQ_TONE,
+  REQ_LABEL as _REQ_LABEL,
+} from "@/lib/display";
+import { useStreamProgress } from "@/components/hooks/useStreamProgress";
 
 type CSS = React.CSSProperties;
 
@@ -229,20 +238,78 @@ const SeeAll = ({ onClick }: { onClick?: () => void }) => (
 );
 
 // ── NOW PLAYING ───────────────────────────────────────────
+
+// Inner row extracted so the hook can be called once per stream item.
+function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/types").NowPlaying; i: number; big?: boolean; role: Role; allServices: Service[]; users: import("@/lib/types").User[] }) {
+  const { cur, pct } = useStreamProgress(s);
+  const svc = allServices.find((x) => x.id === s.src);
+  const c = catColor("stream");
+  const u = users.find((x) => x.id === s.user);
+  const accent = s.src === "plex" ? "var(--originator-third-party)" : "var(--primary)";
+  return (
+    <div style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none" }}>
+      <span style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 9999, background: accent }} />
+      <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} art={s.art} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
+          <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: big ? 15 : 13.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {s.title}
+          </span>
+          {s.paused ? <Icon name="pause_circle" size={14} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={11} /> : null}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {s.ep || (s.kind === "movie" ? s.year : "")}
+          {s.ep || s.year ? " · " : ""}
+          {s.device}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 38 }}>{fmtTime(cur)}</span>
+          <div style={{ flex: 1 }}>
+            <ProgressBar pct={pct} color={accent} />
+          </div>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 38, textAlign: "right" }}>{fmtTime(s.dur * 60)}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {role === "admin" && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <Avatar name={u ? u.name : s.user} size={16} color={accent} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
+            </span>
+          )}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)", color: "var(--on-surface-variant)" }}>{s.res}</span>
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              padding: "1px 6px",
+              borderRadius: 4,
+              fontWeight: 700,
+              background: `color-mix(in srgb, ${s.play === "transcode" ? "var(--amber)" : "var(--originator-own)"} 14%, transparent)`,
+              color: s.play === "transcode" ? "var(--amber)" : "var(--originator-own)",
+            }}
+          >
+            {s.play === "transcode" ? "TRANSCODE" : "DIRECT"}
+          </span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
+            {s.bitrate} Mbps · {s.codec}
+          </span>
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+            {svc ? <ServiceLogo service={svc} size={14} radius={3} /> : <Icon name="play_circle" size={12} color={catColor("stream")} />}
+            {svc?.name ?? s.src}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolean; onAll?: () => void }) {
   const { nowPlaying, services: allServices, users } = useData();
   const { user } = usePortal();
-  const now = useTick(1000);
-  const fetchedAt = useSnapshotTime();
-  // elapsed is relative to when this snapshot was fetched — resets on every poll
-  // so the clock stays in sync with Tautulli rather than drifting from mount time.
-  const elapsed = (now - fetchedAt) / 1000;
-  let streams = nowPlaying;
   // NOTE: NowPlaying uses Plex/Jellyfin identity, not portal ids — this filter is a
   // placeholder until that identity is linked (see plan "Out of scope"). Currently
   // matches nothing for non-admins, same as before.
-  if (role !== "admin") streams = streams.filter((s) => s.user === user.id);
-  const visible = streams;
+  const visible = role !== "admin" ? nowPlaying.filter((s) => s.user === user.id) : nowPlaying;
   return (
     <PanelShell
       title={role === "admin" ? "Now Playing" : "Your Session"}
@@ -256,69 +323,9 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
         <Empty icon="play_disabled" line="Nothing playing" sub="Your active stream will appear here." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {visible.map((s, i) => {
-            const svc = allServices.find((x) => x.id === s.src);
-            const cur = Math.min(s.dur * 60, s.pos * s.dur * 60 + (s.paused ? 0 : elapsed));
-            const pct = (cur / (s.dur * 60)) * 100;
-            const c = catColor("stream");
-            const u = users.find((x) => x.id === s.user);
-            const accent = s.src === "plex" ? "var(--originator-third-party)" : "var(--primary)";
-            return (
-              <div key={s.id} style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none" }}>
-                <span style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 9999, background: accent }} />
-                <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} art={s.art} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
-                    <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: big ? 15 : 13.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {s.title}
-                    </span>
-                    {s.paused ? <Icon name="pause_circle" size={14} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={11} /> : null}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {s.ep || (s.kind === "movie" ? s.year : "")}
-                    {s.ep || s.year ? " · " : ""}
-                    {s.device}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 38 }}>{fmtTime(cur)}</span>
-                    <div style={{ flex: 1 }}>
-                      <ProgressBar pct={pct} color={accent} />
-                    </div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 38, textAlign: "right" }}>{fmtTime(s.dur * 60)}</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    {role === "admin" && (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <Avatar name={u ? u.name : s.user} size={16} color={accent} />
-                        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
-                      </span>
-                    )}
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)", color: "var(--on-surface-variant)" }}>{s.res}</span>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: 10,
-                        padding: "1px 6px",
-                        borderRadius: 4,
-                        fontWeight: 700,
-                        background: `color-mix(in srgb, ${s.play === "transcode" ? "var(--amber)" : "var(--originator-own)"} 14%, transparent)`,
-                        color: s.play === "transcode" ? "var(--amber)" : "var(--originator-own)",
-                      }}
-                    >
-                      {s.play === "transcode" ? "TRANSCODE" : "DIRECT"}
-                    </span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
-                      {s.bitrate} Mbps · {s.codec}
-                    </span>
-                    <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
-                      {svc ? <ServiceLogo service={svc} size={14} radius={3} /> : <Icon name="play_circle" size={12} color={catColor("stream")} />}
-                      {svc?.name ?? s.src}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {visible.map((s, i) => (
+            <StreamRow key={s.id} s={s} i={i} big={big} role={role} allServices={allServices} users={users} />
+          ))}
         </div>
       )}
     </PanelShell>
@@ -327,9 +334,9 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
 
 // ── SERVICE TILES (stripe) ─────────────────────────────────
 export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[] }) {
-  const data = useData();
-  let list = services || data.services;
-  if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus" && isVisible(s.id, role, data.visibility));
+  const visibleServices = useVisibleServices("launcher");
+  // Allow an explicit `services` prop override (e.g. admin panel passes a pre-filtered list).
+  const list = services ?? visibleServices;
 
   const Tile = ({ s }: { s: Service }) => {
     const c = catColor(s.cat);
@@ -395,41 +402,10 @@ export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; on
 }
 
 // ── CENTRAL SERVICES SPOTLIGHT ─────────────────────────────
-function assertNever(x: never): never {
-  throw new Error(`Unhandled ServiceStatus: ${String(x)}`);
-}
-export function statusColor(st: ServiceStatus) {
-  switch (st) {
-    case "up":
-      return "var(--originator-own)";
-    case "degraded":
-      return "var(--amber)";
-    case "down":
-      return "var(--error)";
-    case "unknown":
-      return "var(--on-surface-variant)";
-    default:
-      return assertNever(st);
-  }
-}
-export function statusWord(st: ServiceStatus) {
-  switch (st) {
-    case "up":
-      return "OPERATIONAL";
-    case "degraded":
-      return "DEGRADED";
-    case "down":
-      return "DOWN";
-    case "unknown":
-      return "NO DATA";
-    default:
-      return assertNever(st);
-  }
-}
-/** Short uptime label for a service — honest "—" when health is unknown. */
-export function uptimeText(s: Pick<Service, "status" | "uptime">) {
-  return s.status === "unknown" ? "—" : `${s.uptime.toFixed(2)}%`;
-}
+// Re-export from lib/display (source of truth) for backward compat.
+export const statusColor = _statusColor;
+export const statusWord = _statusWord;
+export const uptimeText = _uptimeText;
 
 function HeartbeatStrip({ beats, h = 24 }: { beats: number[]; h?: number }) {
   return (
@@ -614,8 +590,7 @@ export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: S
 
 // ── STATUS (heartbeat) ─────────────────────────────────────
 export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void }) {
-  const { services, visibility } = useData();
-  const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra" && isVisible(s.id, role, visibility)));
+  const list = useVisibleServices("status");
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
@@ -661,10 +636,11 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
 }
 
 // ── MY REQUESTS (compact) ──────────────────────────────────
-export const REQ_TONE: Record<string, string> = { available: "originator-own", approved: "originator-court", pending: "amber", declined: "error" };
-export const REQ_LABEL: Record<string, string> = { available: "Available", approved: "Approved", pending: "Pending", declined: "Declined" };
+// Re-export from lib/display (source of truth) for backward compat.
+export const REQ_TONE = _REQ_TONE;
+export const REQ_LABEL = _REQ_LABEL;
 
-export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => void }) {
+export function MyRequestsPanel({ role, onAll, onAct }: { role: Role; onAll?: () => void; onAct?: (id: string, action: "approve" | "decline") => void }) {
   const { users, requests } = useData();
   const { user } = usePortal();
   const me = users.find((u) => u.id === user.id) ?? users[0];
@@ -712,12 +688,12 @@ export function MyRequestsPanel({ role, onAll }: { role: Role; onAll?: () => voi
                   )}
                 </div>
               </div>
-              {adminMode ? (
+              {adminMode && onAct ? (
                 <div style={{ display: "flex", gap: 5 }}>
-                  <button className="btn btn-tonal" style={{ color: "var(--originator-own)", background: "color-mix(in srgb, var(--originator-own) 12%, transparent)" }}>
+                  <button className="btn btn-tonal" style={{ color: "var(--originator-own)", background: "color-mix(in srgb, var(--originator-own) 12%, transparent)" }} onClick={() => onAct(r.id, "approve")}>
                     Approve
                   </button>
-                  <button className="btn btn-tonal" style={{ color: "var(--error)", background: "color-mix(in srgb, var(--error) 10%, transparent)" }}>
+                  <button className="btn btn-tonal" style={{ color: "var(--error)", background: "color-mix(in srgb, var(--error) 10%, transparent)" }} onClick={() => onAct(r.id, "decline")}>
                     Decline
                   </button>
                 </div>
