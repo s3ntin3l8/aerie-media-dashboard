@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import type { Role, Service, ServiceStatus } from "@/lib/types";
 import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { isVisible } from "@/lib/visibility";
 import {
   Icon,
   Pill,
@@ -260,7 +261,7 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
 export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[] }) {
   const data = useData();
   let list = services || data.services;
-  if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus");
+  if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus" && isVisible(s.id, role, data.visibility));
 
   const Tile = ({ s }: { s: Service }) => {
     const c = catColor(s.cat);
@@ -499,8 +500,9 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
 }
 
 export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void }) {
-  const { services } = useData();
-  const list = services.filter((s) => s.central);
+  const { services, visibility } = useData();
+  const { role } = usePortal();
+  const list = services.filter((s) => s.central && isVisible(s.id, role, visibility));
   if (list.length === 0) return null;
   const down = list.filter((s) => s.status === "down");
   const deg = list.filter((s) => s.status === "degraded");
@@ -544,8 +546,8 @@ export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: S
 
 // ── STATUS (heartbeat) ─────────────────────────────────────
 export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void }) {
-  const { services } = useData();
-  const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra"));
+  const { services, visibility } = useData();
+  const list = services.filter((s) => (role === "admin" ? true : s.cat !== "infra" && isVisible(s.id, role, visibility)));
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;

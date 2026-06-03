@@ -8,6 +8,7 @@ import type { Service } from "@/lib/types";
 import { CAT, catColor } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
+import { isVisible } from "@/lib/visibility";
 import { Icon, StatusDot, Heartbeat, Divider, SearchField } from "@/components/primitives";
 import { Empty } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
@@ -121,9 +122,9 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
 export function Launcher() {
   const router = useRouter();
   const { role } = usePortal();
-  const { services } = useData();
+  const { services, visibility } = useData();
   let list = services;
-  if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus");
+  if (role !== "admin") list = list.filter((s) => s.cat !== "infra" && s.id !== "prometheus" && isVisible(s.id, role, visibility));
   const grouped = CAT_ORDER.map((cat) => ({ cat, items: list.filter((s) => s.cat === cat) })).filter((g) => g.items.length);
 
   return (
