@@ -79,6 +79,14 @@ export interface MediaRequest {
   requesterEmail?: string;
   /** Portal account id resolved from `requesterEmail`, set in the snapshot. */
   portalUser?: string;
+  /** Season numbers explicitly requested (TV only). */
+  seasons?: number[];
+  /** Overview/synopsis from Overseerr media enrichment. */
+  overview?: string;
+  /** Resolved quality profile name from the connected *arr service. */
+  qualityProfile?: string;
+  /** Overseerr's internal media record id (used for posting comments). */
+  mediaOverseerrId?: number;
 }
 
 export interface User {

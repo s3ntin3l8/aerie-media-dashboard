@@ -299,11 +299,21 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, padding: "13px 15px", borderRadius: 12, background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
         {fact("Requested", req.requested)}
-        {fact("Quality", "1080p", true)}
-        {fact(req.kind === "series" ? "Seasons" : "Type", req.kind === "series" ? "All" : "Movie")}
+        {fact("Quality", req.qualityProfile ?? "—", true)}
+        {fact(
+          req.kind === "series" ? "Seasons" : "Type",
+          req.kind === "series"
+            ? req.seasons && req.seasons.length > 0
+              ? req.seasons.map((n) => `S${n}`).join(", ")
+              : "All"
+            : "Movie",
+        )}
       </div>
-      <Field label="Note to requester" hint="optional">
-        <textarea className="input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a message they'll see with the decision…" style={{ ...fieldInput, resize: "vertical", fontFamily: "var(--font-body)", lineHeight: 1.5 }} />
+      {req.overview && (
+        <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", lineHeight: 1.5, margin: 0 }}>{req.overview}</p>
+      )}
+      <Field label="Note to requester" hint="posted as an Overseerr comment">
+        <textarea className="input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a comment visible in Overseerr…" style={{ ...fieldInput, resize: "vertical", fontFamily: "var(--font-body)", lineHeight: 1.5 }} />
       </Field>
     </div>
   );
@@ -324,7 +334,7 @@ export function RequestModal({
   initialQuery?: string;
   onClose: () => void;
   onSubmit: (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => void;
-  onAct: (id: string, action: "approve" | "decline") => void;
+  onAct: (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => void;
 }) {
   const { users } = useData();
   const { user } = usePortal();
@@ -366,7 +376,7 @@ export function RequestModal({
     setSubmitted(true);
   };
   const act = (verdict: "approved" | "declined") => {
-    if (request) onAct(request.id, verdict === "approved" ? "approve" : "decline");
+    if (request) onAct(request.id, verdict === "approved" ? "approve" : "decline", note || undefined, request.mediaOverseerrId);
     setDecision(verdict);
   };
 
