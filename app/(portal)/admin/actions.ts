@@ -9,7 +9,7 @@ import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
 import { getSessionUser } from "@/lib/session";
 import { setDeploymentSetting } from "@/lib/integrations/registry";
-import { prometheusInstances, detectVersion, probeVersion } from "@/lib/integrations/clients";
+import { prometheusInstances, beszelSystems, detectVersion, probeVersion } from "@/lib/integrations/clients";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -158,5 +158,27 @@ export async function setPrometheusInstance(instance: string | null): Promise<vo
     if (known && !known.includes(instance)) throw new Error(`Unknown Prometheus instance: ${instance}`);
   }
   await setDeploymentSetting("prometheusInstance", instance ?? "");
+  revalidatePath("/status");
+}
+
+/** Select which source fills the System Status metric cards (when both are configured). */
+export async function setMetricsSource(source: "prometheus" | "beszel"): Promise<void> {
+  await requireAdmin();
+  if (source !== "prometheus" && source !== "beszel") throw new Error(`Unknown metrics source: ${source}`);
+  await setDeploymentSetting("metricsSource", source);
+  revalidatePath("/status");
+}
+
+/**
+ * Persist which Beszel system the metric cards display (stores the system id).
+ * null → write the sentinel ("") so the picker falls back to the first system.
+ */
+export async function setBeszelSystem(systemId: string | null): Promise<void> {
+  await requireAdmin();
+  if (systemId) {
+    const known = await beszelSystems().catch(() => null);
+    if (known && !known.some((s) => s.id === systemId)) throw new Error(`Unknown Beszel system: ${systemId}`);
+  }
+  await setDeploymentSetting("beszelSystem", systemId ?? "");
   revalidatePath("/status");
 }

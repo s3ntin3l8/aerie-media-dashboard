@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 **AERIE** (package name `aerie`) is a private media command-center portal for self-hosted
-services (Plex, Jellyfin, Overseerr, the *arr suite, Tautulli/Jellystat, Gatus, Prometheus).
+services (Plex, Jellyfin, Overseerr, the *arr suite, Tautulli/Jellystat, Gatus, Prometheus, Beszel).
 It's a Next.js 16 App Router app (React 19, TypeScript) that sits behind Traefik and
 authenticates via **any OIDC provider** (or a local admin account when OIDC is off).
 
@@ -108,7 +108,15 @@ on the `Snapshot` type.
   `cache: "no-store"` fetch that throws a typed `IntegrationError`. Use it for all upstream
   HTTP so the facade can degrade per-panel.
 - `clients.ts` — one normalizing function per upstream (Gatus, Tautulli, Jellyfin, Overseerr,
-  Sonarr/Radarr, Prometheus). They **throw** on missing config/errors; the facade catches.
+  Sonarr/Radarr, Prometheus, Beszel). They **throw** on missing config/errors; the facade catches.
+  **Prometheus and Beszel are interchangeable sources for `Snapshot.metrics`** (the System Status
+  cards): `getSnapshot()` resolves an active source from the `metricsSource` deployment setting and
+  calls only that one. Beszel's hub is PocketBase, so `beszelMetrics()` authenticates as a **superuser**
+  (`/api/collections/_superusers/auth-with-password`) — the stored `apiKey` secret holds `email:password`
+  (split on the first `:`), and the JWT is cached in-process per baseUrl (re-auth on 401). `beszelMetrics`
+  reads `system_stats` live (uncached; only the token is cached) and converts GiB→bytes and the `b`
+  bytes/s network field (not the legacy `ns`/`nr` MiB/s) into the shared `NodeMetrics` shape. Deployment
+  settings `metricsSource` + `beszelSystem` (and the existing `prometheusInstance`) persist the UI choices.
 - `registry.ts` — bridges DB config ↔ runtime. `getServiceConfigs()`, `getServiceCredentials()`,
   `getServiceSecret()` (decrypts), `isConfigured()`, visibility/groups/members helpers, plus the
   local-account helpers (`getUserByEmail`, `localAdminExists`, `createLocalAdmin`). Readers

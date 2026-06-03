@@ -7,7 +7,7 @@
 // ============================================================
 import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats } from "@/lib/types";
-import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
+import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
   tautulliActivity,
@@ -28,6 +28,7 @@ import {
   tautulliPlays24h,
   tautulliHomeStats,
   prometheusMetrics,
+  beszelMetrics,
   type ServiceHealth,
   type NodeMetrics,
 } from "@/lib/integrations/clients";
@@ -61,6 +62,14 @@ export interface Snapshot {
   /** the group name that maps to the admin role (locked "always" in visibility) */
   adminGroup: string;
   metrics: NodeMetrics | null;
+  /** which source fills `metrics` (the active source; toggle when both are configured) */
+  metricsSource: "prometheus" | "beszel";
+  /** Prometheus service exists in config (drives the source toggle's visibility) */
+  prometheusConfigured: boolean;
+  /** Beszel service has a stored secret (it can't run no-auth, so gate on the secret) */
+  beszelConfigured: boolean;
+  /** persisted Beszel system id (null → the picker defaults to the first system) */
+  beszelSystemId: string | null;
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -85,16 +94,32 @@ export async function getSnapshot(): Promise<Snapshot> {
   const has = async (id: string) => (await getServiceSecret(id)) != null;
   const gatusOn = configs.some((c) => c.id === "gatus");
   const promOn = configs.some((c) => c.id === "prometheus");
-  const [ttOn, jfOn, osOn, sonarrOn, radarrOn] = await Promise.all([
+  // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
+  // secret rather than config existence — an unconfigured row never goes live.
+  const [ttOn, jfOn, osOn, sonarrOn, radarrOn, beszelOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
     has("overseerr"),
     has("sonarr"),
     has("radarr"),
+    has("beszel"),
   ]);
 
+  // Active metrics source: honour the stored preference when its source is live,
+  // otherwise fall back to whichever of Prometheus / Beszel is configured.
+  const [metricsSourceSetting, beszelSystemSetting] = await Promise.all([
+    getDeploymentSetting("metricsSource"),
+    getDeploymentSetting("beszelSystem"),
+  ]);
+  const metricsSource: "prometheus" | "beszel" =
+    metricsSourceSetting === "beszel" && beszelOn ? "beszel"
+    : promOn ? "prometheus"
+    : beszelOn ? "beszel"
+    : "prometheus";
+  const beszelSystemId = beszelSystemSetting && beszelSystemSetting.trim() ? beszelSystemSetting.trim() : null;
+
   const [
-    health, ttAct, jfNow, osReq, osUsers, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members, promResult,
+    health, ttAct, jfNow, osReq, osUsers, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members, metricsResult,
     sonarrDisk, radarrDisk, sonarrHealth, radarrHealth, osIssues, sonarrCal, radarrCal, sonarrHist, radarrHist, ttTop,
     jfLibs, jfRecent, osVersion,
   ] = await Promise.all([
@@ -109,7 +134,8 @@ export async function getSnapshot(): Promise<Snapshot> {
     ttOn ? safe(tautulliRecentlyAdded) : Promise.resolve(null),
     ttOn ? safe(tautulliPlays24h) : Promise.resolve(null),
     getMembers(),
-    promOn ? safe(prometheusMetrics) : Promise.resolve(null),
+    // Only the active source makes a live call — Beszel implies beszelOn (see resolution above).
+    metricsSource === "beszel" ? safe(beszelMetrics) : promOn ? safe(prometheusMetrics) : Promise.resolve(null),
     // Tier 1/2 enrichments (cached upstream-side; safe to fetch every poll)
     sonarrOn ? safe(() => arrDiskSpace("sonarr")) : Promise.resolve(null),
     radarrOn ? safe(() => arrDiskSpace("radarr")) : Promise.resolve(null),
@@ -232,6 +258,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   return {
     services, nowPlaying, requests, users, library, recent, queue, plays24h, bandwidth,
     storage, issues, arrHealth: arrHealthIssues, upcoming, downloads, topStats,
-    groups, visibility, adminGroup: env.adminGroup, metrics: promResult ?? null,
+    groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
+    metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
   };
 }

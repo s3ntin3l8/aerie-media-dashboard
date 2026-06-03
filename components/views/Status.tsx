@@ -11,7 +11,20 @@ import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } fro
 import { PanelShell, StoragePanel, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile } from "@/components/views/shared";
-import { setPrometheusInstance } from "@/app/(portal)/admin/actions";
+import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
+
+/** Shared style for the metrics-section pickers (node instance / Beszel system). */
+const PICKER_SELECT_STYLE: React.CSSProperties = {
+  marginLeft: "auto",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+  padding: "3px 8px",
+  borderRadius: 6,
+  border: "1px solid var(--outline-variant)",
+  background: "var(--surface-container)",
+  color: "var(--on-surface)",
+  cursor: "pointer",
+};
 
 /** seconds → compact uptime ("12d 4h", "4h 12m", "12m"). */
 function fmtUptime(sec: number | null): string {
@@ -64,26 +77,88 @@ function InstanceSelect({ current }: { current: string | null }) {
   }
 
   return (
-    <select
-      value={value}
-      onChange={handleChange}
-      disabled={pending}
-      style={{
-        marginLeft: "auto",
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-        padding: "3px 8px",
-        borderRadius: 6,
-        border: "1px solid var(--outline-variant)",
-        background: "var(--surface-container)",
-        color: "var(--on-surface)",
-        cursor: "pointer",
-        opacity: pending ? 0.5 : 1,
-      }}
-    >
+    <select value={value} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
       <option value="">All nodes</option>
       {instances.map((inst) => (
         <option key={inst} value={inst}>{inst}</option>
+      ))}
+    </select>
+  );
+}
+
+/** Segmented Prometheus ⇄ Beszel toggle, shown only when both sources are configured. */
+function SourceToggle({ current }: { current: "prometheus" | "beszel" }) {
+  const refresh = useRefresh();
+  const [pending, startTransition] = useTransition();
+  const pick = (src: "prometheus" | "beszel") => {
+    if (src === current || pending) return;
+    startTransition(async () => {
+      await setMetricsSource(src);
+      refresh();
+    });
+  };
+  const opts: { id: "prometheus" | "beszel"; label: string }[] = [
+    { id: "prometheus", label: "Prometheus" },
+    { id: "beszel", label: "Beszel" },
+  ];
+  return (
+    <div style={{ display: "inline-flex", borderRadius: 6, border: "1px solid var(--outline-variant)", overflow: "hidden", opacity: pending ? 0.5 : 1 }}>
+      {opts.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          onClick={() => pick(o.id)}
+          disabled={pending}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            padding: "3px 9px",
+            border: "none",
+            cursor: o.id === current ? "default" : "pointer",
+            background: o.id === current ? "var(--primary)" : "var(--surface-container)",
+            color: o.id === current ? "var(--on-primary)" : "var(--on-surface-variant)",
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Beszel system picker — option value = system id, label = system name. */
+function BeszelSystemSelect({ current }: { current: string | null }) {
+  const refresh = useRefresh();
+  const [systems, setSystems] = useState<{ id: string; name: string; status: string }[]>([]);
+  const [value, setValue] = useState<string>(current ?? "");
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => { setValue(current ?? ""); }, [current]);
+
+  useEffect(() => {
+    fetch("/api/beszel/systems", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { id: string; name: string; status: string }[]) => setSystems(d))
+      .catch(() => {});
+  }, []);
+
+  if (systems.length === 0) return null;
+  // Reflect the effective selection: the persisted id, else the first system.
+  const effective = value || systems[0]?.id || "";
+
+  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const next = e.target.value;
+    setValue(next);
+    startTransition(async () => {
+      await setBeszelSystem(next || null);
+      refresh();
+    });
+  }
+
+  return (
+    <select value={effective} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
+      {systems.map((s) => (
+        <option key={s.id} value={s.id}>{s.name}</option>
       ))}
     </select>
   );
@@ -102,8 +177,19 @@ function useSecondsAgo(dep: unknown): string {
 
 export function Status() {
   const { role } = usePortal();
-  const { metrics, arrHealth } = useData();
+  const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured, beszelSystemId } = useData();
   const metricsAge = useSecondsAgo(metrics);
+  const bothConfigured = prometheusConfigured && beszelConfigured;
+  const sourceMeta = metricsSource === "beszel"
+    ? { icon: "dns", title: "Beszel Metrics" }
+    : { icon: "query_stats", title: "Prometheus Metrics" };
+  const emptyMetricsMsg = metricsSource === "beszel"
+    ? (beszelConfigured
+        ? "Beszel unreachable or no system data — check the credentials and that a system is reporting."
+        : "Beszel not configured — add the service in Admin → Services with the API key set to email:password.")
+    : (prometheusConfigured
+        ? "Prometheus unreachable — check the service baseUrl in Admin → Services."
+        : "Prometheus not configured — add the service and set a baseUrl in Admin → Services.");
   const list = useVisibleServices("status");
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
@@ -202,21 +288,24 @@ export function Status() {
           {role === "admin" && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                <Icon name="query_stats" size={16} color="var(--primary)" />
-                <h2 style={{ fontFamily: "var(--font-headline)", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--on-surface)" }}>Prometheus Metrics</h2>
+                <Icon name={sourceMeta.icon} size={16} color="var(--primary)" />
+                <h2 style={{ fontFamily: "var(--font-headline)", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--on-surface)" }}>{sourceMeta.title}</h2>
                 <Pill tone="primary" style={{ marginLeft: 4 }}>
                   Admin
                 </Pill>
+                {bothConfigured && <SourceToggle current={metricsSource} />}
                 {metrics != null && (
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: metricsAge === "live" ? "var(--originator-own)" : "var(--on-surface-variant)", marginLeft: 2 }}>
                     {metricsAge}
                   </span>
                 )}
-                {metrics != null && <InstanceSelect current={metrics.instance} />}
+                {metrics != null && (metricsSource === "beszel"
+                  ? <BeszelSystemSelect current={beszelSystemId} />
+                  : <InstanceSelect current={metrics.instance} />)}
               </div>
               {metrics == null ? (
                 <div style={{ padding: "18px 20px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", color: "var(--on-surface-variant)", fontSize: 13 }}>
-                  Prometheus not configured — add the service and set a baseUrl in <strong>Admin → Services</strong>.
+                  {emptyMetricsMsg}
                 </div>
               ) : (
                 <div className="aerie-metrics-grid">

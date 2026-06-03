@@ -132,6 +132,23 @@ services:
     # Optional — only needed if Prometheus is behind bearer auth.
     apiKey: ${PROMETHEUS_API_KEY}
 
+  - id: beszel
+    name: Beszel
+    cat: monitor
+    icon: dns
+    host: beszel.aerie.tv
+    embeddable: true
+    note: "Metrics · admin"
+    # Beszel is a second, admin-selectable source for the System Status metric
+    # cards (toggle Prometheus ⇄ Beszel in the header). Its hub is PocketBase,
+    # which needs a token, so unlike Prometheus it stays empty without auth.
+    #
+    # IMPORTANT: auth is PocketBase email + password packed as "email:password"
+    # (split on the first ":"). Use a Beszel SUPERUSER so every system is
+    # readable without per-system sharing (matches the Homepage widget):
+    #   docker exec beszel /beszel superuser upsert you@example.com 'your-password'
+    apiKey: ${BESZEL_CREDENTIALS}   # e.g. you@example.com:your-password
+
   # ── Infra ──────────────────────────────────────────────────
   - id: authentik
     name: Authentik
@@ -143,7 +160,9 @@ services:
 
 # ── Visibility (optional) ────────────────────────────────────
 # Which group can see which service. Omit to use AERIE's defaults
-# (admins: all; friends: all but infra/prometheus; guests: streaming).
+# (admins: all; friends: all but infra/prometheus/beszel; guests: streaming).
+# beszel, like prometheus, is a metrics-only source: admin-only, never a
+# launchable tile, but visible in the Service Health status list.
 # Groups referenced here must exist (admins/friends/guests are seeded).
 # visibility:
 #   - { serviceId: prometheus, groupName: friends, visible: false }
