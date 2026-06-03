@@ -905,11 +905,18 @@ export function LeaderboardPanel() {
 // ── RECENTLY DOWNLOADED (*arr history) ─────────────────────
 export function DownloadsPanel() {
   const { downloads } = useData();
+  const { page, totalPages, slice, setPage } = usePagination(downloads, 10);
   if (downloads.length === 0) return null;
   return (
-    <PanelShell title="Recently Downloaded" icon="download_done" accent="var(--originator-third-party)" count={`${downloads.length}`}>
+    <PanelShell
+      title="Recently Downloaded"
+      icon="download_done"
+      accent="var(--originator-third-party)"
+      count={`${downloads.length}`}
+      action={totalPages > 1 ? <PageControls page={page} totalPages={totalPages} setPage={setPage} /> : undefined}
+    >
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {downloads.map((d, i) => (
+        {slice.map((d, i) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <Icon name={d.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
             <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</span>
