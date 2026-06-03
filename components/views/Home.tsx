@@ -1,29 +1,22 @@
 "use client";
 // ============================================================
-// AERIE — Home dashboard (command layout, spotlight central)
+// AERIE — Home dashboard (modular 12-col widget grid)
+// Pick widgets, drag/resize on a snap grid, per-role saved layouts.
 // ============================================================
-import React from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Service } from "@/lib/types";
+import type { Service, Role, DashboardStore } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
 import { getGreeting } from "@/lib/greeting";
 import { useRequestReview } from "@/components/hooks/useRequestReview";
-import {
-  CentralServices,
-  LibraryStats,
-  NowPlayingPanel,
-  ServiceTiles,
-  MyRequestsPanel,
-  StatusPanel,
-  RecentlyAdded,
-  QueuePanel,
-  UpcomingPanel,
-  LeaderboardPanel,
-  DownloadsPanel,
-  Empty,
-} from "@/components/panels";
+import { Empty } from "@/components/panels";
+import { GridDashboard } from "@/components/portal/GridDashboard";
+import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
+import { compactAll, type Tile } from "@/components/portal/gridLayout";
+import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, type WidgetCtx } from "@/components/portal/widgetCatalog";
+import { setDashboardsAction } from "@/app/(portal)/actions";
 
 // 40px aggregate health ticker
 function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
@@ -87,48 +80,129 @@ function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
   );
 }
 
-function GreetingHeader({ role, userName, onOpenPalette, onRequest }: { role: string; userName: string; onOpenPalette: () => void; onRequest: () => void }) {
+function GreetingHeader({
+  role,
+  userName,
+  editing,
+  widgetCount,
+  onOpenPalette,
+  onRequest,
+  onToggleEdit,
+  onReset,
+}: {
+  role: string;
+  userName: string;
+  editing: boolean;
+  widgetCount: number;
+  onOpenPalette: () => void;
+  onRequest: () => void;
+  onToggleEdit: () => void;
+  onReset: () => void;
+}) {
   const { greet, date } = getGreeting();
   return (
     <div style={{ padding: "22px 32px 18px", borderBottom: "1px solid var(--outline-variant)", flexShrink: 0, background: "color-mix(in srgb, var(--surface-container-lowest) 40%, transparent)" }}>
       <div className="aerie-header-row">
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
-            <Eyebrow color="var(--primary)">{role === "admin" ? "Lead Operator" : "Member"} · AERIE</Eyebrow>
+            {editing ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <StatusDot status="degraded" size={7} />
+                <Eyebrow color="var(--amber)">Editing dashboard · {widgetCount} widgets</Eyebrow>
+              </span>
+            ) : (
+              <Eyebrow color="var(--primary)">{role === "admin" ? "Lead Operator" : "Member"} · AERIE</Eyebrow>
+            )}
             <span suppressHydrationWarning style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", whiteSpace: "nowrap" }}>
               {date}
             </span>
           </div>
           <h1 suppressHydrationWarning style={{ fontFamily: "var(--font-headline)", fontSize: 28, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--on-surface)", whiteSpace: "nowrap" }}>
-            {greet}, {userName}.
+            {editing ? "Arrange your dashboard" : `${greet}, ${userName}.`}
           </h1>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <SearchField asButton onClick={onOpenPalette} placeholder="Search" kbd="⌘K" width={200} />
-          <button onClick={onRequest} className="btn btn-primary btn-sm">
-            <Icon name="add" size={15} /> Request
-          </button>
+          {editing ? (
+            <>
+              <button onClick={onReset} className="btn btn-ghost btn-sm" title="Restore the default arrangement">
+                <Icon name="restart_alt" size={15} /> Reset
+              </button>
+              <button onClick={onToggleEdit} className="btn btn-primary btn-sm">
+                <Icon name="check" size={15} /> Done
+              </button>
+            </>
+          ) : (
+            <>
+              <SearchField asButton onClick={onOpenPalette} placeholder="Search" kbd="⌘K" width={200} />
+              <button onClick={onToggleEdit} className="btn btn-tonal btn-sm" title="Customize dashboard layout">
+                <Icon name="edit" size={15} /> Edit
+              </button>
+              <button onClick={onRequest} className="btn btn-primary btn-sm">
+                <Icon name="add" size={15} /> Request
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-export function Home() {
+export function Home({ initialDashboards }: { initialDashboards?: DashboardStore | null }) {
   const router = useRouter();
   const { role, setPaletteOpen, user } = usePortal();
   const { services } = useData();
   const { onAct } = useRequestReview();
   const openService = (s: Service) => router.push(`/s/${s.id}`);
 
+  const [editing, setEditing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  // Both role layouts live in one store; setLayout persists the whole store so a
+  // member's arrangement survives while an admin edits theirs (and vice-versa).
+  const [store, setStore] = useState<Record<Role, Tile[]>>(() => ({
+    admin: initialDashboards?.admin?.length ? initialDashboards.admin : defaultLayout("admin"),
+    user: initialDashboards?.user?.length ? initialDashboards.user : defaultLayout("user"),
+  }));
+  const layout = store[role] || [];
+
+  const setLayout = (next: Tile[] | ((prev: Tile[]) => Tile[])) =>
+    setStore((s) => {
+      const nl = typeof next === "function" ? next(s[role] || []) : next;
+      const nextStore = { ...s, [role]: nl };
+      void setDashboardsAction(nextStore);
+      return nextStore;
+    });
+
+  const removeWidget = (uid: string) => setLayout((l) => compactAll(l.filter((x) => x.uid !== uid)));
+  const addWidget = (type: string) => setLayout((l) => addWidgetToLayout(l, type));
+  const resetLayout = () => setLayout(defaultLayout(role));
+
+  const ctx: WidgetCtx = { role, onNavigate: (path) => router.push(path), onOpenService: openService, onAct };
+  const renderWidget = (item: Tile) => {
+    const m = WIDGET_CATALOG[item.type];
+    if (!m) return <Empty icon="error" line="Unknown widget" sub={item.type} />;
+    return m.render(ctx);
+  };
+
   return (
-    <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
-      <GreetingHeader role={role} userName={user.name} onOpenPalette={() => setPaletteOpen(true)} onRequest={() => router.push("/requests")} />
+    <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)", position: "relative" }}>
+      <GreetingHeader
+        role={role}
+        userName={user.name}
+        editing={editing}
+        widgetCount={layout.length}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onRequest={() => router.push("/requests")}
+        onToggleEdit={() => setEditing((e) => !e)}
+        onReset={resetLayout}
+      />
       <HealthTicker onOpenStatus={() => router.push("/status")} />
+
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
-        <div className="aerie-page-pad" style={{ maxWidth: 1320, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
-          {services.length === 0 && (
-            <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)", paddingBottom: 12 }}>
+        <div className="aerie-page-pad" style={{ maxWidth: 1320, margin: "0 auto", paddingBottom: editing ? 110 : undefined }}>
+          {services.length === 0 && !editing && (
+            <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)", paddingBottom: 12, marginBottom: 18 }}>
               <Empty icon="dashboard_customize" line="No services configured yet" sub="Add your services and their API keys to light up live data." />
               {role === "admin" && (
                 <div style={{ display: "flex", justifyContent: "center" }}>
@@ -139,39 +213,71 @@ export function Home() {
               )}
             </section>
           )}
-          <CentralServices role={role} onOpen={openService} onAll={() => router.push("/status")} />
 
-          <LibraryStats />
-          <UpcomingPanel />
-          <div className="aerie-home-grid">
-            <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
-              <NowPlayingPanel role={role} onAll={() => router.push("/streams")} />
-              <ServiceTiles role={role} onOpen={openService} onAll={() => router.push("/services")} />
-              {role === "admin" && <QueuePanel />}
-              {role === "admin" && <DownloadsPanel />}
+          {editing && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, padding: "10px 14px", borderRadius: 12, border: "1px dashed color-mix(in srgb, var(--primary) 40%, transparent)", background: "color-mix(in srgb, var(--primary) 6%, transparent)" }}>
+              <Icon name="drag_indicator" size={17} color="var(--primary)" />
+              <span style={{ fontSize: 12, color: "var(--on-surface)" }}>
+                Drag a card to move it · drag the bottom-right corner to resize · tap <strong>＋</strong> to add widgets.
+              </span>
+              <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+                {layout.length} widgets · {role}
+              </span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <MyRequestsPanel role={role} onAll={() => router.push("/requests")} onAct={onAct} />
-              <StatusPanel role={role} onAll={() => router.push("/status")} />
-              <LeaderboardPanel />
-              <RecentlyAdded />
-            </div>
-          </div>
+          )}
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 6, fontSize: 11, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
-            <Kbd>g</Kbd>
-            <Kbd>h</Kbd>
-            <span>dashboard</span>
-            <span>·</span>
-            <Kbd>g</Kbd>
-            <Kbd>s</Kbd>
-            <span>services</span>
-            <span>·</span>
-            <Kbd>⌘K</Kbd>
-            <span>command</span>
-          </div>
+          <GridDashboard layout={layout} onChange={setLayout} editing={editing} renderWidget={renderWidget} onRemove={removeWidget} />
+
+          {!editing && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 18, fontSize: 11, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
+              <Kbd>g</Kbd>
+              <Kbd>h</Kbd>
+              <span>dashboard</span>
+              <span>·</span>
+              <Kbd>g</Kbd>
+              <Kbd>s</Kbd>
+              <span>services</span>
+              <span>·</span>
+              <Kbd>⌘K</Kbd>
+              <span>command</span>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* + FAB — opens the widget catalog while editing */}
+      {editing && (
+        <button
+          onClick={() => setAddOpen(true)}
+          title="Add a widget"
+          style={{
+            position: "absolute",
+            right: 28,
+            bottom: 28,
+            zIndex: 120,
+            height: 52,
+            paddingLeft: 18,
+            paddingRight: 22,
+            borderRadius: 9999,
+            border: "none",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 9,
+            background: "var(--primary)",
+            color: "var(--on-primary)",
+            fontFamily: "var(--font-headline)",
+            fontWeight: 800,
+            fontSize: 14,
+            letterSpacing: "0.01em",
+            boxShadow: "0 10px 30px color-mix(in srgb, var(--primary) 35%, transparent), var(--shadow-lg)",
+          }}
+        >
+          <Icon name="add" size={22} color="var(--on-primary)" /> Add widget
+        </button>
+      )}
+
+      <AddWidgetModal open={addOpen} onClose={() => setAddOpen(false)} role={role} layout={layout} onAdd={addWidget} />
     </section>
   );
 }

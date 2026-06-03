@@ -9,7 +9,7 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { decrypt } from "@/lib/crypto";
 import { hashPassword } from "@/lib/auth/password";
-import type { Category } from "@/lib/types";
+import type { Category, DashboardStore } from "@/lib/types";
 
 export interface ServiceConfig {
   id: string;
@@ -114,6 +114,29 @@ export async function setFavorites(userId: string, ids: string[]): Promise<void>
     .insert(schema.preferences)
     .values({ userId, favorites })
     .onConflictDoUpdate({ target: schema.preferences.userId, set: { favorites } });
+}
+
+/** Per-user modular-homescreen layouts (`{ admin?, user? }`). Returns null on no row / parse error / DB unavailable. */
+export async function getDashboards(userId: string): Promise<DashboardStore | null> {
+  try {
+    await ensureDb();
+    const rows = await db.select({ dashboards: schema.preferences.dashboards }).from(schema.preferences).where(eq(schema.preferences.userId, userId)).limit(1);
+    if (rows.length === 0 || !rows[0].dashboards) return null;
+    const parsed = JSON.parse(rows[0].dashboards);
+    return parsed && typeof parsed === "object" ? (parsed as DashboardStore) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist a user's per-role layouts. Targeted upsert so `theme` (NOT NULL) is never clobbered. */
+export async function setDashboards(userId: string, store: DashboardStore): Promise<void> {
+  await ensureDb();
+  const dashboards = JSON.stringify(store);
+  await db
+    .insert(schema.preferences)
+    .values({ userId, dashboards })
+    .onConflictDoUpdate({ target: schema.preferences.userId, set: { dashboards } });
 }
 
 /** Read a deployment-wide setting. Returns null if the key has no row (not the same as ""). */

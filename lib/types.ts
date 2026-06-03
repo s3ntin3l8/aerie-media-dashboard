@@ -206,3 +206,16 @@ export interface AppUser {
   role: Role;
   groups: string[];
 }
+
+/** A widget placed on the modular homescreen grid (12-col, fixed row height). */
+export interface DashboardTile {
+  uid: string;
+  type: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Per-role saved homescreen arrangements, persisted to preferences.dashboards. */
+export type DashboardStore = Partial<Record<Role, DashboardTile[]>>;

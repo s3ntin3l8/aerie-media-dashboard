@@ -4,7 +4,7 @@
 // stripe tiles, heartbeat status). Variant switchers from the
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Role, Service, ServiceStatus } from "@/lib/types";
 import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -168,6 +168,7 @@ export function PanelShell({
   style,
   bodyStyle,
   live,
+  fill,
 }: {
   title: string;
   icon?: string;
@@ -178,6 +179,8 @@ export function PanelShell({
   style?: CSS;
   bodyStyle?: CSS;
   live?: boolean;
+  /** When true, fill the parent's height (for grid tiles) and scroll the body internally. */
+  fill?: boolean;
 }) {
   return (
     <section
@@ -189,6 +192,7 @@ export function PanelShell({
         borderRadius: "var(--radius-xl)",
         boxShadow: "var(--shadow-sm)",
         overflow: "hidden",
+        height: fill ? "100%" : undefined,
         ...style,
       }}
     >
@@ -197,7 +201,7 @@ export function PanelShell({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "13px 16px 11px",
+          padding: "9px 16px 8px",
           borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)",
         }}
       >
@@ -216,7 +220,12 @@ export function PanelShell({
         </div>
         {action}
       </header>
-      <div style={{ flex: 1, ...bodyStyle }}>{children}</div>
+      <div
+        className={fill ? "custom-scrollbar" : undefined}
+        style={{ flex: 1, ...(fill ? { minHeight: 0, overflowY: "auto" } : {}), ...bodyStyle }}
+      >
+        {children}
+      </div>
     </section>
   );
 }
@@ -303,7 +312,7 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
   );
 }
 
-export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolean; onAll?: () => void }) {
+export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: boolean; onAll?: () => void; fill?: boolean }) {
   const { nowPlaying, services: allServices, users } = useData();
   const { user } = usePortal();
   // NOTE: NowPlaying uses Plex/Jellyfin identity, not portal ids — this filter is a
@@ -312,6 +321,7 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
   const visible = role !== "admin" ? nowPlaying.filter((s) => s.user === user.id) : nowPlaying;
   return (
     <PanelShell
+      fill={fill}
       title={role === "admin" ? "Now Playing" : "Your Session"}
       icon="play_circle"
       accent="var(--primary)"
@@ -333,7 +343,7 @@ export function NowPlayingPanel({ role, big, onAll }: { role: Role; big?: boolea
 }
 
 // ── SERVICE TILES (stripe) ─────────────────────────────────
-export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[] }) {
+export function ServiceTiles({ role, onOpen, onAll, services, fill }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[]; fill?: boolean }) {
   const visibleServices = useVisibleServices("launcher");
   // Allow an explicit `services` prop override (e.g. admin panel passes a pre-filtered list).
   const list = services ?? visibleServices;
@@ -387,9 +397,11 @@ export function ServiceTiles({ role, onOpen, onAll, services }: { role: Role; on
   };
 
   return (
-    <PanelShell title="Services" icon="apps" count={`${list.length}`} action={onAll ? <SeeAll onClick={onAll} /> : undefined} bodyStyle={{ padding: 14 }}>
+    <PanelShell fill={fill} title="Services" icon="apps" count={`${list.length}`} action={onAll ? <SeeAll onClick={onAll} /> : undefined} bodyStyle={fill ? undefined : { padding: 14 }}>
       {list.length === 0 ? (
         <Empty icon="apps" line="No services yet" sub="Add services in Admin to launch them here." />
+      ) : fill ? (
+        <FlowGrid items={list} itemW={150} itemH={118} gap={11} padX={14} padY={14} stretch render={(s) => <Tile key={s.id} s={s} />} />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 11 }}>
           {list.map((s) => (
@@ -543,11 +555,18 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
   );
 }
 
-export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void }) {
+export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void; fill?: boolean }) {
   const { services, visibility } = useData();
   const { role } = usePortal();
   const list = services.filter((s) => s.central && isVisible(s.id, role, visibility));
-  if (list.length === 0) return null;
+  // In the modular grid (fill) a tile is absolutely positioned, so returning null
+  // would leave an empty hole — render a graceful empty card instead.
+  if (list.length === 0)
+    return fill ? (
+      <PanelShell fill title="Central Services" icon="verified" accent="var(--originator-own)">
+        <Empty icon="verified" line="No central services" sub="Mark core services as “central” to feature them here." />
+      </PanelShell>
+    ) : null;
   const down = list.filter((s) => s.status === "down");
   const deg = list.filter((s) => s.status === "degraded");
   const unknown = list.filter((s) => s.status === "unknown");
@@ -562,7 +581,7 @@ export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: S
   const hc = allGood ? "var(--originator-own)" : down.length ? "var(--error)" : deg.length ? "var(--amber)" : "var(--on-surface-variant)";
 
   return (
-    <div>
+    <div style={fill ? { height: "100%", display: "flex", flexDirection: "column" } : undefined}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 13 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 9, background: `color-mix(in srgb, ${hc} 13%, transparent)`, flexShrink: 0 }}>
           <Icon name={allGood ? "verified" : down.length || deg.length ? "warning" : "help"} size={18} color={hc} fill={allGood} />
@@ -579,7 +598,10 @@ export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: S
           </a>
         )}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(248px, 1fr))", gap: 14 }}>
+      <div
+        className={fill ? "custom-scrollbar" : undefined}
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(248px, 1fr))", gap: 14, ...(fill ? { flex: 1, minHeight: 0, overflowY: "auto" } : {}) }}
+      >
         {list.map((s) => (
           <CentralCard key={s.id} s={s} onOpen={onOpen} />
         ))}
@@ -589,7 +611,7 @@ export function CentralServices({ onOpen, onAll }: { role?: Role; onOpen?: (s: S
 }
 
 // ── STATUS (heartbeat) ─────────────────────────────────────
-export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void }) {
+export function StatusPanel({ role, onAll, fill }: { role: Role; onAll?: () => void; fill?: boolean }) {
   const list = useVisibleServices("status");
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
@@ -598,6 +620,7 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
 
   return (
     <PanelShell
+      fill={fill}
       title="System Status"
       icon="favorite"
       accent="var(--originator-own)"
@@ -640,7 +663,7 @@ export function StatusPanel({ role, onAll }: { role: Role; onAll?: () => void })
 export const REQ_TONE = _REQ_TONE;
 export const REQ_LABEL = _REQ_LABEL;
 
-export function MyRequestsPanel({ role, onAll, onAct }: { role: Role; onAll?: () => void; onAct?: (id: string, action: "approve" | "decline") => void }) {
+export function MyRequestsPanel({ role, onAll, onAct, fill }: { role: Role; onAll?: () => void; onAct?: (id: string, action: "approve" | "decline") => void; fill?: boolean }) {
   const { users, requests } = useData();
   const { user } = usePortal();
   const me = users.find((u) => u.id === user.id) ?? users[0];
@@ -650,6 +673,7 @@ export function MyRequestsPanel({ role, onAll, onAct }: { role: Role; onAll?: ()
   const items = (adminMode ? queue : mine).slice(0, 5);
   return (
     <PanelShell
+      fill={fill}
       title={adminMode ? "Approval Queue" : "My Requests"}
       icon={adminMode ? "inbox" : "bookmark_added"}
       accent="var(--originator-court)"
@@ -709,11 +733,16 @@ export function MyRequestsPanel({ role, onAll, onAct }: { role: Role; onAll?: ()
 }
 
 // ── LIBRARY STAT STRIP ─────────────────────────────────────
-export function LibraryStats() {
+export function LibraryStats({ fill }: { fill?: boolean } = {}) {
   const { library } = useData();
-  if (library.length === 0) return null;
+  if (library.length === 0)
+    return fill ? (
+      <PanelShell fill title="Library Stats" icon="video_library" accent="var(--primary)">
+        <Empty icon="video_library" line="No library stats" sub="Connect Tautulli or Jellyfin to show movie, show and music counts." />
+      </PanelShell>
+    ) : null;
   return (
-    <div className="aerie-lib-grid">
+    <div className="aerie-lib-grid" style={fill ? { height: "100%", gridAutoRows: "1fr" } : undefined}>
       {library.map((l) => (
         <div key={l.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -728,41 +757,176 @@ export function LibraryStats() {
   );
 }
 
+// Measures an element and reports how many fixed-height rows fit inside it.
+// Drives the adaptive page size of list panels (Queue, Recently Downloaded).
+function useFitRows(rowH: number, fallback = 6) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [h, setH] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setH(el.clientHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const rows = h > 0 ? Math.max(1, Math.floor(h / rowH)) : fallback;
+  return [ref, rows] as const;
+}
+
+// THE dashboard rule for item collections in a grid tile (fill): measure the box
+// and lay items out ROW-MAJOR (reading left-to-right) — row 1 fills the whole
+// width first, then wraps to a second/third row ONLY when the tile is tall
+// enough for another row. When it isn't, cap the rows at what fits and scroll
+// HORIZONTALLY, with the scrollbar pinned to the box bottom.
+// `stretch` makes items share the row width evenly (service tiles) instead of
+// keeping a fixed width (posters).
+function FlowGrid<T>({
+  items,
+  itemW,
+  itemH,
+  gap = 12,
+  padX = 16,
+  padY = 12,
+  stretch = false,
+  render,
+}: {
+  items: T[];
+  itemW: number;
+  itemH: number;
+  gap?: number;
+  padX?: number;
+  padY?: number;
+  stretch?: boolean;
+  render: (item: T, index: number) => React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const T_ = items.length;
+  const innerW = box.w > 0 ? box.w - padX * 2 : 0;
+  const innerH = box.h > 0 ? box.h - padY * 2 : 0;
+  const colsFit = Math.max(1, Math.floor((innerW + gap) / (itemW + gap)));
+  const rowsFit = Math.max(1, Math.floor((innerH + gap) / (itemH + gap)));
+  let rows: number; // how many rows to render
+  let perRow: number; // items per row
+  let scrolls: boolean; // horizontal overflow mode
+  if (innerW <= 0 || innerH <= 0) {
+    rows = 1;
+    perRow = T_;
+    scrolls = true;
+  } else if (Math.ceil(T_ / colsFit) <= rowsFit) {
+    // Everything fits: fill each row to the full width, wrap downward.
+    perRow = colsFit;
+    rows = Math.max(1, Math.ceil(T_ / perRow));
+    scrolls = false;
+  } else {
+    // Not enough vertical room for all the rows: cap at what fits, scroll sideways.
+    rows = rowsFit;
+    perRow = Math.ceil(T_ / rows);
+    scrolls = true;
+  }
+  const chunks: T[][] = [];
+  for (let r = 0; r < rows; r++) {
+    const slice = items.slice(r * perRow, (r + 1) * perRow);
+    if (slice.length) chunks.push(slice);
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="custom-scrollbar"
+      style={{ height: "100%", boxSizing: "border-box", padding: `${padY}px ${padX}px`, overflowX: "auto", overflowY: "hidden", display: "flex", flexDirection: "column", gap }}
+    >
+      {chunks.map((row, r) =>
+        stretch && !scrolls ? (
+          // Stretchy items (service tiles): share the row width evenly.
+          <div key={r} style={{ display: "grid", gridTemplateColumns: `repeat(${perRow}, minmax(0, 1fr))`, gap, flex: 1, minHeight: itemH, alignItems: "start" }}>
+            {row.map((item, j) => render(item, r * perRow + j))}
+          </div>
+        ) : (
+          <div key={r} style={{ display: "flex", gap, flex: 1, minHeight: itemH, alignItems: "flex-start" }}>
+            {stretch
+              ? row.map((item, j) => (
+                  <div key={r * perRow + j} style={{ flex: `0 0 ${itemW}px`, minWidth: 0 }}>
+                    {render(item, r * perRow + j)}
+                  </div>
+                ))
+              : row.map((item, j) => render(item, r * perRow + j))}
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
+// Legacy single-row horizontal poster strip (non-grid contexts).
+function PosterStrip({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="custom-scrollbar" style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
+      {children}
+    </div>
+  );
+}
+
 // ── RECENTLY ADDED ─────────────────────────────────────────
-export function RecentlyAdded() {
+export function RecentlyAdded({ fill }: { fill?: boolean } = {}) {
   const { recent } = useData();
   return (
-    <PanelShell title="Recently Added" icon="new_releases" accent="var(--primary)">
+    <PanelShell fill={fill} title="Recently Added" icon="new_releases" accent="var(--primary)">
       {recent.length === 0 ? (
         <Empty icon="new_releases" line="Nothing added yet" sub="Recently added media will appear here." />
       ) : (
-      <div className="custom-scrollbar" style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
-        {recent.map((r) => (
-          <div key={r.id} style={{ width: 76, flexShrink: 0 }}>
-            <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} art={r.art} />
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{r.year}</div>
-          </div>
-        ))}
-      </div>
+        (() => {
+          const renderItem = (r: (typeof recent)[number]) => (
+            <div key={r.id} style={{ width: 76, flexShrink: 0 }}>
+              <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} art={r.art} />
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{r.year}</div>
+            </div>
+          );
+          return fill ? <FlowGrid items={recent} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{recent.map(renderItem)}</PosterStrip>;
+        })()
       )}
     </PanelShell>
   );
 }
 
 // ── DOWNLOAD QUEUE (admin) ─────────────────────────────────
-export function QueuePanel() {
+export function QueuePanel({ fill }: { fill?: boolean } = {}) {
   const { queue } = useData();
-  const { page, totalPages, slice, setPage } = usePagination(queue, 10);
+  // In a grid tile, show as many rows as fit the height (no scrolling); the rest
+  // is reachable via the ‹ › pager.
+  const [fitRef, fitRows] = useFitRows(61);
+  const { page, totalPages, slice, setPage } = usePagination(queue, fill ? fitRows : 10);
   return (
     <PanelShell
+      fill={fill}
       title="Download Queue"
       icon="downloading"
       accent="var(--originator-third-party)"
       count={`${queue.length} active`}
       action={totalPages > 1 ? <PageControls page={page} totalPages={totalPages} setPage={setPage} /> : undefined}
     >
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((q, i) => (
           <div key={q.id} style={{ padding: "11px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
@@ -818,39 +982,46 @@ export function StoragePanel() {
 }
 
 // ── COMING SOON (upcoming *arr calendar) ───────────────────
-export function UpcomingPanel() {
+export function UpcomingPanel({ fill }: { fill?: boolean } = {}) {
   const { upcoming } = useData();
   return (
-    <PanelShell title="Coming Soon" icon="event_upcoming" accent="var(--originator-court)" count={upcoming.length ? `${upcoming.length}` : undefined}>
+    <PanelShell fill={fill} title="Coming Soon" icon="event_upcoming" accent="var(--originator-court)" count={upcoming.length ? `${upcoming.length}` : undefined}>
       {upcoming.length === 0 ? (
         <Empty icon="event_upcoming" line="Nothing upcoming" sub="Upcoming episodes and releases will appear here." />
       ) : (
-        <div className="custom-scrollbar" style={{ display: "flex", gap: 12, padding: 16, overflowX: "auto" }}>
-          {upcoming.slice(0, 20).map((u) => (
-            <div key={u.id} style={{ width: 84, flexShrink: 0 }}>
-              <PosterTile title={u.title} kind={u.kind} cat="request" w={84} art={u.art} />
+        (() => {
+          const list = upcoming.slice(0, 20);
+          const renderItem = (u: (typeof list)[number]) => (
+            <div key={u.id} style={{ width: 76, flexShrink: 0 }}>
+              <PosterTile title={u.title} kind={u.kind} cat="request" w={76} art={u.art} />
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.title}</div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={u.ep || ""}>
                 {fmtDay(u.when)}{u.ep ? ` · ${u.ep}` : ""}
               </div>
             </div>
-          ))}
-        </div>
+          );
+          return fill ? <FlowGrid items={list} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{list.map(renderItem)}</PosterStrip>;
+        })()
       )}
     </PanelShell>
   );
 }
 
 // ── LEADERBOARD (Tautulli weekly home stats) ───────────────
-export function LeaderboardPanel() {
+export function LeaderboardPanel({ fill }: { fill?: boolean } = {}) {
   const { topStats } = useData();
-  if (!topStats || (topStats.users.length === 0 && topStats.media.length === 0)) return null;
+  if (!topStats || (topStats.users.length === 0 && topStats.media.length === 0))
+    return fill ? (
+      <PanelShell fill title="Most Active · 7d" icon="leaderboard" accent="var(--originator-own)">
+        <Empty icon="leaderboard" line="No activity yet" sub="Most-active users and titles appear once Tautulli reports plays." />
+      </PanelShell>
+    ) : null;
   const maxUser = Math.max(1, ...topStats.users.map((u) => u.plays));
   return (
-    <PanelShell title="Most Active · 7d" icon="leaderboard" accent="var(--originator-own)">
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, paddingBottom: topStats.media.length > 0 ? 0 : 16 }}>
+    <PanelShell fill={fill} title="Most Active · 7d" icon="leaderboard" accent="var(--originator-own)">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, paddingBottom: topStats.media.length > 0 ? 0 : 16, height: fill ? "100%" : undefined, boxSizing: "border-box" }}>
         {topStats.users.length > 0 && (
-          <div>
+          <div style={{ flexShrink: 0 }}>
             <Eyebrow style={{ marginBottom: 8 }}>Top viewers</Eyebrow>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {topStats.users.map((u) => (
@@ -866,39 +1037,57 @@ export function LeaderboardPanel() {
             </div>
           </div>
         )}
-        {topStats.media.length > 0 && (
-          <div>
-            <Eyebrow style={{ marginBottom: 8 }}>Top media</Eyebrow>
-            <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 16, marginLeft: -16, marginRight: -16 }}>
-              {topStats.media.map((m, i) => (
-                <div key={`${m.title}-${i}`} style={{ width: 64, flexShrink: 0 }}>
-                  <PosterTile title={m.title} kind="movie" cat="stream" w={64} art={m.art} />
-                  <div style={{ fontSize: 10.5, fontWeight: 600, color: "var(--on-surface)", marginTop: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
-                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)" }}>{m.plays} plays</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {topStats.media.length > 0 &&
+          (() => {
+            const renderItem = (m: (typeof topStats.media)[number], i: number) => (
+              <div key={`${m.title}-${i}`} style={{ width: 76, flexShrink: 0 }}>
+                <PosterTile title={m.title} kind="movie" cat="stream" w={76} art={m.art} />
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{m.plays} plays</div>
+              </div>
+            );
+            return (
+              <div style={fill ? { flex: 1, minHeight: 158, display: "flex", flexDirection: "column" } : undefined}>
+                <Eyebrow style={{ marginBottom: 8 }}>Top media</Eyebrow>
+                {fill ? (
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <FlowGrid items={topStats.media} itemW={76} itemH={150} gap={10} padX={0} padY={0} render={renderItem} />
+                  </div>
+                ) : (
+                  <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", alignItems: "flex-start", paddingLeft: 16, paddingRight: 16, paddingBottom: 16, marginLeft: -16, marginRight: -16 }}>
+                    {topStats.media.map(renderItem)}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
       </div>
     </PanelShell>
   );
 }
 
 // ── RECENTLY DOWNLOADED (*arr history) ─────────────────────
-export function DownloadsPanel() {
+export function DownloadsPanel({ fill }: { fill?: boolean } = {}) {
   const { downloads } = useData();
-  const { page, totalPages, slice, setPage } = usePagination(downloads, 10);
-  if (downloads.length === 0) return null;
+  // In a grid tile, show as many rows as fit the height; the rest pages via ‹ ›.
+  const [fitRef, fitRows] = useFitRows(41);
+  const { page, totalPages, slice, setPage } = usePagination(downloads, fill ? fitRows : 10);
+  if (downloads.length === 0)
+    return fill ? (
+      <PanelShell fill title="Recently Downloaded" icon="download_done" accent="var(--originator-third-party)">
+        <Empty icon="download_done" line="No recent downloads" sub="Grabbed and imported items from Sonarr / Radarr appear here." />
+      </PanelShell>
+    ) : null;
   return (
     <PanelShell
+      fill={fill}
       title="Recently Downloaded"
       icon="download_done"
       accent="var(--originator-third-party)"
       count={`${downloads.length}`}
       action={totalPages > 1 ? <PageControls page={page} totalPages={totalPages} setPage={setPage} /> : undefined}
     >
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((d, i) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <Icon name={d.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
