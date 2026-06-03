@@ -143,7 +143,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       ]},
     ],
     // @ts-expect-error — limit/window/title added to UpcomingPanel in Task 3
-    render: (_c, s) => <UpcomingPanel fill limit={s.limit as number | undefined} window={s.window as number | undefined} title={s.title as string | undefined} />,
+    render: (_c, s) => <UpcomingPanel fill limit={s.limit as number | undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} />,
   },
   leaderboard: {
     type: "leaderboard", name: "Top Streamers", icon: "leaderboard", accent: "var(--originator-own)", group: "Monitoring",
