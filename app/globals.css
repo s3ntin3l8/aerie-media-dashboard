@@ -213,3 +213,9 @@ textarea.input {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* Login field focus ring */
+.aerie-login-input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+

@@ -145,7 +145,7 @@ export function Home() {
           <UpcomingPanel />
           <div className="aerie-home-grid">
             <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
-              <NowPlayingPanel role={role} onAll={() => router.push("/status")} />
+              <NowPlayingPanel role={role} onAll={() => router.push("/streams")} />
               <ServiceTiles role={role} onOpen={openService} onAll={() => router.push("/services")} />
               {role === "admin" && <QueuePanel />}
               {role === "admin" && <DownloadsPanel />}
