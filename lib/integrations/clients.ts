@@ -769,7 +769,7 @@ export async function arrHistory(serviceId: "sonarr" | "radarr"): Promise<Downlo
   return cached(`history:${serviceId}`, 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds(serviceId);
     const data = await fetchJson<{ records: ArrHistoryRecord[] }>(
-      `${baseUrl}/api/v3/history?pageSize=15&sortKey=date&sortDirection=descending`,
+      `${baseUrl}/api/v3/history?pageSize=30&sortKey=date&sortDirection=descending`,
       { service: serviceId, headers: { "X-Api-Key": apiKey } },
     );
     return (data.records ?? [])

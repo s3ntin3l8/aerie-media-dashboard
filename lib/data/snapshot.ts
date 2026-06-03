@@ -224,7 +224,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   );
   const downloads: DownloadEvent[] = [...(sonarrHist ?? []), ...(radarrHist ?? [])]
     .sort((a, b) => Date.parse(b.when) - Date.parse(a.when))
-    .slice(0, 15);
+    .slice(0, 30);
   const topStats: TopStats | null = ttTop ?? null;
 
   return {
