@@ -24,6 +24,7 @@ const eslintConfig = defineConfig([
     "design/**",
     "drizzle/**",
     "data/**",
+    ".claude/**",
   ]),
 ]);
 
