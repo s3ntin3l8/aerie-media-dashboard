@@ -18,6 +18,7 @@ export interface ServiceForm {
   logoSlug: string;
   scheme: "https" | "http";
   host: string;
+  internalUrl: string;
   version: string;
   embeddable: boolean;
   central: boolean;
@@ -138,6 +139,7 @@ export function ServiceModal({
     logoSlug: "",
     scheme: "https",
     host: "",
+    internalUrl: "",
     version: "",
     embeddable: true,
     central: false,
@@ -156,6 +158,7 @@ export function ServiceModal({
         logoSlug: service.logoSlug ?? "",
         scheme: service.scheme,
         host: service.host,
+        internalUrl: service.internalUrl ?? "", // seed from stored value so edits don't clobber the LAN URL
         version: service.version || "",
         embeddable: service.embeddable,
         central: Boolean(service.central),
@@ -185,11 +188,15 @@ export function ServiceModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, service?.id, mode]);
 
+  // The server calls the internal/LAN URL when set; mirror that here so the test/detect
+  // probes the same endpoint the snapshot will actually hit.
+  const apiUrl = () => f.internalUrl.trim() || `${f.scheme}://${f.host}`;
+
   const handleDetect = async () => {
     if (!onDetectVersion || detecting) return;
     setDetecting(true);
     try {
-      const v = await onDetectVersion(`${f.scheme}://${f.host}`, f.apiKey, f.name);
+      const v = await onDetectVersion(apiUrl(), f.apiKey, f.name);
       if (v) set("version", v);
     } finally {
       setDetecting(false);
@@ -200,7 +207,7 @@ export function ServiceModal({
   const handleTest = async () => {
     if (!onTestConnection) return;
     setConnStatus({ state: "testing" });
-    const result = await onTestConnection(`${f.scheme}://${f.host}`, f.apiKey, f.name);
+    const result = await onTestConnection(apiUrl(), f.apiKey, f.name);
     setConnStatus(result !== null ? { state: "ok", version: result } : { state: "err" });
   };
   const canTest = Boolean(onTestConnection) && (editing || (f.host.trim() !== "" && f.apiKey.trim() !== ""));
@@ -291,6 +298,15 @@ export function ServiceModal({
                   </select>
                   <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)", flex: 1, minWidth: 0 }} value={f.host} onChange={(e) => set("host", e.target.value)} placeholder="host.example.com" />
                 </div>
+            </Field>
+            <Field label="API base URL" hint="internal — defaults to the public host">
+              <input
+                className="input"
+                style={{ ...fieldInput, fontFamily: "var(--font-mono)" }}
+                value={f.internalUrl}
+                onChange={(e) => set("internalUrl", e.target.value)}
+                placeholder="e.g. http://192.168.1.50:8181 — leave blank to use the host above"
+              />
             </Field>
             <Field label="Internal note" hint="shown to admins only">
               <input className="input" style={fieldInput} value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="What is this service for?" />
