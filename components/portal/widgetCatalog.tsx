@@ -107,7 +107,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     defaultW: 4, defaultH: 6, minW: 3, minH: 5, maxW: 12, maxH: 16,
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
-      { key: "limit", label: "Items to show", type: "count", min: 3, max: 24, hint: "Auto = fill to card height" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 24, hint: "Auto = show all matching items" },
       { key: "mediaKind", label: "Filter by type", type: "select", options: [
         { value: "", label: "All types" },
         { value: "movie", label: "Movies" },
@@ -123,7 +123,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     defaultW: 12, defaultH: 10, minW: 4, minH: 4, maxW: 12, maxH: 14,
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
-      { key: "limit", label: "Items to show", type: "count", min: 3, max: 30, hint: "Auto = show all upcoming items" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 30, hint: "Auto = up to 20 items" },
       { key: "window", label: "Time window", type: "select", default: "7", options: [
         { value: "7", label: "Next 7 days" },
         { value: "14", label: "Next 14 days" },

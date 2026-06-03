@@ -669,7 +669,7 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const mine = requests.filter((r) => r.portalUser === user.id);
   const queue = requests.filter((r) => r.status === "pending");
-  const adminMode = view === "queue" ? true : view === "mine" ? false : role === "admin";
+  const adminMode = view === "queue" && role === "admin" ? true : view === "mine" ? false : role === "admin";
   const items = (adminMode ? queue : mine).slice(0, limit ?? 5);
   const rowPadding = dense ? "6px 16px" : "10px 16px";
   const defaultTitle = adminMode ? "Approval Queue" : "My Requests";
