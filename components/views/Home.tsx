@@ -14,6 +14,7 @@ import { useRequestReview } from "@/components/hooks/useRequestReview";
 import { Empty } from "@/components/panels";
 import { GridDashboard } from "@/components/portal/GridDashboard";
 import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
+import { CardSettingsModal } from "@/components/modals/CardSettingsModal";
 import { compactAll, type Tile } from "@/components/portal/gridLayout";
 import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, resolveSettings, type WidgetCtx } from "@/components/portal/widgetCatalog";
 import { setDashboardsAction } from "@/app/(portal)/actions";
@@ -157,6 +158,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
 
   const [editing, setEditing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [configUid, setConfigUid] = useState<string | null>(null);
 
   // Both role layouts live in one store; setLayout persists the whole store so a
   // member's arrangement survives while an admin edits theirs (and vice-versa).
@@ -177,6 +179,8 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   const removeWidget = (uid: string) => setLayout((l) => compactAll(l.filter((x) => x.uid !== uid)));
   const addWidget = (type: string) => setLayout((l) => addWidgetToLayout(l, type));
   const resetLayout = () => setLayout(defaultLayout(role));
+  const updateSettings = (uid: string, settings: Record<string, string | number | boolean>) =>
+    setLayout((l) => l.map((t) => (t.uid === uid ? { ...t, settings } : t)));
 
   const ctx: WidgetCtx = { role, onNavigate: (path) => router.push(path), onOpenService: openService, onAct };
   const renderWidget = (item: Tile) => {
@@ -226,7 +230,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
             </div>
           )}
 
-          <GridDashboard layout={layout} onChange={setLayout} editing={editing} renderWidget={renderWidget} onRemove={removeWidget} onConfigure={() => {}} />
+          <GridDashboard layout={layout} onChange={setLayout} editing={editing} renderWidget={renderWidget} onRemove={removeWidget} onConfigure={setConfigUid} />
 
           {!editing && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 18, fontSize: 11, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
@@ -278,6 +282,15 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
       )}
 
       <AddWidgetModal open={addOpen} onClose={() => setAddOpen(false)} role={role} layout={layout} onAdd={addWidget} />
+      <CardSettingsModal
+        open={!!configUid}
+        tile={configUid ? layout.find((t) => t.uid === configUid) : undefined}
+        onClose={() => setConfigUid(null)}
+        onSave={(uid, settings) => {
+          updateSettings(uid, settings);
+          setConfigUid(null);
+        }}
+      />
     </section>
   );
 }
