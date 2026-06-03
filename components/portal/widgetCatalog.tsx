@@ -99,7 +99,6 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       ]},
       { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
     ],
-    // @ts-expect-error — limit/view/dense/title added to MyRequestsPanel in Task 3
     render: (c, s) => <MyRequestsPanel fill role={c.role} onAll={() => c.onNavigate("/requests")} onAct={c.onAct} limit={s.limit as number | undefined} view={s.view as string | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   recentlyAdded: {
@@ -116,7 +115,6 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "track", label: "Music" },
       ]},
     ],
-    // @ts-expect-error — limit/mediaKind/title added to RecentlyAdded in Task 3
     render: (_c, s) => <RecentlyAdded fill limit={s.limit as number | undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} />,
   },
   upcoming: {
@@ -132,7 +130,6 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "30", label: "Next 30 days" },
       ]},
     ],
-    // @ts-expect-error — limit/window/title added to UpcomingPanel in Task 3
     render: (_c, s) => <UpcomingPanel fill limit={s.limit as number | undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} />,
   },
   leaderboard: {
@@ -143,7 +140,6 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
       { key: "limit", label: "Users to show", type: "count", min: 3, max: 15, hint: "Auto = show all" },
     ],
-    // @ts-expect-error — limit/title added to LeaderboardPanel in Task 3
     render: (_c, s) => <LeaderboardPanel fill limit={s.limit as number | undefined} title={s.title as string | undefined} />,
   },
   bandwidth: {
@@ -161,7 +157,6 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "limit", label: "Items per page", type: "count", min: 3, max: 20, hint: "Auto = fit to card height" },
       { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
     ],
-    // @ts-expect-error — limit/dense/title added to QueuePanel in Task 3
     render: (_c, s) => <QueuePanel fill limit={s.limit as number | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   downloads: {
@@ -173,7 +168,6 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "limit", label: "Items per page", type: "count", min: 3, max: 20, hint: "Auto = fit to card height" },
       { key: "dense", label: "Compact rows", type: "toggle", hint: "Reduce row padding for a denser list" },
     ],
-    // @ts-expect-error — limit/dense/title added to DownloadsPanel in Task 3
     render: (_c, s) => <DownloadsPanel fill limit={s.limit as number | undefined} dense={s.dense as boolean | undefined} title={s.title as string | undefined} />,
   },
   shortcuts: {
