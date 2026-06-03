@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { useRouter } from "next/navigation";
 import { Icon, Avatar, Pill, StatusDot, ProgressBar } from "@/components/primitives";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -67,6 +68,7 @@ function MemberRow({ u, nowPlaying }: { u: User; nowPlaying: NowPlaying[] }) {
 }
 
 export function MobileAdmin({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
   const { user, theme, toggleTheme, signOut, role } = usePortal();
   const { users, nowPlaying, queue, storage } = useData();
 
@@ -181,9 +183,12 @@ export function MobileAdmin({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {/* Manage Services / Full Admin link */}
+        {/* Manage Services / Full Admin — navigates to the real Admin view */}
         <div className="card" style={{ padding: "2px 15px", borderRadius: 18, background: "var(--surface-container)" }}>
-          <a href="/admin" style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 0", textDecoration: "none", cursor: "pointer" }}>
+          <button
+            onClick={() => { onClose(); router.push("/admin"); }}
+            style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "13px 0", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+          >
             <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-container-highest)" }}>
               <Icon name="tune" size={18} color="var(--on-surface-variant)" />
             </span>
@@ -192,7 +197,7 @@ export function MobileAdmin({ onClose }: { onClose: () => void }) {
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 2 }}>Services, secrets, visibility, members</div>
             </div>
             <Icon name="chevron_right" size={18} color="var(--on-surface-variant)" />
-          </a>
+          </button>
         </div>
 
         {/* Sign out */}
