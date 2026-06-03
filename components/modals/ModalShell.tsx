@@ -16,6 +16,7 @@ export function ModalShell({
   open,
   onClose,
   icon,
+  logoUrl,
   accent = "var(--primary)",
   title,
   sub,
@@ -26,6 +27,7 @@ export function ModalShell({
   open: boolean;
   onClose: () => void;
   icon?: string;
+  logoUrl?: string;
   accent?: string;
   title: string;
   sub?: string;
@@ -85,9 +87,12 @@ export function ModalShell({
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: 13, padding: "18px 20px", borderBottom: "1px solid var(--outline-variant)", flexShrink: 0 }}>
-          {icon && (
+          {(logoUrl || icon) && (
             <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${accent} 14%, transparent)` }}>
-              <Icon name={icon} size={21} color={accent} />
+              {logoUrl
+                ? <img src={logoUrl} alt="" width={26} height={26} style={{ objectFit: "contain" }} />
+                : <Icon name={icon!} size={21} color={accent} />
+              }
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
