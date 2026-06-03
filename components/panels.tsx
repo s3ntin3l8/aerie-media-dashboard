@@ -893,7 +893,7 @@ export function LeaderboardPanel() {
         {topStats.media.length > 0 && (
           <div>
             <Eyebrow style={{ marginBottom: 8 }}>Top media</Eyebrow>
-            <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 16 }}>
+            <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", paddingLeft: 16, paddingRight: 16, paddingBottom: 16, marginLeft: -16, marginRight: -16 }}>
               {topStats.media.map((m, i) => (
                 <div key={`${m.title}-${i}`} style={{ width: 64, flexShrink: 0 }}>
                   <PosterTile title={m.title} kind="movie" cat="stream" w={64} art={m.art} />
