@@ -128,12 +128,60 @@ server-side API traffic uses the LAN address while the iframe keeps the public H
 > (`lib/data/snapshot.ts`). Putting an `http://` LAN address in `baseUrl` would make the iframe
 > load `http://tautulli.example.com` → **mixed content, blocked** inside the HTTPS portal.
 > Keep the LAN URL in `internalUrl`; leave `baseUrl`/`host` as the public identity.
+>
+> Note: mixed content only constrains the **iframe** (`baseUrl`). `internalUrl` is used
+> **server-side** by `fetchJson`, which has no mixed-content rule — so `internalUrl` may be plain
+> `http://` freely.
+
+#### What to point `internalUrl` at
+
+Any address AERIE can reach that is **not** behind forward-auth. Two good options:
+
+1. **Raw LAN address** — `http://<service-lan-ip>:8181` (shown above). Simplest. The API never
+   touches the public proxy. Lock the port to AERIE's IP with a host firewall rule.
+
+2. **A separate internal-only Traefik router (split-horizon)** — give the service a *second*
+   hostname (e.g. `tautulli.in.example.com`) whose router has **no** forward-auth, and point
+   `internalUrl` at it:
+
+   ```yaml
+   # public router — forward-auth gated, serves the iframe (unchanged)
+   - traefik.http.routers.tautulli.rule=Host(`tautulli.example.com`)
+   - traefik.http.routers.tautulli.entrypoints=websecure
+   - traefik.http.routers.tautulli.middlewares=forwardAuth-authentik@file,aerie-embed@docker
+   - traefik.http.routers.tautulli.service=tautulli
+
+   # internal router — NO forward-auth, bound to an internal-only entrypoint
+   - traefik.http.routers.tautulli-in.rule=Host(`tautulli.in.example.com`)
+   - traefik.http.routers.tautulli-in.entrypoints=internal   # NOT websecure/443
+   - traefik.http.routers.tautulli-in.tls.certresolver=le
+   - traefik.http.routers.tautulli-in.service=tautulli
+   ```
+   ```yaml
+   # AERIE service entry
+   host: tautulli.example.com               # public → iframe (forward-auth)
+   internalUrl: https://tautulli.in.example.com   # internal router, no forward-auth
+   ```
+
+   This is arguably **nicer than the raw IP**: you get TLS (the `apikey` is encrypted in transit,
+   even internally) and a stable hostname instead of `IP:port`. Two requirements make or break it:
+
+   - **"Internal-only" must be enforced by the entrypoint, not just DNS.** Bind the router to a
+     Traefik entrypoint that listens only on the LAN/VPN interface (or a second internal Traefik
+     instance); the public `:443` entrypoint must never match `tautulli.in.example.com`. Don't rely
+     on split-horizon DNS alone — the hostname is published in **certificate-transparency logs**,
+     so obscurity is not a control.
+   - **The cert must be trusted by AERIE's Node/undici fetch.** `fetchJson` rejects untrusted/
+     self-signed TLS by default. Use a **Let's Encrypt DNS-01** cert (works for names with no
+     public A record; HTTP-01 won't) or an internal CA added via `NODE_EXTRA_CA_CERTS`. Do **not**
+     set `NODE_TLS_REJECT_UNAUTHORIZED=0`. A bad cert makes the API call fail silently → empty panel.
 
 ### Security notes
 
-- **Don't expose the API to the internet.** Forward only `443 → Traefik` at the router; do
-  **not** port-forward `:8181`. Since AERIE and Tautulli are on different hosts, add a host
-  firewall rule on the Tautulli machine allowing `:8181` **only from AERIE's IP**.
+- **Don't expose the API to the internet.** Forward only `443 → Traefik` at the router. With the
+  raw-IP option, do **not** port-forward `:8181`, and add a host firewall rule allowing it **only
+  from AERIE's IP**. With the split-horizon option, ensure the internal router's entrypoint isn't
+  internet-facing (see above). Either way, the API path must never sit behind the public `:443`.
 - **No `/api/v2` forward-auth exemption is needed** — because AERIE hits the LAN address
   directly, the API never traverses the proxy, and the `apikey` never lands in Traefik logs.
 - The Tautulli web password lives as a **shared Authentik group attribute** — low-value (it only
