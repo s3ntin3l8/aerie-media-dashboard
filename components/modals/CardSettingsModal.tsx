@@ -25,7 +25,8 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
     const seed: Record<string, string> = {};
     for (const spec of widgetSettings(tile.type)) {
       const v = tile.settings?.[spec.key];
-      seed[spec.key] = v !== undefined ? String(v) : "";
+      const fallback = spec.default !== undefined ? String(spec.default) : "";
+      seed[spec.key] = v !== undefined ? String(v) : fallback;
     }
     setDraft(seed);
   }, [tile?.uid, tile?.type, open]);
