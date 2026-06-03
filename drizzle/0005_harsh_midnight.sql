@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `internal_url` text;

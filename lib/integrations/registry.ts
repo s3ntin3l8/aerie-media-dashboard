@@ -22,6 +22,8 @@ export interface ServiceConfig {
   centralLabel: string | null;
   host: string;
   baseUrl: string;
+  /** optional internal/LAN URL for server-side API calls; null → use baseUrl */
+  internalUrl: string | null;
   version: string | null;
   note: string | null;
   sortOrder: number;
@@ -43,6 +45,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       centralLabel: r.centralLabel,
       host: r.host,
       baseUrl: r.baseUrl || `https://${r.host}`,
+      internalUrl: r.internalUrl ?? null,
       version: r.version,
       note: r.note,
       sortOrder: r.sortOrder,
@@ -80,7 +83,9 @@ export async function getServiceCredentials(serviceId: string): Promise<ServiceC
   const cfg = configs.find((c) => c.id === serviceId);
   if (!cfg) return null;
   const apiKey = await getServiceSecret(serviceId);
-  return { baseUrl: cfg.baseUrl, apiKey };
+  // Server-side API calls prefer the internal/LAN URL when set; the public baseUrl
+  // (used for the iframe embed) is the fallback.
+  return { baseUrl: cfg.internalUrl || cfg.baseUrl, apiKey };
 }
 
 /** A service can be queried for live data only once a secret is stored. */

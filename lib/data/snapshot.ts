@@ -149,6 +149,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     centralLabel: c.centralLabel ?? undefined,
     host: c.host,
     scheme: c.baseUrl?.startsWith("http:") ? "http" : "https",
+    internalUrl: c.internalUrl ?? undefined,
     version: c.version ?? "",
     note: c.note ?? "",
     monitoringKey: c.monitoringKey ?? undefined,

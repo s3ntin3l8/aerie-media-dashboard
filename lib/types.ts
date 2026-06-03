@@ -25,6 +25,8 @@ export interface Service {
   centralLabel?: string;
   host: string;
   scheme: "http" | "https";
+  /** optional internal/LAN URL the server uses for API calls (admin-only; never used for the iframe) */
+  internalUrl?: string;
   version: string;
   status: ServiceStatus;
   uptime: number;

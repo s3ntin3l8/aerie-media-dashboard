@@ -41,6 +41,7 @@ export async function applyServiceConfig(db: DB, cfg: ServiceConfigFile): Promis
           centralLabel: s.centralLabel ?? null,
           host: s.host,
           baseUrl: s.baseUrl || `https://${s.host}`,
+          internalUrl: s.internalUrl ?? null,
           version: s.version ?? null,
           note: s.note ?? null,
           monitoringKey: s.monitoringKey ?? null,

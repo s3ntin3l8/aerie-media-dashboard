@@ -16,8 +16,10 @@ export const services = sqliteTable("services", {
   central: integer("central", { mode: "boolean" }).notNull().default(false),
   centralLabel: text("central_label"),
   host: text("host").notNull(),
-  /** internal base URL the server uses to call the service API (defaults to https://host) */
+  /** public base URL (scheme + host) — used for the iframe embed / launch link (defaults to https://host) */
   baseUrl: text("base_url"),
+  /** optional internal/LAN URL the server uses for API calls; falls back to baseUrl when null */
+  internalUrl: text("internal_url"),
   version: text("version"),
   note: text("note"),
   sortOrder: integer("sort_order").notNull().default(0),

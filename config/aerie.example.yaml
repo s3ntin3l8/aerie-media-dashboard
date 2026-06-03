@@ -95,7 +95,10 @@ services:
     name: Tautulli
     cat: monitor
     icon: monitoring
-    host: tautulli.aerie.tv
+    host: tautulli.aerie.tv          # public host → iframe embed (behind forward-auth, HTTPS)
+    # internalUrl: server-side API calls go here instead of the public host. Use this to keep the
+    # API off the public proxy — e.g. a LAN address. Falls back to https://<host> when omitted.
+    internalUrl: http://tautulli.lan:8181
     embeddable: true
     note: "Plex stats"
     apiKey: ${TAUTULLI_API_KEY}

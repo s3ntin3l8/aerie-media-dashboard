@@ -22,6 +22,8 @@ const serviceSchema = z.object({
   icon: z.string().min(1),
   host: z.string().min(1),
   baseUrl: z.string().optional(),
+  /** internal/LAN URL for server-side API calls (e.g. http://10.0.0.5:8181); falls back to baseUrl. */
+  internalUrl: z.string().optional(),
   embeddable: z.boolean().optional(),
   central: z.boolean().optional(),
   centralLabel: z.string().nullish(),

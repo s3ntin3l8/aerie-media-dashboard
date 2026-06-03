@@ -63,6 +63,7 @@ export interface ServiceInput {
   logoSlug?: string | null;
   host: string;
   baseUrl?: string;
+  internalUrl?: string | null;
   embeddable?: boolean;
   central?: boolean;
   centralLabel?: string | null;
@@ -83,6 +84,7 @@ export async function upsertService(input: ServiceInput) {
     logoSlug: input.logoSlug ?? null,
     host: input.host,
     baseUrl: input.baseUrl || `https://${input.host}`,
+    internalUrl: input.internalUrl?.trim() || null,
     embeddable: input.embeddable ?? false,
     central: input.central ?? false,
     centralLabel: input.centralLabel ?? null,

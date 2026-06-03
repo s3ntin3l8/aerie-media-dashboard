@@ -36,6 +36,13 @@
       "when": 1780321175498,
       "tag": "0004_opposite_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1780469139776,
+      "tag": "0005_harsh_midnight",
+      "breakpoints": true
     }
   ]
 }
