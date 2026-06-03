@@ -88,6 +88,7 @@ export const preferences = sqliteTable("preferences", {
     .references(() => users.id, { onDelete: "cascade" }),
   theme: text("theme").notNull().default("dark"),
   favorites: text("favorites"), // JSON array of service ids
+  dashboards: text("dashboards"), // JSON { admin: Tile[], user: Tile[] } — modular homescreen layout per role
 });
 
 // Deployment-wide key-value settings (not per-user).

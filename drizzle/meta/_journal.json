@@ -43,6 +43,13 @@
       "when": 1780469139776,
       "tag": "0005_harsh_midnight",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1780494742369,
+      "tag": "0006_fresh_chamber",
+      "breakpoints": true
     }
   ]
 }

@@ -197,3 +197,21 @@ Standalone `Dockerfile` + `docker-compose.yml` behind Traefik. Production setup:
 create the local admin at `/login`) → add services and enter each API key in **Admin → Services**
 to light up live data → `docker compose up -d`. Auth details are in `docs/AUTH.md`; embedding/
 forward-auth middleware in `docs/EMBEDDING.md`.
+
+### Testing changes against the live deployment (this host)
+
+`docker-compose.override.yml` adds `build: .` to the `aerie` service (taking precedence over the
+base file's placeholder `image:`), so `docker compose` builds from the working tree. To test
+working-tree changes end-to-end:
+
+```bash
+docker compose down
+docker compose build      # uses the override's build: . (the Dockerfile)
+docker compose up -d
+```
+
+Then open **https://media.dev-01.in.s3ntin3l8.de/** to verify (the running container is
+`dashboard-aerie-1`). The portal is behind **Authentik SSO**, so the agent can't drive the
+authenticated UI headlessly — sign in in the browser first, then Chrome MCP can interact. The
+LAN dev server on `:3939` hot-reloads the working tree but its OIDC callback isn't registered,
+which is why a Docker rebuild is the way to test auth'd pages.
