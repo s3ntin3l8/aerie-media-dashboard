@@ -24,6 +24,9 @@ const eslintConfig = defineConfig([
     "design/**",
     "drizzle/**",
     "data/**",
+    // Local agent state — may contain git worktrees with full repo copies and
+    // built .next output, which would otherwise be linted as false errors.
+    ".claude/**",
   ]),
 ]);
 
