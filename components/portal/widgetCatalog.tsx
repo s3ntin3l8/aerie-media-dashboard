@@ -35,21 +35,11 @@ export interface WidgetCtx {
   onAct?: (id: string, action: "approve" | "decline") => void;
 }
 
-export type WidgetSettingType = "count" | "text" | "toggle" | "select";
-
-export interface WidgetSettingSpec {
-  key: string;
-  label: string;
-  type: WidgetSettingType;
-  hint?: string;
-  /** Default value. For count: omit or undefined = "auto" (adaptive behavior). */
-  default?: string | number | boolean;
-  /** For count type: min/max inclusive */
-  min?: number;
-  max?: number;
-  /** For select type */
-  options?: { value: string; label: string }[];
-}
+export type WidgetSettingSpec =
+  | { key: string; label: string; type: "count"; hint?: string; default?: number; min?: number; max?: number }
+  | { key: string; label: string; type: "select"; hint?: string; default?: string; options: { value: string; label: string }[] }
+  | { key: string; label: string; type: "text"; hint?: string; default?: string }
+  | { key: string; label: string; type: "toggle"; hint?: string; default?: boolean };
 
 export interface CatalogEntry extends WidgetMeta {
   name: string;
@@ -136,7 +126,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 30, hint: "Auto = show all upcoming items" },
-      { key: "window", label: "Time window", type: "select", options: [
+      { key: "window", label: "Time window", type: "select", default: "7", options: [
         { value: "7", label: "Next 7 days" },
         { value: "14", label: "Next 14 days" },
         { value: "30", label: "Next 30 days" },
