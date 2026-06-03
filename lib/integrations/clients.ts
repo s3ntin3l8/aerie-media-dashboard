@@ -421,9 +421,11 @@ interface OverseerrRequest {
   id: number;
   type: "movie" | "tv";
   status: number; // 1 pending, 2 approved, 3 declined
-  media?: { status?: number; tmdbId?: number; mediaType?: string };
+  media?: { id?: number; status?: number; tmdbId?: number; mediaType?: string };
   requestedBy?: { id: number; displayName?: string; plexUsername?: string; email?: string };
   createdAt?: string;
+  seasons?: Array<{ seasonNumber: number }>;
+  profileId?: number;
 }
 
 interface OverseerrMediaDetails {
@@ -432,6 +434,7 @@ interface OverseerrMediaDetails {
   posterPath?: string;
   releaseDate?: string;  // movies
   firstAirDate?: string; // tv shows
+  overview?: string;
 }
 
 // Cache enriched media details by "type:tmdbId".
@@ -441,6 +444,7 @@ interface EnrichedDetails {
   title: string;
   posterPath?: string;
   year?: number;
+  overview?: string;
   cachedAt: number;
 }
 const enrichCache = new Map<string, EnrichedDetails>();
@@ -465,6 +469,7 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
       title: details.title || details.name || "",
       posterPath: details.posterPath ?? undefined,
       year: dateStr ? Number(dateStr.slice(0, 4)) : undefined,
+      overview: details.overview || undefined,
       cachedAt: Date.now(),
     };
     enrichCache.set(cacheKey, result);
@@ -478,13 +483,55 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
 
 const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending", 2: "approved", 3: "declined" };
 
+// Cache resolved quality profile names (profileId → name) for 1 hour.
+// Profiles come from the first configured Radarr or Sonarr instance via Overseerr's
+// service proxy endpoints. We try Radarr first, then Sonarr as fallback.
+let qualityProfilesCache: { at: number; profiles: Record<number, string> } | null = null;
+const QUALITY_PROFILES_TTL = 60 * 60 * 1000;
+
+async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promise<Record<number, string>> {
+  if (qualityProfilesCache && Date.now() - qualityProfilesCache.at < QUALITY_PROFILES_TTL) {
+    return qualityProfilesCache.profiles;
+  }
+  const h = { "X-Api-Key": apiKey };
+  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 8000 });
+
+  try {
+    // Fetch profile list from first available *arr service (Radarr preferred).
+    type SvcEntry = { id: number };
+    type ProfileEntry = { id: number; name?: string };
+    let rawProfiles: ProfileEntry[] = [];
+
+    const radarrSvcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/radarr`).catch(() => [] as SvcEntry[]);
+    if (radarrSvcs.length > 0) {
+      rawProfiles = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/radarr/${radarrSvcs[0].id}/profiles`).catch(() => []);
+    } else {
+      const sonarrSvcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/sonarr`).catch(() => [] as SvcEntry[]);
+      if (sonarrSvcs.length > 0) {
+        rawProfiles = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/sonarr/${sonarrSvcs[0].id}/profiles`).catch(() => []);
+      }
+    }
+
+    const profiles: Record<number, string> = {};
+    for (const p of rawProfiles) if (p.id != null && p.name) profiles[p.id] = p.name;
+    qualityProfilesCache = { at: Date.now(), profiles };
+    return profiles;
+  } catch {
+    qualityProfilesCache = { at: Date.now(), profiles: {} };
+    return {};
+  }
+}
+
 export async function overseerrRequests(): Promise<MediaRequest[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  const data = await fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=50&sort=added`, {
-    service: "overseerr",
-    headers: { "X-Api-Key": apiKey },
-    timeoutMs: 10000,
-  });
+  const [data, profileMap] = await Promise.all([
+    fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=50&sort=added`, {
+      service: "overseerr",
+      headers: { "X-Api-Key": apiKey },
+      timeoutMs: 10000,
+    }),
+    overseerrQualityProfiles(baseUrl, apiKey!).catch(() => ({}) as Record<number, string>),
+  ]);
   const results = data.results ?? [];
 
   // Enrich in parallel; cache means only new/uncached requests touch the upstream.
@@ -497,8 +544,9 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
   );
 
   return results.map((r, i) => {
-    const { title, posterPath, year } = enriched[i];
+    const { title, posterPath, year, overview } = enriched[i];
     const fallbackYear = r.createdAt ? new Date(r.createdAt).getFullYear() : 0;
+    const seasons = r.seasons?.map((s) => s.seasonNumber).filter((n) => n > 0);
     return {
       id: `os-${r.id}`,
       title: title || `Request ${r.id}`,
@@ -510,6 +558,10 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       art: posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(posterPath)}` : undefined,
       requesterName: r.requestedBy?.displayName || r.requestedBy?.plexUsername || r.requestedBy?.email?.split("@")[0],
       requesterEmail: r.requestedBy?.email,
+      seasons: seasons && seasons.length > 0 ? seasons : undefined,
+      overview: overview || undefined,
+      qualityProfile: r.profileId != null ? profileMap[r.profileId] : undefined,
+      mediaOverseerrId: r.media?.id,
     };
   });
 }
@@ -573,6 +625,11 @@ export async function overseerrCreateRequest(input: { tmdbId: number; mediaType:
 export async function overseerrReview(requestId: number, action: "approve" | "decline"): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
   await fetchJson(`${baseUrl}/api/v1/request/${requestId}/${action}`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey } });
+}
+
+export async function overseerrComment(mediaId: number, message: string): Promise<void> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  await fetchJson(`${baseUrl}/api/v1/comment`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body: { message, mediaId } });
 }
 
 // ── Overseerr — users (for portal↔Overseerr identity matching) ──

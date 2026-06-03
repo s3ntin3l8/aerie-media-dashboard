@@ -22,7 +22,7 @@ export interface RequestReviewHook {
   /** Map of request id → optimistic status ("approved" | "declined"). */
   acted: Record<string, string>;
   /** Approve or decline a request. Updates acted immediately, then syncs. */
-  onAct: (id: string, action: "approve" | "decline") => void;
+  onAct: (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => void;
   /** Merge acted overlay into a list of requests for display. */
   applyActed: (list: MediaRequest[]) => MediaRequest[];
 }
@@ -31,10 +31,10 @@ export function useRequestReview(): RequestReviewHook {
   const refresh = useRefresh();
   const [acted, setActed] = useState<Record<string, string>>({});
 
-  const onAct = (id: string, action: "approve" | "decline") => {
+  const onAct = (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => {
     const optimisticStatus = action === "approve" ? "approved" : "declined";
     setActed((prev) => ({ ...prev, [id]: optimisticStatus }));
-    void reviewRequest(id, action).then(() => refresh());
+    void reviewRequest(id, action, note, mediaOverseerrId).then(() => refresh());
   };
 
   const applyActed = (list: MediaRequest[]): MediaRequest[] =>

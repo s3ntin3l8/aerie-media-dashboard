@@ -9,7 +9,7 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { getSessionUser } from "@/lib/session";
 import { getServiceSecret } from "@/lib/integrations/registry";
-import { overseerrCreateRequest, overseerrReview, overseerrRequests, overseerrUsers, matchOverseerrUserId } from "@/lib/integrations/clients";
+import { overseerrCreateRequest, overseerrReview, overseerrComment, overseerrRequests, overseerrUsers, matchOverseerrUserId } from "@/lib/integrations/clients";
 import type { AppUser, DiscoverItem } from "@/lib/types";
 
 async function overseerrOn(): Promise<boolean> {
@@ -95,7 +95,7 @@ export async function submitRequest(pick: DiscoverItem, seasons: number[]): Prom
 }
 
 /** Approve or decline a request (admin). `id` is the snapshot's `os-<n>` id. */
-export async function reviewRequest(id: string, action: "approve" | "decline"): Promise<SubmitResult> {
+export async function reviewRequest(id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number): Promise<SubmitResult> {
   const user = await getSessionUser();
   if (user.role !== "admin") return { ok: false, message: "forbidden" };
   if (!(await overseerrOn())) return { ok: true, message: action === "approve" ? "Approved" : "Declined" };
@@ -103,6 +103,10 @@ export async function reviewRequest(id: string, action: "approve" | "decline"): 
   if (!Number.isFinite(numeric)) return { ok: true, message: "Updated" }; // mock id → no upstream
   try {
     await overseerrReview(numeric, action);
+    if (note?.trim() && mediaOverseerrId) {
+      // Post note as an Overseerr media comment — non-fatal if it fails.
+      await overseerrComment(mediaOverseerrId, note.trim()).catch(() => undefined);
+    }
     return { ok: true, message: action === "approve" ? "Request approved" : "Request declined" };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Action failed" };
