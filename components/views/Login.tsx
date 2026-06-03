@@ -7,53 +7,156 @@
 //   • "setup"       → first-run "create admin account" form
 // ============================================================
 import React, { useActionState, useState } from "react";
-import { Icon, Eyebrow, Heartbeat } from "@/components/primitives";
-import { BrandLockup } from "@/components/brand/Brand";
+import { Icon, Eyebrow } from "@/components/primitives";
+import { getGreeting } from "@/lib/greeting";
 import type { LoginState } from "@/app/login/actions";
 
 type Mode = "oidc" | "credentials" | "setup";
 
-// Decorative heartbeat for the brand panel (no longer sourced from mock data).
-const DECOR_BEATS = [1, 1, 2, 1, 3, 2, 1, 1, 2, 4, 2, 1, 1, 2, 1, 3, 1, 1, 2, 1, 2, 3, 1, 1, 2, 1, 1, 2, 1, 1];
+// ── AerieMark ────────────────────────────────────────────────
+// Circular disc with a cyan glow radial gradient + ridge SVG.
+function AerieMark({ size = 66 }: { size?: number }) {
+  return (
+    <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: size, height: size }}>
+      {/* Glow layer */}
+      <div
+        style={{
+          position: "absolute",
+          inset: -size * 0.35,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, color-mix(in srgb, var(--primary) 30%, transparent) 0%, transparent 70%)",
+          filter: `blur(${Math.round(size * 0.25)}px)`,
+          pointerEvents: "none",
+        }}
+      />
+      {/* Disc SVG */}
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 120 120"
+        fill="none"
+        aria-hidden
+        focusable="false"
+        style={{ position: "relative", zIndex: 1 }}
+      >
+        {/* Disc background */}
+        <circle
+          cx={60}
+          cy={60}
+          r={56}
+          fill="color-mix(in srgb, var(--primary) 9%, var(--surface-container-lowest))"
+          stroke="color-mix(in srgb, var(--primary) 38%, transparent)"
+          strokeWidth={1.5}
+        />
+        {/* Back ridge */}
+        <polyline
+          points="60,74 82,48 102,80"
+          stroke="var(--primary)"
+          strokeWidth={7.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeOpacity={0.5}
+        />
+        {/* Front ridge */}
+        <polyline
+          points="20,84 52,38 73,66"
+          stroke="var(--primary)"
+          strokeWidth={7.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "11px 13px",
-  fontSize: 14,
-  borderRadius: 10,
-  border: "1px solid var(--outline-variant)",
-  background: "var(--surface-container-lowest)",
-  color: "var(--on-surface)",
-  outline: "none",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 11.5,
-  fontWeight: 600,
-  color: "var(--on-surface-variant)",
-  marginBottom: 6,
-  display: "block",
-};
-
+// ── Field ─────────────────────────────────────────────────────
 function Field({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label style={{ display: "block", marginBottom: 12 }}>
-      <span style={labelStyle}>{label}</span>
-      <input {...props} style={inputStyle} />
+    <label style={{ display: "block", marginBottom: 14 }}>
+      <span
+        style={{
+          display: "block",
+          fontSize: 11.5,
+          fontWeight: 600,
+          color: "var(--on-surface-variant)",
+          marginBottom: 6,
+        }}
+      >
+        {label}
+      </span>
+      <input
+        {...props}
+        style={{
+          width: "100%",
+          padding: "13px 14px",
+          fontSize: 14,
+          borderRadius: 10,
+          border: "1px solid var(--outline-variant)",
+          background: "var(--surface-container-lowest)",
+          color: "var(--on-surface)",
+          outline: "none",
+          boxSizing: "border-box",
+          // focus ring handled via global .aerie-login-input:focus
+        }}
+        className="aerie-login-input"
+      />
     </label>
   );
 }
 
+// ── ErrorNote ─────────────────────────────────────────────────
 function ErrorNote({ error }: { error?: string }) {
   if (!error) return null;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, marginBottom: 14, border: "1px solid color-mix(in srgb, var(--error) 35%, transparent)", background: "color-mix(in srgb, var(--error) 10%, transparent)" }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "10px 12px",
+        borderRadius: 10,
+        marginBottom: 14,
+        border: "1px solid color-mix(in srgb, var(--error) 35%, transparent)",
+        background: "color-mix(in srgb, var(--error) 10%, transparent)",
+      }}
+    >
       <Icon name="error" size={15} color="var(--error)" />
       <span style={{ fontSize: 12.5, color: "var(--error)" }}>{error}</span>
     </div>
   );
 }
 
+// ── Ridgeline motif (decorative bottom of screen) ─────────────
+function RidglineDecor() {
+  return (
+    <svg
+      viewBox="0 0 402 180"
+      preserveAspectRatio="none"
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100%",
+        height: 200,
+        pointerEvents: "none",
+      }}
+      aria-hidden
+    >
+      <path
+        d="M0,180 L0,118 L66,64 L120,110 L188,40 L250,104 L320,58 L402,116 L402,180 Z"
+        fill="color-mix(in srgb, var(--primary) 7%, transparent)"
+      />
+      <path
+        d="M0,180 L0,150 L54,108 L132,150 L210,96 L286,146 L356,110 L402,144 L402,180 Z"
+        fill="color-mix(in srgb, var(--primary) 11%, transparent)"
+      />
+    </svg>
+  );
+}
+
+// ── Login (main export) ───────────────────────────────────────
 export function Login({
   mode,
   providerName,
@@ -73,95 +176,178 @@ export function Login({
   const [credState, credAction, credPending] = useActionState(signInWithPassword, {});
   const [setupState, setupAction, setupPending] = useActionState(createInitialAdmin, {});
 
-  const heading = mode === "setup" ? "Set up AERIE" : "Sign in to AERIE";
-  const subtitle =
-    phase === "redirecting"
-      ? `Redirecting to ${providerName}…`
-      : mode === "oidc"
-        ? "Authentication is handled by your identity provider."
-        : mode === "setup"
-          ? "Create the first administrator account to get started."
-          : "Sign in with your AERIE account.";
+  const { greet } = getGreeting();
 
   return (
-    <div style={{ height: "100vh", display: "flex", background: "var(--background)", overflow: "hidden" }}>
-      {/* Left: brand panel */}
+    <div
+      className="aerie-mobile-login"
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--background)",
+        padding: "40px 20px 60px",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* Decorative ridgeline at the bottom */}
+      <RidglineDecor />
+
+      {/* Content (above the decor) */}
       <div
         style={{
-          flex: "0 0 46%",
+          position: "relative",
+          zIndex: 1,
+          width: "100%",
+          maxWidth: 420,
           display: "flex",
           flexDirection: "column",
-          justifyContent: "space-between",
-          padding: "48px 56px",
-          background: "var(--surface-container-lowest)",
-          borderRight: "1px solid var(--outline-variant)",
-          position: "relative",
-          overflow: "hidden",
+          alignItems: "center",
+          gap: 0,
         }}
       >
-        <div style={{ position: "relative", zIndex: 2 }}>
-          <BrandLockup size={34} />
+        {/* Brand section */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 28 }}>
+          <AerieMark size={66} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: "0.30em",
+                color: "var(--on-surface)",
+              }}
+            >
+              AERIE
+            </span>
+            <Eyebrow color="var(--on-surface-variant)">Media Command Center</Eyebrow>
+          </div>
         </div>
 
-        <div style={{ position: "relative", zIndex: 2 }}>
-          <Eyebrow color="var(--primary)" style={{ marginBottom: 16 }}>
-            Private Media Command Center
-          </Eyebrow>
-          <h1 style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 34, lineHeight: 1.12, letterSpacing: "-0.02em", color: "var(--on-surface)", maxWidth: 380 }}>
-            Every service, one vantage point.
+        {/* Greeting */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <h1
+            suppressHydrationWarning
+            style={{
+              fontFamily: "var(--font-headline)",
+              fontWeight: 700,
+              fontSize: 26,
+              letterSpacing: "-0.02em",
+              color: "var(--on-surface)",
+              margin: 0,
+            }}
+          >
+            {greet}.
           </h1>
-          <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--on-surface-variant)", marginTop: 16, maxWidth: 360 }}>
-            Streaming, requests, automation and monitoring — unified behind a single secure door.
+          <p
+            suppressHydrationWarning
+            style={{
+              fontSize: 13.5,
+              color: "var(--on-surface-variant)",
+              marginTop: 6,
+              margin: "6px 0 0",
+            }}
+          >
+            Sign in to your media portal
           </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 24 }}>
-            {["Plex", "Jellyfin", "Overseerr", "Sonarr", "Radarr", "Tautulli", "Gatus"].map((n) => (
-              <span key={n} style={{ fontFamily: "var(--font-mono)", fontSize: 11, padding: "4px 10px", borderRadius: 9999, border: "1px solid var(--outline-variant)", color: "var(--on-surface-variant)", background: "var(--surface-container-low)" }}>
-                {n}
-              </span>
-            ))}
-          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", zIndex: 2 }}>
-          <Icon name="lock" size={14} color="var(--originator-own)" />
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>Self-hosted · behind Traefik</span>
-        </div>
-
-        <div style={{ position: "absolute", right: -40, bottom: 40, opacity: 0.06, transform: "scale(2.4)", transformOrigin: "bottom right", zIndex: 1 }}>
-          <Heartbeat beats={DECOR_BEATS} h={60} barW={8} gap={4} />
-        </div>
-      </div>
-
-      {/* Right: auth handoff */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
-        <div style={{ width: "100%", maxWidth: 380 }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 28 }}>
-            <div style={{ position: "relative", width: 64, height: 64, marginBottom: 18, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 18, background: "color-mix(in srgb, var(--primary) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--primary) 25%, transparent)" }}>
-              <Icon name={phase === "redirecting" ? "sync" : mode === "setup" ? "person_add" : "shield_person"} size={30} color="var(--primary)" style={phase === "redirecting" ? { animation: "aerieSpin 1s linear infinite" } : undefined} />
-            </div>
-            <h2 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 21, color: "var(--on-surface)" }}>{heading}</h2>
-            <p style={{ fontSize: 13, color: "var(--on-surface-variant)", marginTop: 6 }}>{subtitle}</p>
-          </div>
-
+        {/* Auth card */}
+        <div
+          style={{
+            width: "100%",
+            background: "color-mix(in srgb, var(--surface-container) 92%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)",
+            borderRadius: 20,
+            padding: 22,
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+          }}
+        >
+          {/* OIDC mode */}
           {mode === "oidc" && (
-            <form action={oidcSignIn} style={{ width: "100%" }} onSubmit={() => setPhase("redirecting")}>
-              <button type="submit" disabled={phase === "redirecting"} className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "13px 20px", fontSize: 14, opacity: phase === "redirecting" ? 0.7 : 1 }}>
-                <Icon name={providerIcon} size={18} /> Continue with {providerName}
-              </button>
-            </form>
+            <>
+              <form action={oidcSignIn} style={{ width: "100%" }} onSubmit={() => setPhase("redirecting")}>
+                <button
+                  type="submit"
+                  disabled={phase === "redirecting"}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "15px 18px",
+                    borderRadius: 12,
+                    border: "none",
+                    background: "var(--primary)",
+                    color: "var(--on-primary)",
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: phase === "redirecting" ? "default" : "pointer",
+                    opacity: phase === "redirecting" ? 0.75 : 1,
+                    transition: "opacity 0.15s",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  {phase === "redirecting" ? (
+                    <>
+                      <Icon name="sync" size={18} color="var(--on-primary)" style={{ animation: "aerieSpin 1s linear infinite" }} />
+                      Redirecting…
+                    </>
+                  ) : (
+                    <>
+                      <Icon name={providerIcon} size={19} color="var(--on-primary)" fill />
+                      Continue with {providerName}
+                    </>
+                  )}
+                </button>
+              </form>
+              <p
+                style={{
+                  textAlign: "center",
+                  fontSize: 12,
+                  color: "var(--on-surface-variant)",
+                  marginTop: 16,
+                  marginBottom: 0,
+                  lineHeight: 1.5,
+                }}
+              >
+                Access to AERIE is managed through single sign-on. Speak to your admin for an invite.
+              </p>
+            </>
           )}
 
+          {/* Credentials mode */}
           {mode === "credentials" && (
             <form action={credAction} style={{ width: "100%" }}>
               <ErrorNote error={credState.error} />
               <Field label="Email" name="email" type="email" autoComplete="username" required />
               <Field label="Password" name="password" type="password" autoComplete="current-password" required />
-              <button type="submit" disabled={credPending} className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "13px 20px", fontSize: 14, marginTop: 4, opacity: credPending ? 0.7 : 1 }}>
-                <Icon name={credPending ? "sync" : "login"} size={18} style={credPending ? { animation: "aerieSpin 1s linear infinite" } : undefined} /> Sign in
+              <button
+                type="submit"
+                disabled={credPending}
+                className="btn btn-primary"
+                style={{
+                  width: "100%",
+                  justifyContent: "center",
+                  padding: "13px 20px",
+                  fontSize: 14,
+                  marginTop: 4,
+                  opacity: credPending ? 0.7 : 1,
+                }}
+              >
+                <Icon name={credPending ? "sync" : "login"} size={18} style={credPending ? { animation: "aerieSpin 1s linear infinite" } : undefined} />
+                Sign in
               </button>
             </form>
           )}
 
+          {/* Setup mode */}
           {mode === "setup" && (
             <form action={setupAction} style={{ width: "100%" }}>
               <ErrorNote error={setupState.error} />
@@ -169,27 +355,39 @@ export function Login({
               <Field label="Email" name="email" type="email" autoComplete="username" required />
               <Field label="Password" name="password" type="password" autoComplete="new-password" minLength={8} required />
               <Field label="Confirm password" name="confirm" type="password" autoComplete="new-password" minLength={8} required />
-              <button type="submit" disabled={setupPending} className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "13px 20px", fontSize: 14, marginTop: 4, opacity: setupPending ? 0.7 : 1 }}>
-                <Icon name={setupPending ? "sync" : "person_add"} size={18} style={setupPending ? { animation: "aerieSpin 1s linear infinite" } : undefined} /> Create admin account
+              <button
+                type="submit"
+                disabled={setupPending}
+                className="btn btn-primary"
+                style={{
+                  width: "100%",
+                  justifyContent: "center",
+                  padding: "13px 20px",
+                  fontSize: 14,
+                  marginTop: 4,
+                  opacity: setupPending ? 0.7 : 1,
+                }}
+              >
+                <Icon name={setupPending ? "sync" : "person_add"} size={18} style={setupPending ? { animation: "aerieSpin 1s linear infinite" } : undefined} />
+                Create admin account
               </button>
             </form>
           )}
+        </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 0" }}>
-            <div style={{ flex: 1, height: 1, background: "var(--outline-variant)" }} />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em", color: "var(--on-surface-variant)", whiteSpace: "nowrap" }}>
-              {mode === "oidc" ? "OIDC · PKCE" : "AERIE · local account"}
-            </span>
-            <div style={{ flex: 1, height: 1, background: "var(--outline-variant)" }} />
-          </div>
-
-          <p style={{ textAlign: "center", fontSize: 11, color: "var(--on-surface-variant)", marginTop: 20 }}>
-            {mode === "oidc"
-              ? "Access is managed by your identity provider."
-              : mode === "setup"
-                ? "This account has full administrator access."
-                : "Contact your administrator if you can't sign in."}
-          </p>
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            marginTop: 20,
+            color: "var(--on-surface-variant)",
+            fontSize: 11.5,
+          }}
+        >
+          <Icon name="lock" size={14} color="var(--originator-own)" />
+          Self-hosted · Secured by SSO
         </div>
       </div>
     </div>

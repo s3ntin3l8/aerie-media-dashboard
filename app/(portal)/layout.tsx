@@ -1,8 +1,7 @@
 import React from "react";
 import { PortalProvider } from "@/components/portal/PortalProvider";
 import { DataProvider } from "@/components/portal/DataProvider";
-import { Rail } from "@/components/portal/Rail";
-import { CommandPalette } from "@/components/portal/CommandPalette";
+import { MobileShell } from "@/components/mobile/MobileShell";
 import { getSessionUser } from "@/lib/session";
 import { getSnapshot } from "@/lib/data/snapshot";
 import { getFavorites } from "@/lib/integrations/registry";
@@ -20,11 +19,7 @@ export default async function PortalLayout({ children }: { children: React.React
   return (
     <PortalProvider user={user} oidc={authConfigured} favorites={favorites}>
       <DataProvider initial={snapshot}>
-        <div style={{ height: "100vh", display: "flex", overflow: "hidden" }}>
-          <Rail />
-          <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>{children}</main>
-          <CommandPalette />
-        </div>
+        <MobileShell>{children}</MobileShell>
       </DataProvider>
     </PortalProvider>
   );

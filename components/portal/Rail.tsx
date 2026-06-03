@@ -11,6 +11,7 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import type { Service } from "@/lib/types";
 import { isVisible } from "@/lib/visibility";
+import { RAIL_NAV_ITEMS } from "@/lib/nav";
 
 // Re-exported for existing importers (e.g. the Login view).
 export { BrandBadge };
@@ -203,15 +204,6 @@ export function Rail() {
       ? (services.find((s) => s.id === lastOpened && isVisible(s.id, role, visibility)) ?? null)
       : null;
 
-  const isActive = (id: string) => {
-    if (id === "home") return pathname === "/";
-    if (id === "launch") return pathname === "/services" || pathname.startsWith("/s/");
-    if (id === "requests") return pathname.startsWith("/requests");
-    if (id === "status") return pathname.startsWith("/status");
-    if (id === "admin") return pathname.startsWith("/admin");
-    return false;
-  };
-
   return (
     <aside
       style={{
@@ -234,18 +226,18 @@ export function Rail() {
         </RailTip>
       </div>
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 4 }}>
-        <RailNav icon="dashboard" label="Dashboard" href="/" active={isActive("home")} onNavigate={go} />
-        <RailNav icon="apps" label="Services" href="/services" active={isActive("launch")} onNavigate={go} />
-        <RailNav
-          icon="bookmark_added"
-          label="My Requests"
-          href="/requests"
-          active={isActive("requests")}
-          badge={role === "admin" ? pendingCount : 0}
-          badgeTone="originator-court"
-          onNavigate={go}
-        />
-        <RailNav icon="favorite" label="Status" href="/status" active={isActive("status")} onNavigate={go} />
+        {RAIL_NAV_ITEMS.filter((item) => !item.adminOnly).map((item) => (
+          <RailNav
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            href={item.href}
+            active={item.isActive(pathname)}
+            badge={item.id === "requests" && role === "admin" ? pendingCount : 0}
+            badgeTone="originator-court"
+            onNavigate={go}
+          />
+        ))}
         {(favoriteServices.length > 0 || recentService) && (
           <>
             <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
@@ -260,7 +252,7 @@ export function Rail() {
         {role === "admin" && (
           <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
             <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
-            <RailNav icon="tune" label="Admin" href="/admin" active={isActive("admin")} badge={downCount} onNavigate={go} />
+            <RailNav icon="tune" label="Admin" href="/admin" active={pathname.startsWith("/admin")} badge={downCount} onNavigate={go} />
           </div>
         )}
       </nav>

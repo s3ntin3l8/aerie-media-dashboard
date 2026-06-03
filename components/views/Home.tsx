@@ -8,6 +8,8 @@ import type { Service } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
+import { getGreeting } from "@/lib/greeting";
+import { useRequestReview } from "@/components/hooks/useRequestReview";
 import {
   CentralServices,
   LibraryStats,
@@ -86,9 +88,7 @@ function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
 }
 
 function GreetingHeader({ role, userName, onOpenPalette, onRequest }: { role: string; userName: string; onOpenPalette: () => void; onRequest: () => void }) {
-  const hour = new Date().getHours();
-  const greet = hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const date = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const { greet, date } = getGreeting();
   return (
     <div style={{ padding: "22px 32px 18px", borderBottom: "1px solid var(--outline-variant)", flexShrink: 0, background: "color-mix(in srgb, var(--surface-container-lowest) 40%, transparent)" }}>
       <div className="aerie-header-row">
@@ -118,6 +118,7 @@ export function Home() {
   const router = useRouter();
   const { role, setPaletteOpen, user } = usePortal();
   const { services } = useData();
+  const { onAct } = useRequestReview();
   const openService = (s: Service) => router.push(`/s/${s.id}`);
 
   return (
@@ -144,13 +145,13 @@ export function Home() {
           <UpcomingPanel />
           <div className="aerie-home-grid">
             <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
-              <NowPlayingPanel role={role} onAll={() => router.push("/status")} />
+              <NowPlayingPanel role={role} onAll={() => router.push("/streams")} />
               <ServiceTiles role={role} onOpen={openService} onAll={() => router.push("/services")} />
               {role === "admin" && <QueuePanel />}
               {role === "admin" && <DownloadsPanel />}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <MyRequestsPanel role={role} onAll={() => router.push("/requests")} />
+              <MyRequestsPanel role={role} onAll={() => router.push("/requests")} onAct={onAct} />
               <StatusPanel role={role} onAll={() => router.push("/status")} />
               <LeaderboardPanel />
               <RecentlyAdded />

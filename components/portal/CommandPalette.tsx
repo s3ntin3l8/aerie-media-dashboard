@@ -10,6 +10,8 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import type { Service } from "@/lib/types";
 import { isVisible } from "@/lib/visibility";
+import { PALETTE_NAV_ITEMS } from "@/lib/nav";
+import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 
 function PaletteRow({
   icon,
@@ -57,9 +59,10 @@ function PaletteRow({
 export function CommandPalette() {
   const router = useRouter();
   const { paletteOpen, setPaletteOpen, role } = usePortal();
-  const { services, visibility } = useData();
   const [q, setQ] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // Must be called before any early return (Rules of Hooks).
+  const allVisibleServices = useVisibleServices("launcher");
 
   useEffect(() => {
     if (paletteOpen) {
@@ -71,18 +74,10 @@ export function CommandPalette() {
   if (!paletteOpen) return null;
 
   const close = () => setPaletteOpen(false);
-  const nav: [string, string, string][] = [
-    ["Dashboard", "dashboard", "/"],
-    ["Services", "apps", "/services"],
-    ["My Requests", "bookmark_added", "/requests"],
-    ["Status", "favorite", "/status"],
-  ];
-  if (role === "admin") nav.push(["Admin", "tune", "/admin"]);
-
   const ql = q.toLowerCase();
-  const navMatches = nav.filter((n) => n[0].toLowerCase().includes(ql));
-  const visibleServices = role === "admin" ? services : services.filter((s) => s.cat !== "infra" && s.id !== "prometheus" && isVisible(s.id, role, visibility));
-  const svcMatches = visibleServices.filter((s) => s.name.toLowerCase().includes(ql) || s.host.includes(ql));
+  const visibleNavItems = PALETTE_NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin");
+  const navMatches = visibleNavItems.filter((item) => item.label.toLowerCase().includes(ql));
+  const svcMatches = allVisibleServices.filter((s) => s.name.toLowerCase().includes(ql) || s.host.includes(ql));
 
   return (
     <div
@@ -129,13 +124,13 @@ export function CommandPalette() {
               <Eyebrow>Navigate</Eyebrow>
             </div>
           )}
-          {navMatches.map(([label, icon, href]) => (
+          {navMatches.map((item) => (
             <PaletteRow
-              key={label}
-              icon={icon}
-              label={label}
+              key={item.id}
+              icon={item.icon}
+              label={item.label}
               onClick={() => {
-                router.push(href);
+                router.push(item.href);
                 close();
               }}
             />
