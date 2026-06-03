@@ -81,6 +81,74 @@ export function fmtTime(totalSec: number) {
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
+function usePagination<T>(items: T[], pageSize: number) {
+  const [page, setPage] = useState(0);
+  const len = items.length;
+  useEffect(() => { setPage(0); }, [len]);
+  const totalPages = Math.max(1, Math.ceil(len / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const slice = items.slice(safePage * pageSize, (safePage + 1) * pageSize);
+  return { page: safePage, totalPages, slice, setPage };
+}
+
+function PageControls({
+  page,
+  totalPages,
+  setPage,
+}: {
+  page: number;
+  totalPages: number;
+  setPage: (p: number) => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <button
+        onClick={() => setPage(page - 1)}
+        disabled={page === 0}
+        style={{
+          background: "none",
+          border: "none",
+          padding: "2px 3px",
+          cursor: page === 0 ? "default" : "pointer",
+          color: page === 0 ? "var(--on-surface-variant)" : "var(--primary)",
+          opacity: page === 0 ? 0.35 : 1,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <Icon name="chevron_left" size={14} />
+      </button>
+      <span
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 10,
+          color: "var(--on-surface-variant)",
+          minWidth: 28,
+          textAlign: "center",
+        }}
+      >
+        {page + 1} / {totalPages}
+      </span>
+      <button
+        onClick={() => setPage(page + 1)}
+        disabled={page >= totalPages - 1}
+        style={{
+          background: "none",
+          border: "none",
+          padding: "2px 3px",
+          cursor: page >= totalPages - 1 ? "default" : "pointer",
+          color: page >= totalPages - 1 ? "var(--on-surface-variant)" : "var(--primary)",
+          opacity: page >= totalPages - 1 ? 0.35 : 1,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <Icon name="chevron_right" size={14} />
+      </button>
+    </div>
+  );
+}
+
 export function PanelShell({
   title,
   icon,
