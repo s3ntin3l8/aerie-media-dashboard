@@ -625,6 +625,17 @@ export async function overseerrIssues(): Promise<{ open: number; items: IssueIte
   });
 }
 
+export async function overseerrVersion(): Promise<string | null> {
+  return cached("overseerr:version", 30 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    const d = await fetchJson<{ version?: string }>(`${baseUrl}/api/v1/status`, {
+      service: "overseerr",
+      headers: { "X-Api-Key": apiKey },
+    });
+    return normalizeVersion(d.version);
+  });
+}
+
 /** Pure helper: find the Overseerr user id whose email matches `email` (case-insensitive). */
 export function matchOverseerrUserId(users: OverseerrUser[], email: string | undefined): number | undefined {
   if (!email) return undefined;
@@ -860,7 +871,10 @@ function serviceKind(id: string): ServiceKind | null {
 /** Strip a leading "v"/"V" so stored versions are bare (the UI prepends its own "v"). */
 function normalizeVersion(v: string | undefined | null): string | null {
   if (!v) return null;
-  return v.trim().replace(/^v/i, "") || null;
+  const s = v.trim().replace(/^v/i, "");
+  // dev builds: "develop-{fullSHA}" → "develop-{7chars}"
+  const dev = s.match(/^(develop-[0-9a-f]{7})[0-9a-f]*/i);
+  return (dev ? dev[1] : s) || null;
 }
 
 async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKind): Promise<string | null> {

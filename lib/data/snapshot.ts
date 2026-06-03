@@ -16,6 +16,7 @@ import {
   jellyfinRecentlyAdded,
   overseerrRequests,
   overseerrUsers,
+  overseerrVersion,
   arrQueue,
   arrDiskSpace,
   arrHealth,
@@ -95,7 +96,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   const [
     health, ttAct, jfNow, osReq, osUsers, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members, promResult,
     sonarrDisk, radarrDisk, sonarrHealth, radarrHealth, osIssues, sonarrCal, radarrCal, sonarrHist, radarrHist, ttTop,
-    jfLibs, jfRecent,
+    jfLibs, jfRecent, osVersion,
   ] = await Promise.all([
     gatusOn ? safe(gatusHealth) : Promise.resolve(null),
     ttOn ? safe(tautulliActivity) : Promise.resolve(null),
@@ -122,6 +123,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     ttOn ? safe(tautulliHomeStats) : Promise.resolve(null),
     jfOn ? safe(jellyfinLibraries) : Promise.resolve(null),
     jfOn ? safe(jellyfinRecentlyAdded) : Promise.resolve(null),
+    osOn ? safe(overseerrVersion) : Promise.resolve(null),
   ]);
 
   // services: DB config merged with live Gatus health. Without a Gatus
@@ -150,7 +152,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     host: c.host,
     scheme: c.baseUrl?.startsWith("http:") ? "http" : "https",
     internalUrl: c.internalUrl ?? undefined,
-    version: c.version ?? "",
+    version: (c.id === "overseerr" && osVersion) ? osVersion : (c.version ?? ""),
     note: c.note ?? "",
     monitoringKey: c.monitoringKey ?? undefined,
     ...healthFor(c.id, c.name, c.monitoringKey),
