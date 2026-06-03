@@ -226,7 +226,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
             </div>
           )}
 
-          <GridDashboard layout={layout} onChange={setLayout} editing={editing} renderWidget={renderWidget} onRemove={removeWidget} />
+          <GridDashboard layout={layout} onChange={setLayout} editing={editing} renderWidget={renderWidget} onRemove={removeWidget} onConfigure={() => {}} />
 
           {!editing && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 18, fontSize: 11, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
