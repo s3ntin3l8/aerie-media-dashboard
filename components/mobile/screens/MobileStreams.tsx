@@ -10,6 +10,7 @@ import {
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useStreamProgress } from "@/components/hooks/useStreamProgress";
+import { StreamPipeline, StreamQuality, TranscodeHealth, StreamClient, StreamNetwork } from "@/components/streams/StreamDetail";
 import type { NowPlaying } from "@/lib/types";
 
 function StreamCard({ s }: { s: NowPlaying }) {
@@ -175,34 +176,17 @@ function StreamCard({ s }: { s: NowPlaying }) {
         </span>
       </div>
 
-      {/* Tech info row */}
+      {/* Tech info — quality + transcode pipeline/health */}
       <div
         style={{
           borderTop: "1px solid var(--outline-variant)",
           paddingTop: 10,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
         }}
       >
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 9.5,
-              padding: "1px 6px",
-              borderRadius: 4,
-              background:
-                "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)",
-              color: "var(--on-surface-variant)",
-            }}
-          >
-            {s.res}
-          </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span
             style={{
               fontFamily: "var(--font-mono)",
@@ -211,25 +195,32 @@ function StreamCard({ s }: { s: NowPlaying }) {
               borderRadius: 4,
               fontWeight: 700,
               background: `color-mix(in srgb, ${s.play === "transcode" ? "var(--amber)" : "var(--originator-own)"} 14%, transparent)`,
-              color:
-                s.play === "transcode"
-                  ? "var(--amber)"
-                  : "var(--originator-own)",
+              color: s.play === "transcode" ? "var(--amber)" : "var(--originator-own)",
             }}
           >
             {s.play === "transcode" ? "TRANSCODE" : "DIRECT"}
           </span>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 9.5,
-              color: "var(--on-surface-variant)",
-            }}
-          >
-            {s.bitrate} Mbps · {s.codec}
-          </span>
+          <StreamQuality s={s} />
         </span>
+        {(s.videoDecision || s.audioDecision || s.subtitle?.codec) && <StreamPipeline s={s} />}
+        <TranscodeHealth s={s} />
       </div>
+
+      {/* Client + network */}
+      {(s.product || s.platform || s.qualityProfile || s.location || s.geo || s.ipPublic) && (
+        <div
+          style={{
+            borderTop: "1px solid var(--outline-variant)",
+            paddingTop: 10,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <StreamClient s={s} />
+          <StreamNetwork s={s} />
+        </div>
+      )}
     </div>
   );
 }

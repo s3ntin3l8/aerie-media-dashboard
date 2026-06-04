@@ -31,6 +31,7 @@ import {
   REQ_LABEL as _REQ_LABEL,
 } from "@/lib/display";
 import { useStreamProgress } from "@/components/hooks/useStreamProgress";
+import { StreamPipeline, StreamQuality, TranscodeHealth, StreamClient, StreamNetwork } from "@/components/streams/StreamDetail";
 
 type CSS = React.CSSProperties;
 
@@ -297,12 +298,17 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
               color: s.play === "transcode" ? "var(--amber)" : "var(--originator-own)",
             }}
           >
-            {s.play === "transcode" ? "TRANSCODE" : "DIRECT"}
+            {s.play === "transcode" ? `TRANSCODE${s.hwTranscode != null ? (s.hwTranscode ? " · HW" : " · SW") : ""}` : "DIRECT"}
           </span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
             {s.bitrate} Mbps · {s.codec}
           </span>
-          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+            {s.location && (
+              <span title={s.relayed ? "Relayed" : s.location.toUpperCase()} style={{ display: "inline-flex" }}>
+                <Icon name={s.relayed ? "vpn_lock" : s.local || s.location === "lan" ? "lan" : "public"} size={12} color="var(--on-surface-variant)" />
+              </span>
+            )}
             {svc ? <ServiceLogo service={svc} size={14} radius={3} /> : <Icon name="play_circle" size={12} color={catColor("stream")} />}
             {svc?.name ?? s.src}
           </span>
@@ -339,6 +345,168 @@ export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: 
         </div>
       )}
     </PanelShell>
+  );
+}
+
+// ── Rich session card (full Now Playing page) ─────────────────
+// Expands a single stream into its full story: transcode pipeline,
+// quality, transcode health, client and network. Reuses the shared
+// StreamDetail fragments (which degrade to nothing on missing data).
+export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/types").NowPlaying; role: Role; allServices: Service[]; users: import("@/lib/types").User[] }) {
+  const { cur, pct } = useStreamProgress(s);
+  const svc = allServices.find((x) => x.id === s.src);
+  const c = catColor("stream");
+  const u = users.find((x) => x.id === s.user);
+  const accent = s.src === "plex" ? "var(--originator-third-party)" : "var(--primary)";
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: "var(--surface-container)",
+        border: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)",
+        borderRadius: 16,
+        padding: 16,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        overflow: "hidden",
+      }}
+    >
+      <span style={{ position: "absolute", left: 0, top: 14, bottom: 14, width: 3, borderRadius: 9999, background: accent }} />
+      {/* header */}
+      <div style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>
+        <PosterTile title={s.title} kind={s.kind} cat="stream" w={56} art={s.art} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
+            <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 16, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {s.title}
+            </span>
+            {s.paused ? <Icon name="pause_circle" size={15} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={12} /> : null}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {s.ep || (s.kind === "movie" ? s.year : "")}
+            {s.ep || s.year ? " · " : ""}
+            {s.device}
+          </div>
+          {role === "admin" && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 6 }}>
+              <Avatar name={u ? u.name : s.user} size={17} color={accent} />
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
+            </span>
+          )}
+        </div>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--on-surface-variant)", flexShrink: 0 }}>
+          {svc ? <ServiceLogo service={svc} size={15} radius={3} /> : <Icon name="play_circle" size={13} color={c} />}
+          {svc?.name ?? s.src}
+        </span>
+      </div>
+
+      {/* progress */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: accent, minWidth: 40 }}>{fmtTime(cur)}</span>
+        <div style={{ flex: 1 }}>
+          <ProgressBar pct={pct} color={accent} />
+        </div>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 40, textAlign: "right" }}>{fmtTime(s.dur * 60)}</span>
+      </div>
+
+      {/* quality + play mode */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 9.5,
+            padding: "1px 6px",
+            borderRadius: 4,
+            fontWeight: 700,
+            background: `color-mix(in srgb, ${s.play === "transcode" ? "var(--amber)" : "var(--originator-own)"} 14%, transparent)`,
+            color: s.play === "transcode" ? "var(--amber)" : "var(--originator-own)",
+          }}
+        >
+          {s.play === "transcode" ? "TRANSCODE" : "DIRECT"}
+        </span>
+        <StreamQuality s={s} />
+      </div>
+
+      {/* transcode pipeline + health */}
+      {(s.videoDecision || s.audioDecision || s.subtitle?.codec) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <StreamPipeline s={s} />
+          <TranscodeHealth s={s} />
+        </div>
+      )}
+
+      {/* client + network */}
+      {(s.product || s.platform || s.qualityProfile || s.location || s.geo || s.ipPublic) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 11, borderTop: "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" }}>
+          <StreamClient s={s} />
+          <StreamNetwork s={s} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Summary strip for the full Now Playing page: stream count, transcode mix,
+// and aggregate bandwidth (from the snapshot's `bandwidth`, already fetched).
+function SummaryStat({ value, label, color }: { value: string; label: string; color?: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 800, color: color ?? "var(--on-surface)" }}>{value}</span>
+      <span style={{ fontSize: 10, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>{label}</span>
+    </div>
+  );
+}
+
+export function StreamsSummary({ streams }: { streams: import("@/lib/types").NowPlaying[] }) {
+  const { bandwidth } = useData();
+  const transcoding = streams.filter((s) => s.play === "transcode").length;
+  const direct = streams.length - transcoding;
+  const wan = streams.filter((s) => s.location === "wan" || (s.local === false && s.location !== "lan")).length;
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 26,
+        flexWrap: "wrap",
+        padding: "14px 18px",
+        background: "var(--surface-container-low)",
+        border: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)",
+        borderRadius: 14,
+        marginBottom: 14,
+      }}
+    >
+      <SummaryStat value={String(streams.length)} label="Streaming" color="var(--primary)" />
+      <SummaryStat value={String(transcoding)} label="Transcoding" color={transcoding ? "var(--amber)" : undefined} />
+      <SummaryStat value={String(direct)} label="Direct" color={direct ? "var(--originator-own)" : undefined} />
+      {wan > 0 && <SummaryStat value={String(wan)} label="Remote (WAN)" />}
+      {bandwidth && <SummaryStat value={`${bandwidth.totalMbps.toFixed(1)}`} label="Mbps total" />}
+      {bandwidth && bandwidth.wanMbps > 0 && <SummaryStat value={`${bandwidth.wanMbps.toFixed(1)}`} label="Mbps WAN" />}
+    </div>
+  );
+}
+
+// Full Now Playing page body: summary strip + rich session cards (or empty state).
+export function StreamsView({ role }: { role: Role }) {
+  const { nowPlaying, services: allServices, users } = useData();
+  const { user } = usePortal();
+  const visible = role !== "admin" ? nowPlaying.filter((s) => s.user === user.id) : nowPlaying;
+  if (visible.length === 0) {
+    return (
+      <PanelShell title={role === "admin" ? "Now Playing" : "Your Session"} icon="play_circle" accent="var(--primary)">
+        <Empty icon="play_disabled" line="Nothing playing" sub="Active streams will appear here with full transcode, quality, client and network detail." />
+      </PanelShell>
+    );
+  }
+  return (
+    <div>
+      {role === "admin" && <StreamsSummary streams={visible} />}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {visible.map((s) => (
+          <StreamCard key={s.id} s={s} role={role} allServices={allServices} users={users} />
+        ))}
+      </div>
+    </div>
   );
 }
 

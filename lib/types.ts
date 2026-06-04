@@ -61,6 +61,70 @@ export interface NowPlaying {
   paused: boolean;
   /** proxied cover-art URL (/api/artwork?…), if available */
   art?: string;
+
+  // ── enrichment (all optional; Jellyfin/missing data degrades gracefully) ──
+  // — client / app —
+  /** client app platform, e.g. "Chrome", "Android", "Roku" */
+  platform?: string;
+  platformVersion?: string;
+  /** Plex/Jellyfin product, e.g. "Plex Web", "Plex for Android" */
+  product?: string;
+  productVersion?: string;
+  /** device OS/hardware (Tautulli `device`, e.g. "OSX"), distinct from the player name */
+  devicePlatform?: string;
+  /** Plex quality profile, e.g. "Original", "20 Mbps 1080p" */
+  qualityProfile?: string;
+  // — network —
+  /** "lan" | "wan" | "cellular" */
+  location?: string;
+  ipPublic?: string;
+  secure?: boolean;
+  relayed?: boolean;
+  local?: boolean;
+  /** per-session bandwidth in kbps */
+  sessionKbps?: number;
+  /** resolved geo for the public IP (tier-2; only when Tautulli GeoLite2 is available) */
+  geo?: StreamGeo;
+  // — transcode detail (per stream) —
+  /** "direct play" | "copy" | "transcode" */
+  videoDecision?: string;
+  audioDecision?: string;
+  subtitleDecision?: string;
+  /** hardware-assisted transcode (decode or encode) */
+  hwTranscode?: boolean;
+  transcodeThrottled?: boolean;
+  /** transcode speed in ×realtime (e.g. 8.5) */
+  transcodeSpeed?: number;
+  /** transcode buffer fill 0..100 */
+  transcodeProgress?: number;
+  // — stream specs (source → delivered) —
+  /** e.g. "Dolby Vision/HDR10", "HDR", "SDR" */
+  dynamicRange?: string;
+  /** e.g. "24p" */
+  framerate?: string;
+  sourceContainer?: string;
+  streamContainer?: string;
+  /** source bitrate in kbps (delivered bitrate is `bitrate`, in Mbps) */
+  sourceKbps?: number;
+  /** delivered video codec (source codec is `codec`) */
+  streamCodec?: string;
+  audioCodec?: string;
+  streamAudioCodec?: string;
+  audioChannels?: number;
+  streamAudioChannels?: number;
+  /** simplified channel layout, e.g. "5.1" */
+  audioLayout?: string;
+  subtitle?: { codec?: string; language?: string; transcode?: boolean };
+}
+
+export interface StreamGeo {
+  city?: string;
+  region?: string;
+  country?: string;
+  /** ISO 3166-1 alpha-2 country code, e.g. "GB" */
+  code?: string;
+  lat?: number;
+  lon?: number;
 }
 
 export interface MediaRequest {

@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, IntegrationError } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -108,7 +108,50 @@ interface TautulliSession {
   state?: string;
   thumb?: string;
   grandparent_thumb?: string;
+  // — client / app —
+  platform?: string;
+  platform_version?: string;
+  product?: string;
+  product_version?: string;
+  device?: string;
+  quality_profile?: string;
+  // — network —
+  location?: string;
+  ip_address_public?: string;
+  secure?: string | number;
+  relayed?: string | number;
+  local?: string | number;
+  bandwidth?: string | number;
+  // — transcode detail —
+  video_decision?: string;
+  audio_decision?: string;
+  subtitle_decision?: string;
+  transcode_hw_decoding?: string | number;
+  transcode_hw_encoding?: string | number;
+  transcode_throttled?: string | number;
+  transcode_speed?: string | number;
+  transcode_progress?: string | number;
+  // — stream specs —
+  video_dynamic_range?: string;
+  video_framerate?: string;
+  container?: string;
+  stream_container?: string;
+  bitrate?: string; // source bitrate (kbps)
+  stream_video_codec?: string;
+  audio_codec?: string;
+  stream_audio_codec?: string;
+  audio_channels?: string | number;
+  stream_audio_channels?: string | number;
+  audio_channel_layout?: string;
+  subtitles?: string | number;
+  subtitle_codec?: string;
+  subtitle_language?: string;
 }
+
+/** Tautulli encodes booleans as "1"/"0" (sometimes numeric). */
+const ttBool = (v: string | number | undefined): boolean => v === "1" || v === 1;
+/** Strip channel-layout qualifiers, e.g. "5.1(side)" → "5.1". */
+const cleanLayout = (v: string | undefined): string | undefined => v?.replace(/\s*\([^)]*\)\s*/g, "").trim() || undefined;
 
 function mapTautulliSession(s: TautulliSession): NowPlaying {
   const kind: MediaKind = s.media_type === "episode" ? "series" : s.media_type === "track" ? "track" : "movie";
@@ -130,6 +173,43 @@ function mapTautulliSession(s: TautulliSession): NowPlaying {
     dur: s.duration ? Math.round(Number(s.duration) / 60000) : 0,
     paused: s.state === "paused",
     art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
+    // — client / app —
+    platform: s.platform || undefined,
+    platformVersion: s.platform_version || undefined,
+    product: s.product || undefined,
+    productVersion: s.product_version || undefined,
+    devicePlatform: s.device || undefined,
+    qualityProfile: s.quality_profile || undefined,
+    // — network —
+    location: s.location || undefined,
+    ipPublic: s.ip_address_public || undefined,
+    secure: ttBool(s.secure),
+    relayed: ttBool(s.relayed),
+    local: ttBool(s.local),
+    sessionKbps: s.bandwidth != null && s.bandwidth !== "" ? n(s.bandwidth) : undefined,
+    // — transcode detail —
+    videoDecision: s.video_decision || undefined,
+    audioDecision: s.audio_decision || undefined,
+    subtitleDecision: s.subtitle_decision || undefined,
+    hwTranscode: ttBool(s.transcode_hw_decoding) || ttBool(s.transcode_hw_encoding),
+    transcodeThrottled: ttBool(s.transcode_throttled),
+    transcodeSpeed: s.transcode_speed != null && s.transcode_speed !== "" ? n(s.transcode_speed) : undefined,
+    transcodeProgress: s.transcode_progress != null && s.transcode_progress !== "" ? n(s.transcode_progress) : undefined,
+    // — stream specs —
+    dynamicRange: s.video_dynamic_range || undefined,
+    framerate: s.video_framerate || undefined,
+    sourceContainer: s.container || undefined,
+    streamContainer: s.stream_container || undefined,
+    sourceKbps: s.bitrate != null && s.bitrate !== "" ? n(s.bitrate) : undefined,
+    streamCodec: s.stream_video_codec?.toUpperCase() || undefined,
+    audioCodec: s.audio_codec?.toUpperCase() || undefined,
+    streamAudioCodec: s.stream_audio_codec?.toUpperCase() || undefined,
+    audioChannels: s.audio_channels != null && s.audio_channels !== "" ? n(s.audio_channels) : undefined,
+    streamAudioChannels: s.stream_audio_channels != null && s.stream_audio_channels !== "" ? n(s.stream_audio_channels) : undefined,
+    audioLayout: cleanLayout(s.audio_channel_layout),
+    subtitle: ttBool(s.subtitles)
+      ? { codec: s.subtitle_codec?.toUpperCase() || undefined, language: s.subtitle_language || undefined, transcode: s.subtitle_decision === "transcode" || s.subtitle_decision === "burn" }
+      : undefined,
   };
 }
 
@@ -141,6 +221,30 @@ export interface TautulliActivity {
   wanKbps: number;
 }
 
+/**
+ * Resolve a public IP to a city/country via Tautulli's `get_geoip_lookup`
+ * (requires the MaxMind GeoLite2 DB in Tautulli — returns undefined if absent
+ * or on any error). Cached per-IP for 6h: IP→geo is stable and getSnapshot()
+ * polls every few seconds, so we must not re-look-up on every poll.
+ */
+async function tautulliGeoIp(ip: string): Promise<StreamGeo | undefined> {
+  return cached(`tautulli:geoip:${ip}`, 6 * 60 * 60 * 1000, async () => {
+    try {
+      const { baseUrl, apiKey } = await creds("tautulli");
+      const r = await fetchJson<{ response: { result?: string; data?: { city?: string; region?: string; country?: string; code?: string; latitude?: number; longitude?: number } } }>(
+        `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_geoip_lookup&ip_address=${encodeURIComponent(ip)}`,
+        { service: "tautulli" },
+      );
+      if (r.response?.result !== "success" || !r.response.data) return undefined;
+      const g = r.response.data;
+      if (!g.city && !g.country && !g.code) return undefined;
+      return { city: g.city, region: g.region, country: g.country, code: g.code, lat: g.latitude, lon: g.longitude };
+    } catch {
+      return undefined;
+    }
+  });
+}
+
 /** Now-playing sessions + aggregate bandwidth from a single `get_activity` call. */
 export async function tautulliActivity(): Promise<TautulliActivity> {
   const { baseUrl, apiKey } = await creds("tautulli");
@@ -149,8 +253,19 @@ export async function tautulliActivity(): Promise<TautulliActivity> {
     { service: "tautulli" },
   );
   const d = data.response?.data;
+  const sessions = (d?.sessions ?? []).map(mapTautulliSession);
+
+  // Tier-2 geo: resolve distinct non-LAN public IPs (cached per-IP). Best-effort —
+  // a failed lookup just leaves `geo` undefined and the card omits the location line.
+  const ips = [...new Set(sessions.filter((s) => !s.local && s.ipPublic).map((s) => s.ipPublic as string))];
+  if (ips.length) {
+    const geos = new Map<string, StreamGeo | undefined>();
+    await Promise.all(ips.map(async (ip) => geos.set(ip, await tautulliGeoIp(ip))));
+    for (const s of sessions) if (s.ipPublic && geos.get(s.ipPublic)) s.geo = geos.get(s.ipPublic);
+  }
+
   return {
-    sessions: (d?.sessions ?? []).map(mapTautulliSession),
+    sessions,
     totalKbps: n(d?.total_bandwidth),
     wanKbps: n(d?.wan_bandwidth),
   };
@@ -302,12 +417,22 @@ interface JellyfinMediaStream {
   Height?: number;
   Width?: number;
   BitRate?: number; // bits/s
+  Channels?: number;
+  ChannelLayout?: string;
+  VideoRange?: string; // "SDR" | "HDR"
+  VideoRangeType?: string; // "SDR" | "HDR10" | "DOVI" | …
+  RealFrameRate?: number;
+  AverageFrameRate?: number;
+  Language?: string;
 }
 interface JellyfinSession {
   Id: string;
   UserId: string;
   UserName: string;
   DeviceName: string;
+  Client?: string;
+  ApplicationVersion?: string;
+  RemoteEndPoint?: string;
   NowPlayingItem?: {
     Id: string;
     Name: string;
@@ -317,10 +442,39 @@ interface JellyfinSession {
     SeriesId?: string;
     RunTimeTicks?: number;
     Height?: number;
+    Container?: string;
     MediaStreams?: JellyfinMediaStream[];
   };
   PlayState?: { IsPaused?: boolean; PositionTicks?: number; PlayMethod?: string };
-  TranscodingInfo?: { Bitrate?: number; VideoCodec?: string };
+  TranscodingInfo?: {
+    Bitrate?: number;
+    VideoCodec?: string;
+    AudioCodec?: string;
+    Container?: string;
+    IsVideoDirect?: boolean;
+    IsAudioDirect?: boolean;
+    AudioChannels?: number;
+    Framerate?: number;
+    CompletionPercentage?: number;
+    HardwareAccelerationType?: string;
+  };
+}
+
+/** Channel count → friendly layout label (2→"2.0", 6→"5.1", 8→"7.1"). */
+function chLayout(ch: number | undefined): string | undefined {
+  if (!ch) return undefined;
+  if (ch === 1) return "1.0";
+  if (ch === 2) return "2.0";
+  if (ch === 6) return "5.1";
+  if (ch === 8) return "7.1";
+  return `${ch}ch`;
+}
+
+/** Is an IP address in a private/LAN range? (handles IPv4-mapped IPv6.) */
+function isLanIp(ip: string | undefined): boolean {
+  if (!ip) return false;
+  const v4 = ip.replace(/^::ffff:/i, "");
+  return /^(10\.|127\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(v4) || v4 === "::1" || v4.startsWith("fc") || v4.startsWith("fd");
 }
 
 /** Map a pixel height to a friendly resolution label. */
@@ -347,9 +501,21 @@ export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
       const durMin = item.RunTimeTicks ? Math.round(item.RunTimeTicks / 600_000_000) : 0;
       const pos = item.RunTimeTicks && s.PlayState?.PositionTicks ? s.PlayState.PositionTicks / item.RunTimeTicks : 0;
       const video = item.MediaStreams?.find((m) => m.Type === "Video");
-      const transcoding = s.PlayState?.PlayMethod === "Transcode";
-      const bps = transcoding ? s.TranscodingInfo?.Bitrate : video?.BitRate;
-      const codec = (transcoding ? s.TranscodingInfo?.VideoCodec : video?.Codec)?.toUpperCase();
+      const audio = item.MediaStreams?.find((m) => m.Type === "Audio");
+      const sub = item.MediaStreams?.find((m) => m.Type === "Subtitle");
+      const ti = s.TranscodingInfo;
+      const method = s.PlayState?.PlayMethod;
+      const transcoding = method === "Transcode";
+      const bps = transcoding ? ti?.Bitrate : video?.BitRate;
+      const codec = (transcoding ? ti?.VideoCodec : video?.Codec)?.toUpperCase();
+      // Decisions: DirectPlay → "direct play", DirectStream → "copy" (remux),
+      // Transcode → per-track direct flags decide copy vs transcode.
+      const trackDecision = (direct: boolean | undefined): string =>
+        method === "DirectPlay" ? "direct play" : !transcoding ? "copy" : direct ? "copy" : "transcode";
+      const range = video?.VideoRangeType || video?.VideoRange;
+      const fps = video?.RealFrameRate ?? video?.AverageFrameRate;
+      const ip = s.RemoteEndPoint?.replace(/:\d+$/, "").replace(/^::ffff:/i, "");
+      const lan = isLanIp(s.RemoteEndPoint);
       return {
         id: `jf-${s.Id}`,
         title: kind === "series" ? item.SeriesName || item.Name : item.Name,
@@ -367,6 +533,31 @@ export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
         dur: durMin,
         paused: Boolean(s.PlayState?.IsPaused),
         art: item.Id ? `/api/artwork?svc=jellyfin&ref=${encodeURIComponent(kind === "series" && item.SeriesId ? item.SeriesId : item.Id)}` : undefined,
+        // — client / app —
+        product: s.Client || undefined,
+        productVersion: s.ApplicationVersion || undefined,
+        devicePlatform: s.DeviceName || undefined,
+        // — network —
+        location: lan ? "lan" : "wan",
+        ipPublic: ip || undefined,
+        local: lan,
+        // — transcode detail —
+        videoDecision: trackDecision(ti?.IsVideoDirect),
+        audioDecision: trackDecision(ti?.IsAudioDirect),
+        hwTranscode: Boolean(ti?.HardwareAccelerationType),
+        transcodeProgress: ti?.CompletionPercentage != null ? Math.round(ti.CompletionPercentage) : undefined,
+        // — stream specs —
+        dynamicRange: range || undefined,
+        framerate: fps ? `${Math.round(fps)}p` : undefined,
+        sourceContainer: item.Container || undefined,
+        streamContainer: ti?.Container || undefined,
+        streamCodec: ti?.VideoCodec?.toUpperCase() || undefined,
+        audioCodec: audio?.Codec?.toUpperCase() || undefined,
+        streamAudioCodec: ti?.AudioCodec?.toUpperCase() || undefined,
+        audioChannels: audio?.Channels,
+        streamAudioChannels: ti?.AudioChannels,
+        audioLayout: cleanLayout(audio?.ChannelLayout) || chLayout(audio?.Channels),
+        subtitle: sub ? { codec: sub.Codec?.toUpperCase() || undefined, language: sub.Language || undefined, transcode: transcoding } : undefined,
       } satisfies NowPlaying;
     });
 }

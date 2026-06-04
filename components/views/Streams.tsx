@@ -6,7 +6,7 @@
 // ============================================================
 import React from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { NowPlayingPanel } from "@/components/panels";
+import { StreamsView } from "@/components/panels";
 import { PageHeader } from "@/components/views/shared";
 
 export function Streams() {
@@ -23,7 +23,7 @@ export function Streams() {
         className="custom-scrollbar aerie-page-pad"
         style={{ flex: 1, overflowY: "auto", maxWidth: 960, margin: "0 auto", width: "100%" }}
       >
-        <NowPlayingPanel role={role} big />
+        <StreamsView role={role} />
       </div>
     </section>
   );
