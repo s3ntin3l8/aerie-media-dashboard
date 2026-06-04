@@ -62,7 +62,6 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   role: text("role").notNull().default("user"), // admin | user
-  reqQuota: integer("req_quota").notNull().default(5),
   /** scrypt hash for local-credentials accounts; null for OIDC users. */
   passwordHash: text("password_hash"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

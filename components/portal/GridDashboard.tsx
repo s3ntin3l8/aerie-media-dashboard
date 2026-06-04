@@ -9,7 +9,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/primitives";
 import { GRID, gridSort, packAround, type Tile } from "@/components/portal/gridLayout";
-import { widgetMeta } from "@/components/portal/widgetCatalog";
+import { widgetMeta, hasSettings } from "@/components/portal/widgetCatalog";
 
 type CSS = React.CSSProperties;
 
@@ -30,7 +30,27 @@ interface GridDashboardProps {
   editing: boolean;
   renderWidget: (item: Tile, stacked: boolean) => React.ReactNode;
   onRemove: (uid: string) => void;
+  onConfigure: (uid: string) => void;
 }
+
+// floating configure (gear) button shared by grid + stack
+const configBtnStyle: CSS = {
+  position: "absolute",
+  top: 8,
+  right: 40,
+  width: 24,
+  height: 24,
+  borderRadius: 7,
+  zIndex: 6,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+  border: "none",
+  background: "color-mix(in srgb, var(--on-surface) 12%, var(--surface-container-highest))",
+  color: "var(--on-surface-variant)",
+  boxShadow: "var(--shadow-sm)",
+};
 
 // floating remove button shared by grid + stack
 const removeBtnStyle: CSS = {
@@ -62,7 +82,7 @@ function tileChrome(editing: boolean, isActive: boolean): CSS {
   };
 }
 
-export function GridDashboard({ layout, onChange, editing, renderWidget, onRemove }: GridDashboardProps) {
+export function GridDashboard({ layout, onChange, editing, renderWidget, onRemove, onConfigure }: GridDashboardProps) {
   const { cols, rowH, gap, stackBelow } = GRID;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(1180);
@@ -166,6 +186,16 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
           return (
             <div key={item.uid} style={{ position: "relative", height: hUnits * rowH + (hUnits - 1) * gap, borderRadius: "var(--radius-xl)" }}>
               <div style={{ height: "100%", pointerEvents: editing ? "none" : "auto" }}>{renderWidget(item, true)}</div>
+              {editing && hasSettings(item.type) && (
+                <button
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => onConfigure(item.uid)}
+                  title="Widget settings"
+                  style={configBtnStyle}
+                >
+                  <Icon name="settings" size={14} />
+                </button>
+              )}
               {editing && (
                 <button onClick={() => onRemove(item.uid)} title="Remove" style={removeBtnStyle}>
                   <Icon name="close" size={15} />
@@ -243,6 +273,16 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
 
             {editing && (
               <>
+                {hasSettings(item.type) && (
+                  <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => onConfigure(item.uid)}
+                    title="Widget settings"
+                    style={configBtnStyle}
+                  >
+                    <Icon name="settings" size={14} />
+                  </button>
+                )}
                 <button onPointerDown={(e) => e.stopPropagation()} onClick={() => onRemove(item.uid)} title="Remove widget" style={removeBtnStyle}>
                   <Icon name="close" size={15} />
                 </button>

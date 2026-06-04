@@ -50,6 +50,13 @@
       "when": 1780494742369,
       "tag": "0006_fresh_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1780555670332,
+      "tag": "0007_bored_thanos",
+      "breakpoints": true
     }
   ]
 }

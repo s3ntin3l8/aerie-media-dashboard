@@ -9,8 +9,9 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { getSessionUser } from "@/lib/session";
 import { getServiceSecret } from "@/lib/integrations/registry";
-import { overseerrCreateRequest, overseerrReview, overseerrComment, overseerrRequests, overseerrUsers, matchOverseerrUserId } from "@/lib/integrations/clients";
-import type { AppUser, DiscoverItem } from "@/lib/types";
+import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
+import { QUALITY_PROFILES } from "@/lib/categories";
+import type { AppUser, DiscoverItem, QualityProfile, RequestStatus } from "@/lib/types";
 
 async function overseerrOn(): Promise<boolean> {
   return (await getServiceSecret("overseerr")) != null;
@@ -42,15 +43,25 @@ async function resolveOverseerrUserId(user: AppUser): Promise<number | undefined
   }
 }
 
-/** The portal-side request quota for a user (DB `users.req_quota`), or null if unknown. */
-async function userQuota(portalUserId: string): Promise<number | null> {
-  try {
-    await ensureDb();
-    const rows = await db.select({ q: schema.users.reqQuota }).from(schema.users).where(eq(schema.users.id, portalUserId)).limit(1);
-    return rows[0]?.q ?? null;
-  } catch {
-    return null;
-  }
+function parseRequestId(id: string): number | null {
+  const numeric = Number(id.replace(/^os-/, ""));
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function sameEmail(a: string | undefined, b: string | undefined): boolean {
+  const left = a?.trim().toLowerCase();
+  const right = b?.trim().toLowerCase();
+  return Boolean(left && right && left === right);
+}
+
+async function canMutateRequest(user: AppUser, requestId: number): Promise<{ ok: true; status: RequestStatus } | { ok: false; message: string }> {
+  const request = await overseerrRequestDetails(requestId);
+  if (user.role === "admin") return { ok: true, status: request.status };
+
+  const userId = await resolveOverseerrUserId(user);
+  const ownsById = userId != null && request.requesterId === userId;
+  const ownsByEmail = sameEmail(request.requesterEmail, user.email);
+  return ownsById || ownsByEmail ? { ok: true, status: request.status } : { ok: false, message: "forbidden" };
 }
 
 export interface SubmitResult {
@@ -58,37 +69,43 @@ export interface SubmitResult {
   message: string;
 }
 
+/** Return live quality profiles for the request modal. Falls back to static list when Overseerr is not configured. */
+export async function getQualityProfiles(mediaType: "movie" | "tv"): Promise<QualityProfile[]> {
+  if (!(await overseerrOn())) return QUALITY_PROFILES;
+  const profiles = mediaType === "movie"
+    ? await overseerrMovieProfiles().catch(() => [])
+    : await overseerrTvProfiles().catch(() => []);
+  return profiles.length > 0 ? profiles : QUALITY_PROFILES;
+}
+
 /** Create an Overseerr request for the signed-in user. */
-export async function submitRequest(pick: DiscoverItem, seasons: number[]): Promise<SubmitResult> {
+export async function submitRequest(pick: DiscoverItem, seasons: number[], quality?: string): Promise<SubmitResult> {
   const user = await getSessionUser();
   if (!(await overseerrOn())) {
     // Dev/mock: nothing to persist; the modal shows its own success panel.
-    return { ok: true, message: `Requested “${pick.title}” — pending approval` };
+    return { ok: true, message: `Requested "${pick.title}" — pending approval` };
   }
   try {
-    // Portal-side quota gate: count the user's current Overseerr requests (by email)
-    // against their DB quota. Advisory — not atomic against Overseerr — but the modal
-    // disables re-submit so double-submits are unlikely.
-    // NOTE: this reuses overseerrRequests() (a list fetch + enrichMedia on cold cache).
-    // Overseerr's user object usually exposes `requestCount` via /api/v1/user — if so,
-    // that's a cheaper, authoritative count that also avoids the take=50 window. Switch
-    // to it once confirmed against the live instance.
-    const quota = await userQuota(user.id);
-    if (quota != null && user.email) {
-      const key = user.email.trim().toLowerCase();
-      const used = (await overseerrRequests()).filter((r) => r.requesterEmail?.trim().toLowerCase() === key).length;
-      if (used >= quota) return { ok: false, message: `Request limit reached (${used}/${quota})` };
-    }
-    // Attribution: create as the matched Overseerr user when we can resolve one
-    // (explicit link or email match), otherwise it's created as the API key's owner.
+    // Quota gate: use Overseerr's authoritative restricted flag (respects rolling-window days).
     const userId = await resolveOverseerrUserId(user);
+    if (userId != null) {
+      const quota = await overseerrUserQuota(userId);
+      const isMovie = pick.kind !== "series";
+      const q = isMovie ? quota.movie : quota.tv;
+      if (q.restricted) {
+        const label = isMovie ? "movie" : "TV";
+        return { ok: false, message: `${label} request limit reached (${q.used}/${q.limit ?? "∞"})` };
+      }
+    }
+    const profileId = quality && quality !== "default" ? (Number(quality) || undefined) : undefined;
     await overseerrCreateRequest({
       tmdbId: Number(pick.id),
       mediaType: pick.kind === "series" ? "tv" : "movie",
       seasons: pick.kind === "series" ? seasons : undefined,
       userId,
+      profileId,
     });
-    return { ok: true, message: `Requested “${pick.title}”` };
+    return { ok: true, message: `Requested "${pick.title}"` };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Request failed" };
   }
@@ -99,8 +116,8 @@ export async function reviewRequest(id: string, action: "approve" | "decline", n
   const user = await getSessionUser();
   if (user.role !== "admin") return { ok: false, message: "forbidden" };
   if (!(await overseerrOn())) return { ok: true, message: action === "approve" ? "Approved" : "Declined" };
-  const numeric = Number(id.replace(/^os-/, ""));
-  if (!Number.isFinite(numeric)) return { ok: true, message: "Updated" }; // mock id → no upstream
+  const numeric = parseRequestId(id);
+  if (numeric == null) return { ok: true, message: "Updated" }; // mock id → no upstream
   try {
     await overseerrReview(numeric, action);
     if (note?.trim() && mediaOverseerrId) {
@@ -111,4 +128,49 @@ export async function reviewRequest(id: string, action: "approve" | "decline", n
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Action failed" };
   }
+}
+
+/** Cancel/delete a request. Server-side ownership is enforced before using the shared Overseerr mutation path. */
+export async function deleteRequest(id: string): Promise<SubmitResult> {
+  if (!(await overseerrOn())) return { ok: true, message: "Deleted" };
+  const numeric = parseRequestId(id);
+  if (numeric == null) return { ok: true, message: "Deleted" };
+  try {
+    const user = await getSessionUser();
+    const allowed = await canMutateRequest(user, numeric);
+    if (!allowed.ok) return { ok: false, message: allowed.message };
+    if (allowed.status !== "pending" && allowed.status !== "approved") {
+      return { ok: false, message: "Cannot cancel this request" };
+    }
+    await overseerrDeleteRequest(numeric);
+    bustCache("overseerr:requestCounts");
+    return { ok: true, message: "Request cancelled" };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Could not cancel" };
+  }
+}
+
+/** Edit an existing pending request (seasons + quality profile). */
+export async function editRequest(id: string, seasons: number[], quality?: string): Promise<SubmitResult> {
+  if (!(await overseerrOn())) return { ok: true, message: "Updated" };
+  const numeric = parseRequestId(id);
+  if (numeric == null) return { ok: true, message: "Updated" };
+  try {
+    const user = await getSessionUser();
+    const allowed = await canMutateRequest(user, numeric);
+    if (!allowed.ok) return { ok: false, message: allowed.message };
+    if (allowed.status !== "pending") return { ok: false, message: "Only pending requests can be edited" };
+    const profileId = quality && quality !== "default" ? (Number(quality) || undefined) : undefined;
+    await overseerrEditRequest(numeric, { seasons, profileId });
+    bustCache("overseerr:requestCounts");
+    return { ok: true, message: "Request updated" };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Could not update" };
+  }
+}
+
+/** Fetch the user's Plex watchlist for the request modal. */
+export async function getWatchlist(): Promise<DiscoverItem[]> {
+  if (!(await overseerrOn())) return [];
+  return overseerrWatchlist().catch(() => []);
 }

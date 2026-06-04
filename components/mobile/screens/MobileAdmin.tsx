@@ -7,16 +7,18 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { MiniStat, SectionHead } from "@/components/mobile/mcommon";
 import type { User, NowPlaying } from "@/lib/types";
 
-function QuotaBar({ used, quota }: { used: number; quota: number }) {
-  const pct = Math.min(100, quota > 0 ? (used / quota) * 100 : 0);
-  const full = used >= quota;
-  const col = full ? "var(--error)" : pct > 70 ? "var(--amber)" : "var(--originator-own)";
+import type { OverseerrQuota } from "@/lib/types";
+
+function QuotaBar({ quota, label }: { quota: OverseerrQuota; label: string }) {
+  const pct = Math.min(100, quota.limit ? (quota.used / quota.limit) * 100 : 0);
+  const col = quota.restricted ? "var(--error)" : pct > 70 ? "var(--amber)" : "var(--originator-own)";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 92 }}>
-      <div style={{ flex: 1, height: 4, borderRadius: 9999, background: "var(--surface-container-highest)", overflow: "hidden" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--on-surface-variant)", width: 26, flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, height: 4, borderRadius: 9999, background: "var(--surface-container-highest)", overflow: "hidden", minWidth: 60 }}>
         <div style={{ width: pct + "%", height: "100%", background: col, borderRadius: 9999 }} />
       </div>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: full ? "var(--error)" : "var(--on-surface-variant)", flexShrink: 0 }}>{used}/{quota}</span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: quota.restricted ? "var(--error)" : "var(--on-surface-variant)", flexShrink: 0 }}>{quota.used}/{quota.limit ?? "∞"}</span>
     </div>
   );
 }
@@ -47,10 +49,11 @@ function MemberRow({ u, nowPlaying }: { u: User; nowPlaying: NowPlaying[] }) {
           )}
         </div>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</div>
-        {u.reqQuota > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: "var(--font-body)", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>Requests</span>
-            <QuotaBar used={u.reqUsed} quota={u.reqQuota} />
+        {(u.movieQuota || u.tvQuota) && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--on-surface-variant)", marginBottom: 1 }}>Requests</span>
+            {u.movieQuota && <QuotaBar quota={u.movieQuota} label="Film" />}
+            {u.tvQuota && <QuotaBar quota={u.tvQuota} label="TV" />}
           </div>
         )}
         {session && (

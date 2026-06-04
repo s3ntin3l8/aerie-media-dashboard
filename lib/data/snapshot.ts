@@ -6,7 +6,7 @@
 // panel. Live calls only fire for services that have a stored secret.
 // ============================================================
 import "server-only";
-import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats } from "@/lib/types";
+import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
@@ -16,7 +16,15 @@ import {
   jellyfinRecentlyAdded,
   overseerrRequests,
   overseerrUsers,
+  overseerrUserQuota,
   overseerrVersion,
+  overseerrTrending,
+  overseerrPopularMovies,
+  overseerrPopularTv,
+  overseerrUpcomingMovies,
+  overseerrWatchlist,
+  overseerrRequestCounts,
+  matchOverseerrUserId,
   arrQueue,
   arrDiskSpace,
   arrHealth,
@@ -70,6 +78,10 @@ export interface Snapshot {
   beszelConfigured: boolean;
   /** persisted Beszel system id (null → the picker defaults to the first system) */
   beszelSystemId: string | null;
+  /** Overseerr discover feeds — null when Overseerr not configured */
+  discover: { trending: DiscoverItem[]; popularMovies: DiscoverItem[]; popularTv: DiscoverItem[]; upcomingMovies: DiscoverItem[]; watchlist: DiscoverItem[] } | null;
+  /** Authoritative request counts from Overseerr — null when unconfigured */
+  requestCounts: { total: number; pending: number; approved: number; processing: number; failed: number; available: number } | null;
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -122,6 +134,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     health, ttAct, jfNow, osReq, osUsers, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members, metricsResult,
     sonarrDisk, radarrDisk, sonarrHealth, radarrHealth, osIssues, sonarrCal, radarrCal, sonarrHist, radarrHist, ttTop,
     jfLibs, jfRecent, osVersion,
+    osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
   ] = await Promise.all([
     gatusOn ? safe(gatusHealth) : Promise.resolve(null),
     ttOn ? safe(tautulliActivity) : Promise.resolve(null),
@@ -150,6 +163,13 @@ export async function getSnapshot(): Promise<Snapshot> {
     jfOn ? safe(jellyfinLibraries) : Promise.resolve(null),
     jfOn ? safe(jellyfinRecentlyAdded) : Promise.resolve(null),
     osOn ? safe(overseerrVersion) : Promise.resolve(null),
+    // Discover feeds (Overseerr → TMDB) — cached 1h inside the functions
+    osOn ? safe(overseerrTrending) : Promise.resolve(null),
+    osOn ? safe(overseerrPopularMovies) : Promise.resolve(null),
+    osOn ? safe(overseerrPopularTv) : Promise.resolve(null),
+    osOn ? safe(overseerrUpcomingMovies) : Promise.resolve(null),
+    osOn ? safe(overseerrWatchlist) : Promise.resolve(null),
+    osOn ? safe(overseerrRequestCounts) : Promise.resolve(null),
   ]);
 
   // services: DB config merged with live Gatus health. Without a Gatus
@@ -204,21 +224,25 @@ export async function getSnapshot(): Promise<Snapshot> {
   // Portal ids whose email resolves to a real Overseerr account → "linked".
   const overseerrEmails = new Set((osUsers ?? []).map((u) => u.email?.trim().toLowerCase()).filter(Boolean) as string[]);
 
-  // ── members: DB-mirrored, with reqUsed/watching/groups derived from live data ──
-  const users: User[] = members.map((m) => ({
-    id: m.id,
-    name: m.name,
-    handle: m.email.split("@")[0] || m.id,
-    role: m.role,
-    email: m.email,
-    // "linked" = the member's email resolves to an Overseerr account (or a manual DB link).
-    linked: overseerrEmails.has(m.email?.trim().toLowerCase()) || m.linked,
-    groups: m.role === "admin" ? [env.adminGroup] : ["friends"],
-    // reqUsed counts the member's Overseerr requests (within the last 50 fetched — see overseerrRequests take=50).
-    reqUsed: requests.filter((r) => r.portalUser === m.id).length,
-    reqQuota: m.reqQuota,
-    watching: nowPlaying.find((np) => np.user === m.id)?.id ?? null,
-  }));
+  // ── members: DB-mirrored, quota fetched live from Overseerr (cached 3 min per user) ──
+  const users: User[] = await Promise.all(
+    members.map(async (m) => {
+      const oUserId = matchOverseerrUserId(osUsers ?? [], m.email);
+      const quota = oUserId != null ? await safe(() => overseerrUserQuota(oUserId)) : null;
+      return {
+        id: m.id,
+        name: m.name,
+        handle: m.email.split("@")[0] || m.id,
+        role: m.role,
+        email: m.email,
+        linked: overseerrEmails.has(m.email?.trim().toLowerCase()) || m.linked,
+        groups: m.role === "admin" ? [env.adminGroup] : ["friends"],
+        movieQuota: quota?.movie ?? null,
+        tvQuota: quota?.tv ?? null,
+        watching: nowPlaying.find((np) => np.user === m.id)?.id ?? null,
+      };
+    }),
+  );
 
   // ── library: Tautulli (Plex) sections win; fall back to Jellyfin so a Jellyfin-only
   // deployment still gets library counts. 24h-plays row is Tautulli-only. ──
@@ -255,10 +279,21 @@ export async function getSnapshot(): Promise<Snapshot> {
     .slice(0, 30);
   const topStats: TopStats | null = ttTop ?? null;
 
+  const discover = osOn && (osTrending || osPopularMovies || osPopularTv || osUpcomingMovies || osWatchlist)
+    ? {
+        trending: osTrending ?? [],
+        popularMovies: osPopularMovies ?? [],
+        popularTv: osPopularTv ?? [],
+        upcomingMovies: osUpcomingMovies ?? [],
+        watchlist: osWatchlist ?? [],
+      }
+    : null;
+
   return {
     services, nowPlaying, requests, users, library, recent, queue, plays24h, bandwidth,
     storage, issues, arrHealth: arrHealthIssues, upcoming, downloads, topStats,
     groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
     metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
+    discover, requestCounts: osRequestCounts ?? null,
   };
 }

@@ -9,7 +9,8 @@ import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
 import { getSessionUser } from "@/lib/session";
 import { setDeploymentSetting } from "@/lib/integrations/registry";
-import { prometheusInstances, beszelSystems, detectVersion, probeVersion } from "@/lib/integrations/clients";
+import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId } from "@/lib/integrations/clients";
+import type { OverseerrQuotaSettings } from "@/lib/integrations/clients";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -27,12 +28,17 @@ export async function setVisibility(serviceId: string, groupName: string, visibl
   revalidatePath("/admin");
 }
 
-/** Set a member's request quota (portal-side cap). */
-export async function setUserQuota(userId: string, quota: number) {
+/** Write a member's movie + TV request quotas to Overseerr. */
+export async function setUserOverseerrQuota(userId: string, settings: OverseerrQuotaSettings) {
   await requireAdmin();
   await ensureDb();
-  const n = Math.max(0, Math.floor(Number(quota) || 0));
-  await db.update(schema.users).set({ reqQuota: n }).where(eq(schema.users.id, userId));
+  const rows = await db.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+  const email = rows[0]?.email;
+  if (!email) throw new Error("User not found");
+  const oUsers = await overseerrUsers();
+  const oUserId = matchOverseerrUserId(oUsers, email);
+  if (oUserId == null) throw new Error("User has no Overseerr account");
+  await overseerrUpdateUserQuota(oUserId, settings);
   revalidatePath("/admin");
 }
 

@@ -4,19 +4,19 @@
 //   mode 'request': member discovers a title → quality/seasons → submit
 //   mode 'review' : admin approves/declines a pending request with a note
 // Search hits /api/discover (real Overseerr when keyed, else empty results);
-// quality profiles are a static list (lib/categories.ts). Approve/decline reuse
-// the optimistic path in the Requests view.
+// quality profiles are fetched live from Radarr/Sonarr via Overseerr.
+// Approve/decline reuse the optimistic path in the Requests view.
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
-import type { DiscoverItem, MediaRequest, RequestStatus, User } from "@/lib/types";
+import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, User } from "@/lib/types";
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { QUALITY_PROFILES } from "@/lib/categories";
+import { getQualityProfiles } from "@/app/(portal)/requests/actions";
+import { REQ_TONE as RQ_TONE, REQ_LABEL as RQ_LABEL } from "@/lib/display";
 
-const RQ_TONE: Record<string, string> = { available: "originator-own", approved: "originator-court", pending: "amber", declined: "error" };
-const RQ_LABEL: Record<string, string> = { available: "In library", approved: "Approved", pending: "Requested", declined: "Declined" };
 const REQ_C = "var(--originator-court)";
 
 function StateBadge({ state }: { state: RequestStatus | null }) {
@@ -29,7 +29,10 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 40);
   }, []);
-  const atQuota = me.reqUsed >= me.reqQuota;
+  // Show the combined quota state: restricted if either type is restricted (pre-pick), or just movie/TV when known.
+  const movieAtQuota = me.movieQuota?.restricted ?? false;
+  const tvAtQuota = me.tvQuota?.restricted ?? false;
+  const atQuota = movieAtQuota && tvAtQuota;
 
   // Type-ahead against /api/discover (real Overseerr search, or mock catalog),
   // debounced with an AbortController so superseded keystrokes cancel.
@@ -61,22 +64,28 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
           <Icon name="search" size={18} color="var(--on-surface-variant)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
           <input ref={inputRef} className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search movies & shows…" style={{ paddingLeft: 40, paddingTop: 11, paddingBottom: 11, fontSize: 14 }} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 11 }}>
-          <Icon name="data_usage" size={14} color={atQuota ? "var(--amber)" : REQ_C} />
-          <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>Request quota</span>
-          <div style={{ flex: 1, maxWidth: 130 }}>
-            <ProgressBar pct={me.reqQuota ? (me.reqUsed / me.reqQuota) * 100 : 0} color={atQuota ? "var(--amber)" : REQ_C} h={5} />
+        {me.movieQuota != null && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 11, flexWrap: "wrap", rowGap: 4 }}>
+            {([["movie", "Movies", me.movieQuota, movieAtQuota], ["live_tv", "TV", me.tvQuota, tvAtQuota]] as const).map(([icon, label, quota, at]) => quota && (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 120 }}>
+                <Icon name={icon} size={13} color={at ? "var(--amber)" : REQ_C} />
+                <span style={{ fontSize: 11, color: "var(--on-surface-variant)" }}>{label}</span>
+                <div style={{ flex: 1, minWidth: 44 }}>
+                  <ProgressBar pct={quota.limit ? Math.min(100, (quota.used / quota.limit) * 100) : 0} color={at ? "var(--amber)" : REQ_C} h={5} />
+                </div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: at ? "var(--amber)" : "var(--on-surface-variant)", fontWeight: at ? 700 : 400 }}>
+                  {quota.used}/{quota.limit ?? "∞"}
+                </span>
+              </div>
+            ))}
           </div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: atQuota ? "var(--amber)" : "var(--on-surface-variant)", fontWeight: atQuota ? 700 : 400 }}>
-            {me.reqUsed}/{me.reqQuota} used
-          </span>
-        </div>
+        )}
       </div>
       <div style={{ padding: "6px 14px 16px" }}>
         {atQuota && (
           <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "6px 6px 10px", padding: "9px 13px", borderRadius: 10, background: "color-mix(in srgb, var(--amber) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 28%, transparent)" }}>
             <Icon name="info" size={16} color="var(--amber)" />
-            <span style={{ fontSize: 12, color: "var(--on-surface)" }}>You&rsquo;ve used all your requests. Ask an admin to raise your quota.</span>
+            <span style={{ fontSize: 12, color: "var(--on-surface)" }}>You&rsquo;ve used all your requests for both movies and TV. Ask an admin to raise your quota.</span>
           </div>
         )}
         {results.length === 0 ? (
@@ -85,7 +94,8 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
           results.map((d) => {
             const inLib = d.state === "available";
             const requested = d.state === "pending" || d.state === "approved";
-            const blocked = inLib || requested || atQuota;
+            const itemAtQuota = d.kind === "series" ? tvAtQuota : movieAtQuota;
+            const blocked = inLib || requested || itemAtQuota;
             return (
               <button
                 key={d.id}
@@ -93,7 +103,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
                 disabled={blocked}
                 onClick={() => !blocked && onPick(d)}
                 className="req-result"
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 13, padding: "9px 10px", borderRadius: 11, border: "none", background: "transparent", cursor: blocked ? "default" : "pointer", textAlign: "left", opacity: atQuota && !blocked ? 0.5 : 1 }}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 13, padding: "9px 10px", borderRadius: 11, border: "none", background: "transparent", cursor: blocked ? "default" : "pointer", textAlign: "left" }}
               >
                 <PosterTile title={d.title} kind={d.kind} cat="request" w={42} art={d.art} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -107,7 +117,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
                     </span>
                   </div>
                 </div>
-                {d.state ? <StateBadge state={d.state} /> : <Icon name="add_circle" size={20} color={atQuota ? "var(--on-surface-variant)" : REQ_C} />}
+                {d.state ? <StateBadge state={d.state} /> : <Icon name="add_circle" size={20} color={itemAtQuota ? "var(--on-surface-variant)" : REQ_C} />}
               </button>
             );
           })
@@ -133,6 +143,20 @@ function ConfirmStep({
   onBack: () => void;
 }) {
   const selCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
+  const [profiles, setProfiles] = useState<QualityProfile[]>(QUALITY_PROFILES);
+  const [loadingProfiles, setLoadingProfiles] = useState(true);
+
+  useEffect(() => {
+    setLoadingProfiles(true);
+    getQualityProfiles(pick.kind === "series" ? "tv" : "movie")
+      .then((ps) => {
+        setProfiles(ps);
+        setQuality(ps[0]?.id ?? "default");
+      })
+      .catch(() => { /* keep static fallback */ })
+      .finally(() => setLoadingProfiles(false));
+  }, [pick.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <>
       <div style={{ padding: "18px 20px 6px" }}>
@@ -159,13 +183,14 @@ function ConfirmStep({
         <Divider />
         <section>
           <SectionLabel>Quality profile</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            {QUALITY_PROFILES.map((p) => {
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8, opacity: loadingProfiles ? 0.45 : 1, transition: "opacity .2s" }}>
+            {(loadingProfiles ? QUALITY_PROFILES : profiles).map((p) => {
               const sel = quality === p.id;
               return (
                 <button
                   key={p.id}
                   type="button"
+                  disabled={loadingProfiles}
                   onClick={() => setQuality(p.id)}
                   style={{
                     display: "flex",
@@ -174,7 +199,7 @@ function ConfirmStep({
                     gap: 4,
                     padding: "11px 13px",
                     borderRadius: 11,
-                    cursor: "pointer",
+                    cursor: loadingProfiles ? "default" : "pointer",
                     textAlign: "left",
                     border: "1px solid " + (sel ? `color-mix(in srgb, ${REQ_C} 55%, transparent)` : "var(--outline-variant)"),
                     background: sel ? `color-mix(in srgb, ${REQ_C} 12%, transparent)` : "transparent",
@@ -183,7 +208,7 @@ function ConfirmStep({
                 >
                   <Icon name={p.icon} size={18} color={sel ? REQ_C : "var(--on-surface-variant)"} />
                   <span style={{ fontSize: 13, fontWeight: 700, color: sel ? REQ_C : "var(--on-surface)" }}>{p.label}</span>
-                  <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>{p.sub}</span>
+                  {p.sub && <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>{p.sub}</span>}
                 </button>
               );
             })}
@@ -287,14 +312,18 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
             </div>
             {u?.email && <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 1 }}>{u.email}</div>}
           </div>
-          {u && (
-            <div style={{ textAlign: "right" }}>
-              <Eyebrow>Quota</Eyebrow>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: u.reqUsed >= u.reqQuota ? "var(--amber)" : "var(--on-surface)", marginTop: 3 }}>
-                {u.reqUsed}/{u.reqQuota}
+          {u && (() => {
+            const quota = req.kind === "series" ? u.tvQuota : u.movieQuota;
+            if (!quota) return null;
+            return (
+              <div style={{ textAlign: "right" }}>
+                <Eyebrow>{req.kind === "series" ? "TV quota" : "Movie quota"}</Eyebrow>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: quota.restricted ? "var(--amber)" : "var(--on-surface)", marginTop: 3 }}>
+                  {quota.used}/{quota.limit ?? "∞"}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, padding: "13px 15px", borderRadius: 12, background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
@@ -324,6 +353,8 @@ export function RequestModal({
   mode,
   request,
   initialQuery,
+  initialPick,
+  initialSelectedSeasons,
   onClose,
   onSubmit,
   onAct,
@@ -332,6 +363,10 @@ export function RequestModal({
   mode: "request" | "review";
   request?: MediaRequest | null;
   initialQuery?: string;
+  /** When set, skip the DiscoverStep and open ConfirmStep with this item pre-selected. */
+  initialPick?: DiscoverItem | null;
+  /** Exact season numbers to preselect when editing an existing TV request. */
+  initialSelectedSeasons?: number[];
   onClose: () => void;
   onSubmit: (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => void;
   onAct: (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => void;
@@ -343,34 +378,42 @@ export function RequestModal({
 
   const [q, setQ] = useState("");
   const [pick, setPick] = useState<DiscoverItem | null>(null);
-  const [quality, setQuality] = useState("hd1080");
+  const [quality, setQuality] = useState("default");
   const [seasons, setSeasons] = useState<Record<number, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<"approved" | "declined" | null>(null);
 
+  const choosePick = (d: DiscoverItem, selectedSeasons?: number[]) => {
+    setPick(d);
+    if (d.kind === "series") {
+      const s: Record<number, boolean> = {};
+      if (selectedSeasons) {
+        for (const season of selectedSeasons) s[season] = true;
+      } else {
+        for (let i = 1; i <= (d.seasons || 1); i++) s[i] = true;
+      }
+      setSeasons(s);
+    }
+    setQuality("default");
+  };
+
   useEffect(() => {
     if (open) {
       setQ(initialQuery || "");
-      setPick(null);
-      setQuality("hd1080");
-      setSeasons({});
+      setQuality("default");
       setSubmitted(false);
       setNote("");
+      if (initialPick) {
+        choosePick(initialPick, initialSelectedSeasons);
+      } else {
+        setPick(null);
+        setSeasons({});
+      }
       setDecision(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, request?.id]);
-
-  const choosePick = (d: DiscoverItem) => {
-    setPick(d);
-    if (d.kind === "series") {
-      const s: Record<number, boolean> = {};
-      for (let i = 1; i <= (d.seasons || 1); i++) s[i] = true;
-      setSeasons(s);
-    }
-    setQuality("hd1080");
-  };
   const submitRequest = () => {
     if (pick) onSubmit(pick, quality, seasons);
     setSubmitted(true);

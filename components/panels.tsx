@@ -5,7 +5,7 @@
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
-import type { Role, Service, ServiceStatus } from "@/lib/types";
+import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus } from "@/lib/types";
 import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { isVisible } from "@/lib/visibility";
@@ -663,18 +663,20 @@ export function StatusPanel({ role, onAll, fill }: { role: Role; onAll?: () => v
 export const REQ_TONE = _REQ_TONE;
 export const REQ_LABEL = _REQ_LABEL;
 
-export function MyRequestsPanel({ role, onAll, onAct, fill }: { role: Role; onAll?: () => void; onAct?: (id: string, action: "approve" | "decline") => void; fill?: boolean }) {
+export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, title }: { role: Role; onAll?: () => void; onAct?: (id: string, action: "approve" | "decline") => void; fill?: boolean; limit?: number; view?: string; dense?: boolean; title?: string }) {
   const { users, requests } = useData();
   const { user } = usePortal();
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const mine = requests.filter((r) => r.portalUser === user.id);
   const queue = requests.filter((r) => r.status === "pending");
-  const adminMode = role === "admin";
-  const items = (adminMode ? queue : mine).slice(0, 5);
+  const adminMode = view === "queue" && role === "admin" ? true : view === "mine" ? false : role === "admin";
+  const items = (adminMode ? queue : mine).slice(0, limit ?? 5);
+  const rowPadding = dense ? "6px 16px" : "10px 16px";
+  const defaultTitle = adminMode ? "Approval Queue" : "My Requests";
   return (
     <PanelShell
       fill={fill}
-      title={adminMode ? "Approval Queue" : "My Requests"}
+      title={title && title.length > 0 ? title : defaultTitle}
       icon={adminMode ? "inbox" : "bookmark_added"}
       accent="var(--originator-court)"
       count={adminMode ? `${queue.length} pending` : undefined}
@@ -683,19 +685,21 @@ export function MyRequestsPanel({ role, onAll, onAct, fill }: { role: Role; onAl
       {!adminMode && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" }}>
           <Eyebrow>Quota</Eyebrow>
-          <div style={{ flex: 1 }}>
-            <ProgressBar pct={me.reqQuota ? (me.reqUsed / me.reqQuota) * 100 : 0} color="var(--originator-court)" h={6} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+            {me.movieQuota && <ProgressBar pct={me.movieQuota.limit ? Math.min(100, (me.movieQuota.used / me.movieQuota.limit) * 100) : 0} color={me.movieQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
+            {me.tvQuota && <ProgressBar pct={me.tvQuota.limit ? Math.min(100, (me.tvQuota.used / me.tvQuota.limit) * 100) : 0} color={me.tvQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
           </div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
-            {me.reqUsed}/{me.reqQuota}
-          </span>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+            {me.movieQuota && <span>{me.movieQuota.used}/{me.movieQuota.limit ?? "∞"}</span>}
+            {me.tvQuota && <span>{me.tvQuota.used}/{me.tvQuota.limit ?? "∞"}</span>}
+          </div>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {items.map((r, i) => {
           const u = users.find((x) => x.id === r.portalUser);
           return (
-            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
               <PosterTile title={r.title} kind={r.kind} cat="request" w={32} art={r.art} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -888,22 +892,24 @@ function PosterStrip({ children }: { children: React.ReactNode }) {
 }
 
 // ── RECENTLY ADDED ─────────────────────────────────────────
-export function RecentlyAdded({ fill }: { fill?: boolean } = {}) {
+export function RecentlyAdded({ fill, limit, mediaKind, title }: { fill?: boolean; limit?: number; mediaKind?: string; title?: string } = {}) {
   const { recent } = useData();
+  const filtered = mediaKind && mediaKind.length > 0 ? recent.filter((r) => r.kind === mediaKind) : recent;
+  const displayItems = limit != null ? filtered.slice(0, limit) : filtered;
   return (
-    <PanelShell fill={fill} title="Recently Added" icon="new_releases" accent="var(--primary)">
-      {recent.length === 0 ? (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Recently Added"} icon="new_releases" accent="var(--primary)">
+      {displayItems.length === 0 ? (
         <Empty icon="new_releases" line="Nothing added yet" sub="Recently added media will appear here." />
       ) : (
         (() => {
-          const renderItem = (r: (typeof recent)[number]) => (
+          const renderItem = (r: (typeof displayItems)[number]) => (
             <div key={r.id} style={{ width: 76, flexShrink: 0 }}>
               <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} art={r.art} />
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{r.year}</div>
             </div>
           );
-          return fill ? <FlowGrid items={recent} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{recent.map(renderItem)}</PosterStrip>;
+          return fill ? <FlowGrid items={displayItems} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
         })()
       )}
     </PanelShell>
@@ -911,16 +917,18 @@ export function RecentlyAdded({ fill }: { fill?: boolean } = {}) {
 }
 
 // ── DOWNLOAD QUEUE (admin) ─────────────────────────────────
-export function QueuePanel({ fill }: { fill?: boolean } = {}) {
+export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { queue } = useData();
   // In a grid tile, show as many rows as fit the height (no scrolling); the rest
   // is reachable via the ‹ › pager.
   const [fitRef, fitRows] = useFitRows(61);
-  const { page, totalPages, slice, setPage } = usePagination(queue, fill ? fitRows : 10);
+  const pageSize = limit ?? (fill ? fitRows : 10);
+  const { page, totalPages, slice, setPage } = usePagination(queue, pageSize);
+  const rowPadding = dense ? "7px 16px" : "11px 16px";
   return (
     <PanelShell
       fill={fill}
-      title="Download Queue"
+      title={title && title.length > 0 ? title : "Download Queue"}
       icon="downloading"
       accent="var(--originator-third-party)"
       count={`${queue.length} active`}
@@ -928,7 +936,7 @@ export function QueuePanel({ fill }: { fill?: boolean } = {}) {
     >
       <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((q, i) => (
-          <div key={q.id} style={{ padding: "11px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+          <div key={q.id} style={{ padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
               <Icon name={q.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{q.title}</span>
@@ -982,15 +990,24 @@ export function StoragePanel() {
 }
 
 // ── COMING SOON (upcoming *arr calendar) ───────────────────
-export function UpcomingPanel({ fill }: { fill?: boolean } = {}) {
+export function UpcomingPanel({ fill, limit, window: windowDays, title }: { fill?: boolean; limit?: number; window?: number; title?: string } = {}) {
   const { upcoming } = useData();
+  const now = useTick(60000); // update cutoff every minute
+  const cutoff = windowDays != null ? new Date(now + windowDays * 86400000) : null;
+  const windowFiltered = cutoff != null
+    ? upcoming.filter((u) => new Date(u.when) <= cutoff)
+    : upcoming;
+  const sliceCap = limit ?? 20;
+  const countDisplay = windowFiltered.length > sliceCap
+    ? `${sliceCap} of ${windowFiltered.length}`
+    : windowFiltered.length > 0 ? `${windowFiltered.length}` : undefined;
   return (
-    <PanelShell fill={fill} title="Coming Soon" icon="event_upcoming" accent="var(--originator-court)" count={upcoming.length ? `${upcoming.length}` : undefined}>
-      {upcoming.length === 0 ? (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Coming Soon"} icon="event_upcoming" accent="var(--originator-court)" count={countDisplay}>
+      {windowFiltered.length === 0 ? (
         <Empty icon="event_upcoming" line="Nothing upcoming" sub="Upcoming episodes and releases will appear here." />
       ) : (
         (() => {
-          const list = upcoming.slice(0, 20);
+          const list = windowFiltered.slice(0, sliceCap);
           const renderItem = (u: (typeof list)[number]) => (
             <div key={u.id} style={{ width: 76, flexShrink: 0 }}>
               <PosterTile title={u.title} kind={u.kind} cat="request" w={76} art={u.art} />
@@ -1008,23 +1025,24 @@ export function UpcomingPanel({ fill }: { fill?: boolean } = {}) {
 }
 
 // ── LEADERBOARD (Tautulli weekly home stats) ───────────────
-export function LeaderboardPanel({ fill }: { fill?: boolean } = {}) {
+export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit?: number; title?: string } = {}) {
   const { topStats } = useData();
   if (!topStats || (topStats.users.length === 0 && topStats.media.length === 0))
     return fill ? (
-      <PanelShell fill title="Most Active · 7d" icon="leaderboard" accent="var(--originator-own)">
+      <PanelShell fill title={title && title.length > 0 ? title : "Most Active · 7d"} icon="leaderboard" accent="var(--originator-own)">
         <Empty icon="leaderboard" line="No activity yet" sub="Most-active users and titles appear once Tautulli reports plays." />
       </PanelShell>
     ) : null;
-  const maxUser = Math.max(1, ...topStats.users.map((u) => u.plays));
+  const displayUsers = limit != null ? topStats.users.slice(0, limit) : topStats.users;
+  const maxUser = Math.max(1, ...displayUsers.map((u) => u.plays));
   return (
-    <PanelShell fill={fill} title="Most Active · 7d" icon="leaderboard" accent="var(--originator-own)">
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Most Active · 7d"} icon="leaderboard" accent="var(--originator-own)">
       <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, paddingBottom: topStats.media.length > 0 ? 0 : 16, height: fill ? "100%" : undefined, boxSizing: "border-box" }}>
-        {topStats.users.length > 0 && (
+        {displayUsers.length > 0 && (
           <div style={{ flexShrink: 0 }}>
             <Eyebrow style={{ marginBottom: 8 }}>Top viewers</Eyebrow>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              {topStats.users.map((u) => (
+              {displayUsers.map((u) => (
                 <div key={u.name} style={{ display: "flex", alignItems: "center", gap: 9 }}>
                   <Avatar name={u.name} size={20} color="var(--originator-own)" />
                   <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: "0 0 110px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</span>
@@ -1067,21 +1085,23 @@ export function LeaderboardPanel({ fill }: { fill?: boolean } = {}) {
 }
 
 // ── RECENTLY DOWNLOADED (*arr history) ─────────────────────
-export function DownloadsPanel({ fill }: { fill?: boolean } = {}) {
+export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { downloads } = useData();
   // In a grid tile, show as many rows as fit the height; the rest pages via ‹ ›.
   const [fitRef, fitRows] = useFitRows(41);
-  const { page, totalPages, slice, setPage } = usePagination(downloads, fill ? fitRows : 10);
+  const pageSize = limit ?? (fill ? fitRows : 10);
+  const { page, totalPages, slice, setPage } = usePagination(downloads, pageSize);
+  const rowPadding = dense ? "5px 16px" : "9px 16px";
   if (downloads.length === 0)
     return fill ? (
-      <PanelShell fill title="Recently Downloaded" icon="download_done" accent="var(--originator-third-party)">
+      <PanelShell fill title={title && title.length > 0 ? title : "Recently Downloaded"} icon="download_done" accent="var(--originator-third-party)">
         <Empty icon="download_done" line="No recent downloads" sub="Grabbed and imported items from Sonarr / Radarr appear here." />
       </PanelShell>
     ) : null;
   return (
     <PanelShell
       fill={fill}
-      title="Recently Downloaded"
+      title={title && title.length > 0 ? title : "Recently Downloaded"}
       icon="download_done"
       accent="var(--originator-third-party)"
       count={`${downloads.length}`}
@@ -1089,7 +1109,7 @@ export function DownloadsPanel({ fill }: { fill?: boolean } = {}) {
     >
       <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((d, i) => (
-          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <Icon name={d.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
             <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</span>
             <Pill tone={d.event === "imported" ? "originator-own" : "on-surface-variant"}>{d.event}</Pill>
@@ -1097,6 +1117,122 @@ export function DownloadsPanel({ fill }: { fill?: boolean } = {}) {
           </div>
         ))}
       </div>
+    </PanelShell>
+  );
+}
+
+// ── DISCOVER PANEL (trending / popular / upcoming from Overseerr) ──
+export type DiscoverFeed = "trending" | "popularMovies" | "popularTv" | "upcomingMovies" | "watchlist";
+
+export function DiscoverFeedPanel({
+  feed,
+  fill,
+  limit,
+  title,
+  onRequest,
+}: {
+  feed: DiscoverFeed;
+  fill?: boolean;
+  limit?: number;
+  title?: string;
+  onRequest?: (item: DiscoverItem) => void;
+}) {
+  const { discover } = useData();
+  const META: Record<DiscoverFeed, { icon: string; accent: string; defaultTitle: string; emptyLine: string }> = {
+    trending:      { icon: "trending_up",   accent: "var(--originator-court)", defaultTitle: "Trending Now",      emptyLine: "No trending data yet" },
+    popularMovies: { icon: "movie",          accent: "var(--originator-court)", defaultTitle: "Popular Movies",    emptyLine: "No popular movies yet" },
+    popularTv:     { icon: "live_tv",        accent: "var(--originator-court)", defaultTitle: "Popular TV Shows",  emptyLine: "No popular shows yet" },
+    upcomingMovies:{ icon: "event_upcoming", accent: "var(--originator-court)", defaultTitle: "Coming Soon",       emptyLine: "No upcoming releases" },
+    watchlist:     { icon: "bookmarks",      accent: "var(--primary)",           defaultTitle: "Plex Watchlist",    emptyLine: "Watchlist is empty" },
+  };
+  const m = META[feed];
+  const items = discover?.[feed] ?? [];
+  return (
+    <DiscoverPanel
+      items={items}
+      fill={fill}
+      limit={limit}
+      title={title && title.length > 0 ? title : m.defaultTitle}
+      icon={m.icon}
+      accent={m.accent}
+      emptyLine={m.emptyLine}
+      onRequest={onRequest}
+    />
+  );
+}
+
+
+const DISCOVER_STATE_TONE: Partial<Record<RequestStatus, string>> = {
+  available: "originator-own",
+  approved: "originator-court",
+  pending: "amber",
+  processing: "primary",
+};
+const DISCOVER_STATE_LABEL: Partial<Record<RequestStatus, string>> = {
+  available: "In library",
+  approved: "Approved",
+  pending: "Requested",
+  processing: "Processing",
+};
+
+export function DiscoverPanel({
+  items,
+  fill,
+  limit,
+  title,
+  icon,
+  accent,
+  emptyLine,
+  onRequest,
+}: {
+  items: DiscoverItem[];
+  fill?: boolean;
+  limit?: number;
+  title: string;
+  icon: string;
+  accent: string;
+  emptyLine: string;
+  onRequest?: (item: DiscoverItem) => void;
+}) {
+  const displayItems = limit != null ? items.slice(0, limit) : items;
+  return (
+    <PanelShell fill={fill} title={title} icon={icon} accent={accent}>
+      {displayItems.length === 0 ? (
+        <Empty icon={icon} line={emptyLine} sub="Configure Overseerr to see this feed." />
+      ) : (
+        (() => {
+          const renderItem = (d: DiscoverItem) => {
+            const requestable = !d.state || (d.state !== "available" && d.state !== "approved");
+            const tone = d.state ? DISCOVER_STATE_TONE[d.state] : undefined;
+            const label = d.state ? DISCOVER_STATE_LABEL[d.state] : undefined;
+            return (
+              <div
+                key={d.id}
+                style={{ width: 76, flexShrink: 0, cursor: requestable && onRequest ? "pointer" : "default", position: "relative" }}
+                onClick={() => requestable && onRequest && onRequest(d)}
+                title={requestable ? `Request ${d.title}` : d.title}
+              >
+                <PosterTile title={d.title} kind={d.kind} cat="request" w={76} art={d.art} />
+                {tone && label && (
+                  <div style={{ position: "absolute", bottom: 2, left: 2, right: 2 }}>
+                    <Pill tone={tone} style={{ fontSize: 8.5, padding: "1px 5px", width: "100%", textAlign: "center", display: "block" }}>{label}</Pill>
+                  </div>
+                )}
+                {requestable && onRequest && !d.state && (
+                  <div style={{ position: "absolute", top: 3, right: 3, background: "color-mix(in srgb, var(--surface-container) 75%, transparent)", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Icon name="add" size={15} color="var(--originator-court)" />
+                  </div>
+                )}
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{d.year}</div>
+              </div>
+            );
+          };
+          return fill
+            ? <FlowGrid items={displayItems} itemW={76} itemH={155} render={renderItem} />
+            : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
+        })()
+      )}
     </PanelShell>
   );
 }

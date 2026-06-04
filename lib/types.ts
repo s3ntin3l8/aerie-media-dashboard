@@ -6,7 +6,7 @@ export type Category = "stream" | "request" | "automation" | "monitor" | "infra"
 export type ServiceStatus = "up" | "degraded" | "down" | "unknown";
 export type Role = "admin" | "user";
 export type MediaKind = "movie" | "series" | "track";
-export type RequestStatus = "available" | "approved" | "pending" | "declined";
+export type RequestStatus = "available" | "approved" | "pending" | "declined" | "processing" | "failed";
 export type PlayMode = "direct" | "transcode";
 
 export interface CatMeta {
@@ -87,6 +87,17 @@ export interface MediaRequest {
   qualityProfile?: string;
   /** Overseerr's internal media record id (used for posting comments). */
   mediaOverseerrId?: number;
+  /** ISO timestamp of last modification (status change etc.) — used for sort-by-modified. */
+  modified?: string;
+}
+
+export interface OverseerrQuota {
+  /** null = unlimited (Overseerr stores 0) */
+  limit: number | null;
+  days: number;
+  used: number;
+  remaining: number;
+  restricted: boolean;
 }
 
 export interface User {
@@ -97,8 +108,9 @@ export interface User {
   email: string;
   linked: boolean;
   groups: string[];
-  reqUsed: number;
-  reqQuota: number;
+  /** null when user has no Overseerr account */
+  movieQuota: OverseerrQuota | null;
+  tvQuota: OverseerrQuota | null;
   watching: string | null;
 }
 
@@ -223,6 +235,8 @@ export interface DashboardTile {
   y: number;
   w: number;
   h: number;
+  /** Per-card user settings (item count, title override, filters). Absent = catalog defaults. */
+  settings?: Record<string, string | number | boolean>;
 }
 
 /** Per-role saved homescreen arrangements, persisted to preferences.dashboards. */
