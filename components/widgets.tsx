@@ -238,4 +238,115 @@ export function AnnouncementsWidget({ fill }: { fill?: boolean } = {}) {
   );
 }
 
+// ── shared layout + helpers for the stat-panel widgets ─────
+function StatRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ padding: 16, display: "flex", gap: 20, flexWrap: "wrap", alignContent: "flex-start", height: "100%", boxSizing: "border-box" }}>
+      {children}
+    </div>
+  );
+}
+
+function relTime(iso: string | null): string {
+  if (!iso) return "never";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "recently";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+// ── WIZARR — invite / user stats ───────────────────────────
+export function WizarrWidget({ fill }: { fill?: boolean } = {}) {
+  const { wizarr } = useData();
+  return (
+    <PanelShell fill={fill} title="Wizarr" icon="person_add" accent="var(--primary)" live={!!wizarr}>
+      {!wizarr ? (
+        <Empty icon="person_add" line="Wizarr not connected" sub="Add Wizarr and store its API key to see invite activity." />
+      ) : (
+        <StatRow>
+          <Metric label="Users" value={wizarr.users.toLocaleString("en-US")} icon="group" color="var(--primary)" />
+          <Metric label="Invites" value={wizarr.invites.toLocaleString("en-US")} icon="mail" color="var(--on-surface-variant)" />
+          <Metric label="Pending" value={wizarr.pending.toLocaleString("en-US")} icon="hourglass_top" color={wizarr.pending > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />
+          <Metric label="Expired" value={wizarr.expired.toLocaleString("en-US")} icon="event_busy" color={wizarr.expired > 0 ? "var(--error)" : "var(--on-surface-variant)"} />
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── PROWLARR — indexer health + grab/query stats ───────────
+export function ProwlarrWidget({ fill }: { fill?: boolean } = {}) {
+  const { prowlarr } = useData();
+  return (
+    <PanelShell fill={fill} title="Indexers" icon="search" accent="var(--originator-third-party)" live={!!prowlarr}>
+      {!prowlarr ? (
+        <Empty icon="search" line="Prowlarr not connected" sub="Add Prowlarr and store its API key to see indexer stats." />
+      ) : (
+        <StatRow>
+          <Metric label="Indexers" value={`${prowlarr.enabled}/${prowlarr.total}`} icon="dns" color="var(--primary)" />
+          <Metric label="Queries" value={prowlarr.queries.toLocaleString("en-US")} icon="travel_explore" color="var(--on-surface-variant)" />
+          <Metric label="Grabs" value={prowlarr.grabs.toLocaleString("en-US")} icon="download" color="var(--originator-own)" />
+          <Metric label="Failed grabs" value={prowlarr.failedGrabs.toLocaleString("en-US")} icon="error" color={prowlarr.failedGrabs > 0 ? "var(--error)" : "var(--on-surface-variant)"} />
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── AGREGARR — Plex collections sync status ────────────────
+export function AgregarrWidget({ fill }: { fill?: boolean } = {}) {
+  const { agregarr } = useData();
+  return (
+    <PanelShell fill={fill} title="Collections" icon="collections" accent="var(--originator-court)" live={!!agregarr}>
+      {!agregarr ? (
+        <Empty icon="collections" line="Agregarr not connected" sub="Add Agregarr and store its API key to see collection sync status." />
+      ) : (
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14, height: "100%", boxSizing: "border-box" }}>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            <Metric label="Collections" value={agregarr.totalCollections.toLocaleString("en-US")} icon="collections_bookmark" color="var(--primary)" />
+            <Metric label="Needs sync" value={agregarr.needingSync.toLocaleString("en-US")} icon="sync_problem" color={agregarr.needingSync > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />
+          </div>
+          {agregarr.running ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--on-surface-variant)" }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agregarr.currentStage || "Syncing…"}</span>
+                <span style={{ fontFamily: "var(--font-mono)" }}>{agregarr.progress}%</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: "var(--surface-container-high)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.min(100, Math.max(0, agregarr.progress))}%`, background: "var(--primary)", transition: "width 0.3s" }} />
+              </div>
+            </div>
+          ) : (
+            <div suppressHydrationWarning style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: "var(--on-surface-variant)" }}>
+              <StatusDot status={agregarr.error ? "down" : "up"} size={6} />
+              {agregarr.error ? "Last sync failed" : `Last synced ${relTime(agregarr.lastSyncAt)}`}
+            </div>
+          )}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── BAZARR — wanted (missing) subtitle counts ──────────────
+export function BazarrWidget({ fill }: { fill?: boolean } = {}) {
+  const { bazarrWanted: w } = useData();
+  return (
+    <PanelShell fill={fill} title="Subtitles" icon="subtitles" accent="var(--primary)" live={!!w}>
+      {!w ? (
+        <Empty icon="subtitles" line="Bazarr not connected" sub="Add Bazarr and store its API key to see missing subtitles." />
+      ) : (
+        <StatRow>
+          <Metric label="Wanted episodes" value={w.episodes.toLocaleString("en-US")} icon="live_tv" color={w.episodes > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />
+          <Metric label="Wanted movies" value={w.movies.toLocaleString("en-US")} icon="movie" color={w.movies > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />
+          <Metric label="Total missing" value={(w.episodes + w.movies).toLocaleString("en-US")} icon="subtitles_off" color="var(--primary)" />
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
 export type { CSS };

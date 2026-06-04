@@ -37,8 +37,16 @@ import {
   tautulliHomeStats,
   prometheusMetrics,
   beszelMetrics,
+  wizarrStats,
+  prowlarrStats,
+  agregarrStatus,
+  bazarrWanted,
   type ServiceHealth,
   type NodeMetrics,
+  type WizarrStats,
+  type ProwlarrStats,
+  type AgregarrStatus,
+  type BazarrWanted,
 } from "@/lib/integrations/clients";
 import { env } from "@/lib/env";
 
@@ -82,6 +90,14 @@ export interface Snapshot {
   discover: { trending: DiscoverItem[]; popularMovies: DiscoverItem[]; popularTv: DiscoverItem[]; upcomingMovies: DiscoverItem[]; watchlist: DiscoverItem[] } | null;
   /** Authoritative request counts from Overseerr — null when unconfigured */
   requestCounts: { total: number; pending: number; approved: number; processing: number; failed: number; available: number } | null;
+  /** Wizarr invite/user stats — null when unconfigured */
+  wizarr: WizarrStats | null;
+  /** Prowlarr indexer health + grab/query stats — null when unconfigured */
+  prowlarr: ProwlarrStats | null;
+  /** Agregarr collections sync status — null when unconfigured */
+  agregarr: AgregarrStatus | null;
+  /** Bazarr wanted (missing) subtitle counts — null when unconfigured */
+  bazarrWanted: BazarrWanted | null;
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -108,13 +124,17 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
-  const [ttOn, jfOn, osOn, sonarrOn, radarrOn, beszelOn] = await Promise.all([
+  const [ttOn, jfOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
     has("overseerr"),
     has("sonarr"),
     has("radarr"),
     has("beszel"),
+    has("wizarr"),
+    has("prowlarr"),
+    has("agregarr"),
+    has("bazarr"),
   ]);
 
   // Active metrics source: honour the stored preference when its source is live,
@@ -135,6 +155,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     sonarrDisk, radarrDisk, sonarrHealth, radarrHealth, osIssues, sonarrCal, radarrCal, sonarrHist, radarrHist, ttTop,
     jfLibs, jfRecent, osVersion,
     osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
+    wizarrData, prowlarrData, agregarrData, bazarrData,
   ] = await Promise.all([
     gatusOn ? safe(gatusHealth) : Promise.resolve(null),
     ttOn ? safe(tautulliActivity) : Promise.resolve(null),
@@ -170,6 +191,10 @@ export async function getSnapshot(): Promise<Snapshot> {
     osOn ? safe(overseerrUpcomingMovies) : Promise.resolve(null),
     osOn ? safe(overseerrWatchlist) : Promise.resolve(null),
     osOn ? safe(overseerrRequestCounts) : Promise.resolve(null),
+    wizarrOn ? safe(wizarrStats) : Promise.resolve(null),
+    prowlarrOn ? safe(prowlarrStats) : Promise.resolve(null),
+    agregarrOn ? safe(agregarrStatus) : Promise.resolve(null),
+    bazarrOn ? safe(bazarrWanted) : Promise.resolve(null),
   ]);
 
   // services: DB config merged with live Gatus health. Without a Gatus
@@ -295,5 +320,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
     metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
     discover, requestCounts: osRequestCounts ?? null,
+    wizarr: wizarrData ?? null, prowlarr: prowlarrData ?? null,
+    agregarr: agregarrData ?? null, bazarrWanted: bazarrData ?? null,
   };
 }

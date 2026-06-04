@@ -225,7 +225,10 @@ export interface TautulliActivity {
  * Resolve a public IP to a city/country via Tautulli's `get_geoip_lookup`
  * (requires the MaxMind GeoLite2 DB in Tautulli — returns undefined if absent
  * or on any error). Cached per-IP for 6h: IP→geo is stable and getSnapshot()
- * polls every few seconds, so we must not re-look-up on every poll.
+ * polls every few seconds, so we must not re-look-up on every poll. Note this
+ * intentionally caches the failure (undefined) too — unlike the codebase's usual
+ * "cache successes only" pattern — so a missing GeoLite2 DB doesn't get re-probed
+ * every poll forever (the inner fn catches rather than throws).
  */
 async function tautulliGeoIp(ip: string): Promise<StreamGeo | undefined> {
   return cached(`tautulli:geoip:${ip}`, 6 * 60 * 60 * 1000, async () => {
@@ -1399,16 +1402,145 @@ export async function prometheusInstances(): Promise<string[]> {
   return data.data ?? [];
 }
 
+// ── Wizarr — invite / user stats (cached) ──────────────────
+export interface WizarrStats {
+  users: number;
+  invites: number;
+  pending: number;
+  expired: number;
+}
+
+export async function wizarrStats(): Promise<WizarrStats> {
+  return cached("wizarr:stats", 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("wizarr");
+    const d = await fetchJson<{ users?: number; invites?: number; pending?: number; expired?: number }>(
+      `${baseUrl}/api/status`,
+      { service: "wizarr", headers: { "X-API-Key": apiKey } },
+    );
+    return { users: d.users ?? 0, invites: d.invites ?? 0, pending: d.pending ?? 0, expired: d.expired ?? 0 };
+  });
+}
+
+// ── Prowlarr — indexer health + grab/query stats (cached) ──
+export interface ProwlarrStats {
+  total: number;
+  enabled: number;
+  queries: number;
+  grabs: number;
+  failedGrabs: number;
+}
+
+export async function prowlarrStats(): Promise<ProwlarrStats> {
+  return cached("prowlarr:stats", 5 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("prowlarr");
+    const headers = { "X-Api-Key": apiKey };
+    // The indexer list is the primary signal (a real outage throws here → panel empties).
+    // Stats are best-effort enrichment: if /indexerstats errors (e.g. wants date params on
+    // some versions), still show indexer counts rather than blanking the whole panel.
+    const indexers = await fetchJson<{ enable?: boolean }[]>(`${baseUrl}/api/v1/indexer`, { service: "prowlarr", headers });
+    const stats = await fetchJson<{ indexers?: { numberOfQueries?: number; numberOfGrabs?: number; numberOfFailedGrabs?: number }[] }>(
+      `${baseUrl}/api/v1/indexerstats`,
+      { service: "prowlarr", headers },
+    ).catch(() => ({ indexers: [] as { numberOfQueries?: number; numberOfGrabs?: number; numberOfFailedGrabs?: number }[] }));
+    const list = indexers ?? [];
+    const si = stats.indexers ?? [];
+    return {
+      total: list.length,
+      enabled: list.filter((i) => i.enable !== false).length,
+      queries: si.reduce((a, s) => a + (s.numberOfQueries ?? 0), 0),
+      grabs: si.reduce((a, s) => a + (s.numberOfGrabs ?? 0), 0),
+      failedGrabs: si.reduce((a, s) => a + (s.numberOfFailedGrabs ?? 0), 0),
+    };
+  });
+}
+
+// ── Agregarr — collections sync status (cached) ────────────
+export interface AgregarrStatus {
+  running: boolean;
+  totalCollections: number;
+  needingSync: number;
+  progress: number;
+  currentStage: string | null;
+  lastSyncAt: string | null;
+  error: string | null;
+}
+
+export async function agregarrStatus(): Promise<AgregarrStatus> {
+  return cached("agregarr:status", 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("agregarr");
+    const d = await fetchJson<{
+      running?: boolean;
+      totalCollections?: number;
+      collectionsNeedingSync?: number;
+      progress?: number;
+      currentStage?: string;
+      lastGlobalSyncAt?: string;
+      globalSyncError?: string | null;
+    }>(`${baseUrl}/api/v1/collections/sync/status`, { service: "agregarr", headers: { "X-Api-Key": apiKey } });
+    return {
+      running: d.running ?? false,
+      totalCollections: d.totalCollections ?? 0,
+      needingSync: d.collectionsNeedingSync ?? 0,
+      progress: d.progress ?? 0,
+      currentStage: d.currentStage ?? null,
+      lastSyncAt: d.lastGlobalSyncAt ?? null,
+      error: d.globalSyncError ?? null,
+    };
+  });
+}
+
+// ── Bazarr — wanted (missing) subtitle counts (cached) ─────
+export interface BazarrWanted {
+  episodes: number;
+  movies: number;
+}
+
+export async function bazarrWanted(): Promise<BazarrWanted> {
+  return cached("bazarr:wanted", 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("bazarr");
+    // Bazarr authenticates via ?apikey=; length=1 keeps the page tiny — we only read `total`.
+    const q = `apikey=${encodeURIComponent(apiKey)}&start=0&length=1`;
+    // Settle independently: a Bazarr instance with only Sonarr (or only Radarr) wired up
+    // errors on the other endpoint — that shouldn't blank the count we *can* read.
+    const [ep, mv] = await Promise.allSettled([
+      fetchJson<{ total?: number }>(`${baseUrl}/api/episodes/wanted?${q}`, { service: "bazarr" }),
+      fetchJson<{ total?: number }>(`${baseUrl}/api/movies/wanted?${q}`, { service: "bazarr" }),
+    ]);
+    // If both endpoints fail, treat the service as down so the panel shows its empty state.
+    if (ep.status === "rejected" && mv.status === "rejected") throw ep.reason;
+    return {
+      episodes: ep.status === "fulfilled" ? ep.value.total ?? 0 : 0,
+      movies: mv.status === "fulfilled" ? mv.value.total ?? 0 : 0,
+    };
+  });
+}
+
 // ── Version detection ──────────────────────────────────────
 
-type ServiceKind = "jellyfin" | "overseerr" | "arr" | "tautulli" | "prometheus";
+type ServiceKind =
+  | "jellyfin"
+  | "overseerr"
+  | "arr" // Sonarr/Radarr/Whisparr — /api/v3
+  | "arr-v1" // Prowlarr/Lidarr/Readarr — /api/v1
+  | "bazarr" // own Flask API — /api/system/status?apikey=
+  | "agregarr" // /api/v1/status (public)
+  | "wizarr" // /api/status (X-API-Key; no version field)
+  | "audiobookshelf" // /api/libraries (Bearer; no version field)
+  | "tautulli"
+  | "prometheus";
 
 function serviceKind(id: string): ServiceKind | null {
   const l = id.toLowerCase();
   if (l.includes("jellyfin") || l.includes("emby")) return "jellyfin";
   if (l.includes("overseerr") || l.includes("jellyseerr") || l.includes("seerr")) return "overseerr";
-  if (l.includes("sonarr") || l.includes("radarr") || l.includes("lidarr") ||
-      l.includes("readarr") || l.includes("prowlarr") || l.includes("whisparr") || l.includes("bazarr")) return "arr";
+  // Order matters: match the specific apps before the v3 *arr family below
+  // (e.g. "bazarr"/"agregarr" must not fall through to the v3 branch).
+  if (l.includes("bazarr")) return "bazarr";
+  if (l.includes("agregarr")) return "agregarr";
+  if (l.includes("wizarr")) return "wizarr";
+  if (l.includes("audiobookshelf")) return "audiobookshelf";
+  if (l.includes("prowlarr") || l.includes("lidarr") || l.includes("readarr")) return "arr-v1";
+  if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
   if (l.includes("tautulli")) return "tautulli";
   if (l.includes("prometheus")) return "prometheus";
   return null;
@@ -1439,12 +1571,44 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     });
     return normalizeVersion(d.version);
   }
-  if (kind === "arr") {
-    const d = await fetchJson<{ version?: string }>(`${b}/api/v3/system/status`, {
+  if (kind === "arr" || kind === "arr-v1") {
+    const apiVer = kind === "arr-v1" ? "v1" : "v3";
+    const d = await fetchJson<{ version?: string }>(`${b}/api/${apiVer}/system/status`, {
       service: "version-detect",
       headers: apiKey ? { "X-Api-Key": apiKey } : {},
     });
     return normalizeVersion(d.version);
+  }
+  if (kind === "bazarr") {
+    // Bazarr has its own (non-*arr) API; auth via ?apikey= like Tautulli.
+    const d = await fetchJson<{ data?: { bazarr_version?: string } }>(
+      `${b}/api/system/status?apikey=${encodeURIComponent(apiKey)}`,
+      { service: "version-detect" },
+    );
+    return normalizeVersion(d.data?.bazarr_version);
+  }
+  if (kind === "agregarr") {
+    // Public status endpoint (no auth) exposes the version.
+    const d = await fetchJson<{ version?: string }>(`${b}/api/v1/status`, {
+      service: "version-detect",
+    });
+    return normalizeVersion(d.version);
+  }
+  if (kind === "wizarr") {
+    // /api/status is authenticated but returns no version → "" means "connected, version unknown".
+    await fetchJson<unknown>(`${b}/api/status`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-API-Key": apiKey } : {},
+    });
+    return "";
+  }
+  if (kind === "audiobookshelf") {
+    // Hit an authenticated endpoint so a bad token fails; no plain version endpoint.
+    await fetchJson<unknown>(`${b}/api/libraries`, {
+      service: "version-detect",
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    });
+    return "";
   }
   if (kind === "tautulli") {
     const d = await fetchJson<{ response?: { data?: { tautulli_version?: string } } }>(

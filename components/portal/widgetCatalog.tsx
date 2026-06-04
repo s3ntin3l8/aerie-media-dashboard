@@ -26,7 +26,7 @@ import {
   DownloadsPanel,
   DiscoverFeedPanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -217,6 +217,30 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Broadcast notices and maintenance windows (configurable soon).",
     defaultW: 4, defaultH: 6, minW: 3, minH: 3, maxW: 12, maxH: 12,
     render: (_c, _s) => <AnnouncementsWidget fill />,
+  },
+  wizarr: {
+    type: "wizarr", name: "Wizarr Invites", icon: "person_add", accent: "var(--primary)", group: "Services", adminOnly: true,
+    desc: "User and invite counts from Wizarr — total users, pending and expired invites.",
+    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    render: (_c, _s) => <WizarrWidget fill />,
+  },
+  prowlarr: {
+    type: "prowlarr", name: "Indexers", icon: "search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
+    desc: "Prowlarr indexer health plus total queries, grabs and failures.",
+    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    render: (_c, _s) => <ProwlarrWidget fill />,
+  },
+  agregarr: {
+    type: "agregarr", name: "Collections", icon: "collections", accent: "var(--originator-court)", group: "Automation", adminOnly: true,
+    desc: "Agregarr Plex collections — total, pending sync, and live sync progress.",
+    defaultW: 4, defaultH: 5, minW: 3, minH: 4, maxW: 8, maxH: 7,
+    render: (_c, _s) => <AgregarrWidget fill />,
+  },
+  bazarr: {
+    type: "bazarr", name: "Subtitles", icon: "subtitles", accent: "var(--primary)", group: "Automation", adminOnly: true,
+    desc: "Bazarr wanted (missing) subtitle counts for episodes and movies.",
+    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    render: (_c, _s) => <BazarrWidget fill />,
   },
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",
