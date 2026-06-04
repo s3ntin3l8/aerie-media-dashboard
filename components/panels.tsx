@@ -5,7 +5,7 @@
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
-import type { Role, Service, ServiceStatus } from "@/lib/types";
+import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus } from "@/lib/types";
 import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { isVisible } from "@/lib/visibility";
@@ -685,12 +685,14 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
       {!adminMode && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" }}>
           <Eyebrow>Quota</Eyebrow>
-          <div style={{ flex: 1 }}>
-            <ProgressBar pct={me.reqQuota ? (me.reqUsed / me.reqQuota) * 100 : 0} color="var(--originator-court)" h={6} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+            {me.movieQuota && <ProgressBar pct={me.movieQuota.limit ? Math.min(100, (me.movieQuota.used / me.movieQuota.limit) * 100) : 0} color={me.movieQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
+            {me.tvQuota && <ProgressBar pct={me.tvQuota.limit ? Math.min(100, (me.tvQuota.used / me.tvQuota.limit) * 100) : 0} color={me.tvQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
           </div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
-            {me.reqUsed}/{me.reqQuota}
-          </span>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+            {me.movieQuota && <span>{me.movieQuota.used}/{me.movieQuota.limit ?? "∞"}</span>}
+            {me.tvQuota && <span>{me.tvQuota.used}/{me.tvQuota.limit ?? "∞"}</span>}
+          </div>
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column" }}>
@@ -1115,6 +1117,122 @@ export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; 
           </div>
         ))}
       </div>
+    </PanelShell>
+  );
+}
+
+// ── DISCOVER PANEL (trending / popular / upcoming from Overseerr) ──
+export type DiscoverFeed = "trending" | "popularMovies" | "popularTv" | "upcomingMovies" | "watchlist";
+
+export function DiscoverFeedPanel({
+  feed,
+  fill,
+  limit,
+  title,
+  onRequest,
+}: {
+  feed: DiscoverFeed;
+  fill?: boolean;
+  limit?: number;
+  title?: string;
+  onRequest?: (item: DiscoverItem) => void;
+}) {
+  const { discover } = useData();
+  const META: Record<DiscoverFeed, { icon: string; accent: string; defaultTitle: string; emptyLine: string }> = {
+    trending:      { icon: "trending_up",   accent: "var(--originator-court)", defaultTitle: "Trending Now",      emptyLine: "No trending data yet" },
+    popularMovies: { icon: "movie",          accent: "var(--originator-court)", defaultTitle: "Popular Movies",    emptyLine: "No popular movies yet" },
+    popularTv:     { icon: "live_tv",        accent: "var(--originator-court)", defaultTitle: "Popular TV Shows",  emptyLine: "No popular shows yet" },
+    upcomingMovies:{ icon: "event_upcoming", accent: "var(--originator-court)", defaultTitle: "Coming Soon",       emptyLine: "No upcoming releases" },
+    watchlist:     { icon: "bookmarks",      accent: "var(--primary)",           defaultTitle: "Plex Watchlist",    emptyLine: "Watchlist is empty" },
+  };
+  const m = META[feed];
+  const items = discover?.[feed] ?? [];
+  return (
+    <DiscoverPanel
+      items={items}
+      fill={fill}
+      limit={limit}
+      title={title && title.length > 0 ? title : m.defaultTitle}
+      icon={m.icon}
+      accent={m.accent}
+      emptyLine={m.emptyLine}
+      onRequest={onRequest}
+    />
+  );
+}
+
+
+const DISCOVER_STATE_TONE: Partial<Record<RequestStatus, string>> = {
+  available: "originator-own",
+  approved: "originator-court",
+  pending: "amber",
+  processing: "primary",
+};
+const DISCOVER_STATE_LABEL: Partial<Record<RequestStatus, string>> = {
+  available: "In library",
+  approved: "Approved",
+  pending: "Requested",
+  processing: "Processing",
+};
+
+export function DiscoverPanel({
+  items,
+  fill,
+  limit,
+  title,
+  icon,
+  accent,
+  emptyLine,
+  onRequest,
+}: {
+  items: DiscoverItem[];
+  fill?: boolean;
+  limit?: number;
+  title: string;
+  icon: string;
+  accent: string;
+  emptyLine: string;
+  onRequest?: (item: DiscoverItem) => void;
+}) {
+  const displayItems = limit != null ? items.slice(0, limit) : items;
+  return (
+    <PanelShell fill={fill} title={title} icon={icon} accent={accent}>
+      {displayItems.length === 0 ? (
+        <Empty icon={icon} line={emptyLine} sub="Configure Overseerr to see this feed." />
+      ) : (
+        (() => {
+          const renderItem = (d: DiscoverItem) => {
+            const requestable = !d.state || (d.state !== "available" && d.state !== "approved");
+            const tone = d.state ? DISCOVER_STATE_TONE[d.state] : undefined;
+            const label = d.state ? DISCOVER_STATE_LABEL[d.state] : undefined;
+            return (
+              <div
+                key={d.id}
+                style={{ width: 76, flexShrink: 0, cursor: requestable && onRequest ? "pointer" : "default", position: "relative" }}
+                onClick={() => requestable && onRequest && onRequest(d)}
+                title={requestable ? `Request ${d.title}` : d.title}
+              >
+                <PosterTile title={d.title} kind={d.kind} cat="request" w={76} art={d.art} />
+                {tone && label && (
+                  <div style={{ position: "absolute", bottom: 2, left: 2, right: 2 }}>
+                    <Pill tone={tone} style={{ fontSize: 8.5, padding: "1px 5px", width: "100%", textAlign: "center", display: "block" }}>{label}</Pill>
+                  </div>
+                )}
+                {requestable && onRequest && !d.state && (
+                  <div style={{ position: "absolute", top: 3, right: 3, background: "color-mix(in srgb, var(--surface-container) 75%, transparent)", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Icon name="add" size={15} color="var(--originator-court)" />
+                  </div>
+                )}
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{d.year}</div>
+              </div>
+            );
+          };
+          return fill
+            ? <FlowGrid items={displayItems} itemW={76} itemH={155} render={renderItem} />
+            : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
+        })()
+      )}
     </PanelShell>
   );
 }

@@ -191,7 +191,6 @@ export interface MemberRow {
   name: string;
   email: string;
   role: "admin" | "user";
-  reqQuota: number;
   linked: boolean;
 }
 
@@ -205,7 +204,6 @@ export async function getMembers(): Promise<MemberRow[]> {
         name: schema.users.name,
         email: schema.users.email,
         role: schema.users.role,
-        reqQuota: schema.users.reqQuota,
         linked: schema.accountLinks.linked,
       })
       .from(schema.users)
@@ -215,7 +213,6 @@ export async function getMembers(): Promise<MemberRow[]> {
       name: r.name,
       email: r.email,
       role: (r.role as "admin" | "user") ?? "user",
-      reqQuota: r.reqQuota,
       linked: Boolean(r.linked),
     }));
   } catch {
@@ -229,7 +226,7 @@ export async function mirrorUser(u: { id: string; name: string; email: string; r
     await ensureDb();
     await db
       .insert(schema.users)
-      .values({ id: u.id, name: u.name, email: u.email, role: u.role, reqQuota: 5, createdAt: new Date() })
+      .values({ id: u.id, name: u.name, email: u.email, role: u.role, createdAt: new Date() })
       .onConflictDoUpdate({ target: schema.users.id, set: { name: u.name, email: u.email, role: u.role } });
     await db.insert(schema.accountLinks).values({ portalUserId: u.id, linked: false }).onConflictDoNothing();
   } catch {
@@ -290,7 +287,7 @@ export async function createLocalAdmin(u: { name: string; email: string; passwor
   const id = u.email.trim().toLowerCase();
   await db
     .insert(schema.users)
-    .values({ id, name: u.name, email: id, role: "admin", reqQuota: 5, passwordHash: hashPassword(u.password), createdAt: new Date() })
+    .values({ id, name: u.name, email: id, role: "admin", passwordHash: hashPassword(u.password), createdAt: new Date() })
     .onConflictDoUpdate({ target: schema.users.id, set: { name: u.name, email: id, role: "admin", passwordHash: hashPassword(u.password) } });
   await db.insert(schema.accountLinks).values({ portalUserId: id, linked: false }).onConflictDoNothing();
 }

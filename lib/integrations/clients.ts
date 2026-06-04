@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, IntegrationError } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats } from "@/lib/types";
+import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -28,6 +28,9 @@ async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Prom
   const value = await fn();
   ttlCache.set(key, { at: Date.now(), value });
   return value;
+}
+export function bustCache(key: string): void {
+  ttlCache.delete(key);
 }
 
 // ── Gatus — per-service health + heartbeat ─────────────────
@@ -420,10 +423,11 @@ export async function jellyfinRecentlyAdded(count = 6): Promise<RecentItem[]> {
 interface OverseerrRequest {
   id: number;
   type: "movie" | "tv";
-  status: number; // 1 pending, 2 approved, 3 declined
+  status: number; // 1 pending, 2 approved, 3 declined, 4 failed
   media?: { id?: number; status?: number; tmdbId?: number; mediaType?: string };
   requestedBy?: { id: number; displayName?: string; plexUsername?: string; email?: string };
   createdAt?: string;
+  updatedAt?: string;
   seasons?: Array<{ seasonNumber: number }>;
   profileId?: number;
 }
@@ -481,7 +485,7 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
   }
 }
 
-const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending", 2: "approved", 3: "declined" };
+const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending", 2: "approved", 3: "declined", 4: "failed" };
 
 // Cache resolved quality profile names (profileId → name) for 1 hour.
 // Profiles come from the first configured Radarr or Sonarr instance via Overseerr's
@@ -522,10 +526,45 @@ async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promis
   }
 }
 
+// Per-type profile caches (movie = Radarr, TV = Sonarr) for the client-facing fetch.
+let movieProfilesCache: { at: number; profiles: QualityProfile[] } | null = null;
+let tvProfilesCache: { at: number; profiles: QualityProfile[] } | null = null;
+
+async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radarr" | "sonarr"): Promise<QualityProfile[]> {
+  const h = { "X-Api-Key": apiKey };
+  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 8000 });
+  type SvcEntry = { id: number };
+  type ProfileEntry = { id: number; name?: string };
+  const svcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/${arr}`).catch(() => [] as SvcEntry[]);
+  if (svcs.length === 0) return [];
+  const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]);
+  const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
+  const live: QualityProfile[] = raw.filter((p) => p.id != null && p.name).map((p) => ({ id: String(p.id), label: p.name!, sub: "", icon: "high_quality" }));
+  return [DEFAULT, ...live];
+}
+
+/** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
+export async function overseerrMovieProfiles(): Promise<QualityProfile[]> {
+  if (movieProfilesCache && Date.now() - movieProfilesCache.at < QUALITY_PROFILES_TTL) return movieProfilesCache.profiles;
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const profiles = await fetchServiceProfiles(baseUrl, apiKey, "radarr");
+  movieProfilesCache = { at: Date.now(), profiles };
+  return profiles;
+}
+
+/** Live quality profiles for TV requests (from the first Sonarr instance). Cached 1h. */
+export async function overseerrTvProfiles(): Promise<QualityProfile[]> {
+  if (tvProfilesCache && Date.now() - tvProfilesCache.at < QUALITY_PROFILES_TTL) return tvProfilesCache.profiles;
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const profiles = await fetchServiceProfiles(baseUrl, apiKey, "sonarr");
+  tvProfilesCache = { at: Date.now(), profiles };
+  return profiles;
+}
+
 export async function overseerrRequests(): Promise<MediaRequest[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const [data, profileMap] = await Promise.all([
-    fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=50&sort=added`, {
+    fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=250&sort=added`, {
       service: "overseerr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 10000,
@@ -553,7 +592,9 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       kind: r.type === "tv" ? "series" : "movie",
       year: year ?? fallbackYear,
       user: String(r.requestedBy?.id ?? "unknown"),
-      status: r.media?.status === 5 ? "available" : (OVERSEERR_STATUS[r.status] ?? "pending"),
+      status: r.media?.status === 5 ? "available"
+        : (r.media?.status === 3 || r.media?.status === 4) ? "processing"
+        : (OVERSEERR_STATUS[r.status] ?? "pending"),
       requested: r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "",
       art: posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(posterPath)}` : undefined,
       requesterName: r.requestedBy?.displayName || r.requestedBy?.plexUsername || r.requestedBy?.email?.split("@")[0],
@@ -562,6 +603,7 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       overview: overview || undefined,
       qualityProfile: r.profileId != null ? profileMap[r.profileId] : undefined,
       mediaOverseerrId: r.media?.id,
+      modified: r.updatedAt ?? r.createdAt,
     };
   });
 }
@@ -588,6 +630,20 @@ function mediaStatusToState(status?: number): RequestStatus | null {
   return null;
 }
 
+function mapDiscoverResult(r: OverseerrSearchResult): DiscoverItem {
+  const date = r.releaseDate || r.firstAirDate || "";
+  return {
+    id: String(r.id),
+    title: r.title || r.name || `#${r.id}`,
+    kind: r.mediaType === "tv" ? "series" : "movie",
+    year: date ? Number(date.slice(0, 4)) : 0,
+    rating: r.voteAverage ? Math.round(r.voteAverage * 10) / 10 : 0,
+    state: mediaStatusToState(r.mediaInfo?.status),
+    overview: r.overview || "",
+    art: r.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(r.posterPath)}` : undefined,
+  };
+}
+
 export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const data = await fetchJson<{ results: OverseerrSearchResult[] }>(
@@ -597,28 +653,112 @@ export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
   return (data.results ?? [])
     .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")
     .slice(0, 20)
-    .map((r) => {
-      const date = r.releaseDate || r.firstAirDate || "";
-      return {
-        id: String(r.id), // tmdbId
-        title: r.title || r.name || `#${r.id}`,
-        kind: r.mediaType === "tv" ? "series" : "movie",
-        year: date ? Number(date.slice(0, 4)) : 0,
-        rating: r.voteAverage ? Math.round(r.voteAverage * 10) / 10 : 0,
-        // season count isn't in search results → leave undefined (picker hidden, submit = all)
-        state: mediaStatusToState(r.mediaInfo?.status),
-        overview: r.overview || "",
-        // posterPath is a TMDB path (e.g. "/abc.jpg"); proxy it like requests do (see overseerrRequests).
-        art: r.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(r.posterPath)}` : undefined,
-      } satisfies DiscoverItem;
-    });
+    .map(mapDiscoverResult);
 }
 
-export async function overseerrCreateRequest(input: { tmdbId: number; mediaType: "movie" | "tv"; seasons?: number[]; userId?: number }): Promise<void> {
+// ── Overseerr — discover (trending / popular / upcoming) ──────
+async function fetchDiscover(baseUrl: string, apiKey: string, path: string, limit = 20): Promise<DiscoverItem[]> {
+  const data = await fetchJson<{ results: OverseerrSearchResult[] }>(
+    `${baseUrl}/api/v1/discover/${path}?page=1&language=en`,
+    { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
+  );
+  return (data.results ?? [])
+    .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")
+    .slice(0, limit)
+    .map(mapDiscoverResult);
+}
+
+export async function overseerrTrending(): Promise<DiscoverItem[]> {
+  return cached("overseerr:discover:trending", QUALITY_PROFILES_TTL, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    return fetchDiscover(baseUrl, apiKey, "trending", 20);
+  });
+}
+
+export async function overseerrPopularMovies(): Promise<DiscoverItem[]> {
+  return cached("overseerr:discover:popularMovies", QUALITY_PROFILES_TTL, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    return fetchDiscover(baseUrl, apiKey, "movies", 20);
+  });
+}
+
+export async function overseerrPopularTv(): Promise<DiscoverItem[]> {
+  return cached("overseerr:discover:popularTv", QUALITY_PROFILES_TTL, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    return fetchDiscover(baseUrl, apiKey, "tv", 20);
+  });
+}
+
+export async function overseerrUpcomingMovies(): Promise<DiscoverItem[]> {
+  return cached("overseerr:discover:upcomingMovies", QUALITY_PROFILES_TTL, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    return fetchDiscover(baseUrl, apiKey, "movies/upcoming", 20);
+  });
+}
+
+// ── Overseerr — request mutations (delete / edit) ─────────────
+export async function overseerrDeleteRequest(requestId: number): Promise<void> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  await fetchJson(`${baseUrl}/api/v1/request/${requestId}`, { service: "overseerr", method: "DELETE", headers: { "X-Api-Key": apiKey } });
+}
+
+export async function overseerrEditRequest(requestId: number, changes: { seasons?: number[]; profileId?: number }): Promise<void> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const body: Record<string, unknown> = {};
+  if (changes.seasons !== undefined) body.seasons = changes.seasons.length ? changes.seasons : "all";
+  if (changes.profileId !== undefined) body.profileId = changes.profileId;
+  await fetchJson(`${baseUrl}/api/v1/request/${requestId}`, { service: "overseerr", method: "PUT", headers: { "X-Api-Key": apiKey }, body });
+}
+
+// ── Overseerr — request counts ────────────────────────────────
+export interface RequestCounts {
+  total: number;
+  pending: number;
+  approved: number;
+  processing: number;
+  failed: number;
+  available: number;
+}
+
+export async function overseerrRequestCounts(): Promise<RequestCounts> {
+  return cached("overseerr:requestCounts", 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    const data = await fetchJson<Record<string, number>>(`${baseUrl}/api/v1/request/count`, {
+      service: "overseerr",
+      headers: { "X-Api-Key": apiKey },
+    });
+    return {
+      total: data.total ?? 0,
+      pending: data.pending ?? 0,
+      approved: data.approved ?? 0,
+      processing: data.processing ?? 0,
+      failed: (data.failed ?? 0) + (data.unavailable ?? 0),
+      available: data.available ?? 0,
+    };
+  });
+}
+
+// ── Overseerr — Plex watchlist ────────────────────────────────
+export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
+  return cached("overseerr:watchlist", 5 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    const data = await fetchJson<{ results: (OverseerrSearchResult & { tmdbId?: number })[] }>(
+      `${baseUrl}/api/v1/discover/watchlist?page=1`,
+      { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
+    );
+    return (data.results ?? [])
+      .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")
+      .slice(0, 50)
+      .map((r) => mapDiscoverResult({ ...r, id: r.tmdbId ?? r.id }));
+  });
+}
+
+export async function overseerrCreateRequest(input: { tmdbId: number; mediaType: "movie" | "tv"; seasons?: number[]; userId?: number; profileId?: number }): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const body: Record<string, unknown> = { mediaType: input.mediaType, mediaId: input.tmdbId };
   if (input.mediaType === "tv") body.seasons = input.seasons && input.seasons.length ? input.seasons : "all";
   if (input.userId) body.userId = input.userId;
+  if (input.profileId) body.profileId = input.profileId;
   await fetchJson(`${baseUrl}/api/v1/request`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body });
 }
 
@@ -699,6 +839,55 @@ export function matchOverseerrUserId(users: OverseerrUser[], email: string | und
   const key = email.trim().toLowerCase();
   if (!key) return undefined;
   return users.find((u) => u.email?.trim().toLowerCase() === key)?.id;
+}
+
+// ── Overseerr — per-user quota (read + write) ──────────────
+interface OverseerrQuotaApi {
+  limit: number;
+  days: number;
+  used: number;
+  remaining: number;
+  restricted: boolean;
+}
+
+function mapQuota(q: OverseerrQuotaApi): OverseerrQuota {
+  return { limit: q.limit === 0 ? null : q.limit, days: q.days, used: q.used, remaining: q.remaining, restricted: q.restricted };
+}
+
+/** Fetch the current movie + TV quota for an Overseerr user. Cached 3 min per user. */
+export async function overseerrUserQuota(overseerrUserId: number): Promise<{ movie: OverseerrQuota; tv: OverseerrQuota }> {
+  return cached(`overseerr:quota:${overseerrUserId}`, 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("overseerr");
+    const raw = await fetchJson<{ movie: OverseerrQuotaApi; tv: OverseerrQuotaApi }>(
+      `${baseUrl}/api/v1/user/${overseerrUserId}/quota`,
+      { service: "overseerr", headers: { "X-Api-Key": apiKey } },
+    );
+    return { movie: mapQuota(raw.movie), tv: mapQuota(raw.tv) };
+  });
+}
+
+export interface OverseerrQuotaSettings {
+  movieQuotaLimit: number | null;
+  movieQuotaDays: number;
+  tvQuotaLimit: number | null;
+  tvQuotaDays: number;
+}
+
+/** Write movie + TV quota settings for an Overseerr user, then bust the local cache. */
+export async function overseerrUpdateUserQuota(overseerrUserId: number, settings: OverseerrQuotaSettings): Promise<void> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  await fetchJson(`${baseUrl}/api/v1/user/${overseerrUserId}/settings/main`, {
+    service: "overseerr",
+    method: "POST",
+    headers: { "X-Api-Key": apiKey },
+    body: {
+      movieQuotaLimit: settings.movieQuotaLimit ?? 0,
+      movieQuotaDays: settings.movieQuotaDays,
+      tvQuotaLimit: settings.tvQuotaLimit ?? 0,
+      tvQuotaDays: settings.tvQuotaDays,
+    },
+  });
+  bustCache(`overseerr:quota:${overseerrUserId}`);
 }
 
 // ── *arr (Sonarr / Radarr) — download queue ────────────────
