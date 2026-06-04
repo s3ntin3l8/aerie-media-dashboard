@@ -507,7 +507,7 @@ async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promis
     return qualityProfilesCache.maps;
   }
   const h = { "X-Api-Key": apiKey };
-  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 8000 });
+  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 20000 });
   type SvcEntry = { id: number };
   type ProfileEntry = { id: number; name?: string };
   const toMap = (ps: ProfileEntry[]): Record<number, string> => {
@@ -540,20 +540,12 @@ let tvProfilesCache: { at: number; profiles: QualityProfile[] } | null = null;
 
 async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radarr" | "sonarr"): Promise<QualityProfile[]> {
   const h = { "X-Api-Key": apiKey };
-  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 8000 });
+  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 20000 });
   type SvcEntry = { id: number };
   type ProfileEntry = { id: number; name?: string };
-  const svcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/${arr}`).catch((e) => {
-    console.warn(`[overseerr] ${arr} service list failed: ${e}`);
-    return [] as SvcEntry[];
-  });
+  const svcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/${arr}`).catch(() => [] as SvcEntry[]);
   if (svcs.length === 0) return [];
-  console.info(`[overseerr] ${arr} services: ${JSON.stringify(svcs)}`);
-  const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch((e) => {
-    console.warn(`[overseerr] ${arr} profiles fetch failed (svc id=${svcs[0].id}): ${e}`);
-    return [] as ProfileEntry[];
-  });
-  console.info(`[overseerr] ${arr} raw profiles: ${JSON.stringify(raw)}`);
+  const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]);
   const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
   const live: QualityProfile[] = raw.filter((p) => p.id != null && p.name).map((p) => ({ id: String(p.id), label: p.name!, sub: "", icon: "high_quality" }));
   return [DEFAULT, ...live];
@@ -617,7 +609,7 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       requesterEmail: r.requestedBy?.email,
       seasons: seasons && seasons.length > 0 ? seasons : undefined,
       overview: overview || undefined,
-      qualityProfile: r.profileId != null ? profileMaps[r.type === "tv" ? "tv" : "movie"][r.profileId] : undefined,
+      qualityProfile: r.profileId != null ? (profileMaps[r.type === "tv" ? "tv" : "movie"][r.profileId] ?? `Profile ${r.profileId}`) : undefined,
       mediaOverseerrId: r.media?.id,
       modified: r.updatedAt ?? r.createdAt,
     };

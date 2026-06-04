@@ -410,8 +410,11 @@ export function RequestModal({
         setSeasons({});
       }
       setDecision(null);
-      getQualityProfiles("movie").then(setMovieProfiles).catch(() => {});
-      getQualityProfiles("tv").then(setTvProfiles).catch(() => {});
+      const reloadIfStale = (e: unknown) => {
+        if (String(e).includes("Failed to find Server Action")) window.location.reload();
+      };
+      getQualityProfiles("movie").then(setMovieProfiles).catch(reloadIfStale);
+      getQualityProfiles("tv").then(setTvProfiles).catch(reloadIfStale);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, request?.id]);
