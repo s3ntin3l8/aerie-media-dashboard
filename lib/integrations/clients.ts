@@ -496,41 +496,41 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
 const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending", 2: "approved", 3: "declined", 4: "failed" };
 
 // Cache resolved quality profile names (profileId → name) for 1 hour.
-// Profiles come from the first configured Radarr or Sonarr instance via Overseerr's
-// service proxy endpoints. We try Radarr first, then Sonarr as fallback.
-let qualityProfilesCache: { at: number; profiles: Record<number, string> } | null = null;
+// Radarr (movies) and Sonarr (TV) have independent profile ID spaces so we keep
+// separate maps and select by request type when resolving a name.
+interface QualityProfileMaps { movie: Record<number, string>; tv: Record<number, string> }
+let qualityProfilesCache: { at: number; maps: QualityProfileMaps } | null = null;
 const QUALITY_PROFILES_TTL = 60 * 60 * 1000;
 
-async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promise<Record<number, string>> {
+async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promise<QualityProfileMaps> {
   if (qualityProfilesCache && Date.now() - qualityProfilesCache.at < QUALITY_PROFILES_TTL) {
-    return qualityProfilesCache.profiles;
+    return qualityProfilesCache.maps;
   }
   const h = { "X-Api-Key": apiKey };
   const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 8000 });
+  type SvcEntry = { id: number };
+  type ProfileEntry = { id: number; name?: string };
+  const toMap = (ps: ProfileEntry[]): Record<number, string> => {
+    const m: Record<number, string> = {};
+    for (const p of ps) if (p.id != null && p.name) m[p.id] = p.name;
+    return m;
+  };
 
   try {
-    // Fetch profile list from first available *arr service (Radarr preferred).
-    type SvcEntry = { id: number };
-    type ProfileEntry = { id: number; name?: string };
-    let rawProfiles: ProfileEntry[] = [];
-
-    const radarrSvcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/radarr`).catch(() => [] as SvcEntry[]);
-    if (radarrSvcs.length > 0) {
-      rawProfiles = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/radarr/${radarrSvcs[0].id}/profiles`).catch(() => []);
-    } else {
-      const sonarrSvcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/sonarr`).catch(() => [] as SvcEntry[]);
-      if (sonarrSvcs.length > 0) {
-        rawProfiles = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/sonarr/${sonarrSvcs[0].id}/profiles`).catch(() => []);
-      }
-    }
-
-    const profiles: Record<number, string> = {};
-    for (const p of rawProfiles) if (p.id != null && p.name) profiles[p.id] = p.name;
-    qualityProfilesCache = { at: Date.now(), profiles };
-    return profiles;
+    const [radarrSvcs, sonarrSvcs] = await Promise.all([
+      get<SvcEntry[]>(`${baseUrl}/api/v1/service/radarr`).catch(() => [] as SvcEntry[]),
+      get<SvcEntry[]>(`${baseUrl}/api/v1/service/sonarr`).catch(() => [] as SvcEntry[]),
+    ]);
+    const [movieRaw, tvRaw] = await Promise.all([
+      radarrSvcs[0] ? get<ProfileEntry[]>(`${baseUrl}/api/v1/service/radarr/${radarrSvcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]) : Promise.resolve([] as ProfileEntry[]),
+      sonarrSvcs[0] ? get<ProfileEntry[]>(`${baseUrl}/api/v1/service/sonarr/${sonarrSvcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]) : Promise.resolve([] as ProfileEntry[]),
+    ]);
+    const maps: QualityProfileMaps = { movie: toMap(movieRaw), tv: toMap(tvRaw) };
+    qualityProfilesCache = { at: Date.now(), maps };
+    return maps;
   } catch {
-    qualityProfilesCache = { at: Date.now(), profiles: {} };
-    return {};
+    qualityProfilesCache = { at: Date.now(), maps: { movie: {}, tv: {} } };
+    return { movie: {}, tv: {} };
   }
 }
 
@@ -548,6 +548,9 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
   const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]);
   const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
   const live: QualityProfile[] = raw.filter((p) => p.id != null && p.name).map((p) => ({ id: String(p.id), label: p.name!, sub: "", icon: "high_quality" }));
+  if (live.length === 0) {
+    console.warn(`[overseerr] No ${arr} quality profiles returned from ${baseUrl}. Check that the ${arr} instance is configured and reachable from Overseerr.`);
+  }
   return [DEFAULT, ...live];
 }
 
@@ -571,13 +574,13 @@ export async function overseerrTvProfiles(): Promise<QualityProfile[]> {
 
 export async function overseerrRequests(): Promise<MediaRequest[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  const [data, profileMap] = await Promise.all([
+  const [data, profileMaps] = await Promise.all([
     fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=250&sort=added`, {
       service: "overseerr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 10000,
     }),
-    overseerrQualityProfiles(baseUrl, apiKey!).catch(() => ({}) as Record<number, string>),
+    overseerrQualityProfiles(baseUrl, apiKey!).catch(() => ({ movie: {}, tv: {} } as { movie: Record<number, string>; tv: Record<number, string> })),
   ]);
   const results = data.results ?? [];
 
@@ -609,7 +612,7 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       requesterEmail: r.requestedBy?.email,
       seasons: seasons && seasons.length > 0 ? seasons : undefined,
       overview: overview || undefined,
-      qualityProfile: r.profileId != null ? profileMap[r.profileId] : undefined,
+      qualityProfile: r.profileId != null ? profileMaps[r.type === "tv" ? "tv" : "movie"][r.profileId] : undefined,
       mediaOverseerrId: r.media?.id,
       modified: r.updatedAt ?? r.createdAt,
     };

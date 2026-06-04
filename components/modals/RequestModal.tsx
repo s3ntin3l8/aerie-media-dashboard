@@ -135,6 +135,7 @@ function ConfirmStep({
   setSeasons,
   onBack,
   onProfilesLoad,
+  preloadedProfiles,
 }: {
   pick: DiscoverItem;
   quality: string;
@@ -143,22 +144,15 @@ function ConfirmStep({
   setSeasons: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
   onBack: () => void;
   onProfilesLoad: (ps: QualityProfile[]) => void;
+  preloadedProfiles: QualityProfile[];
 }) {
   const selCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
-  const [profiles, setProfiles] = useState<QualityProfile[]>(QUALITY_PROFILES);
-  const [loadingProfiles, setLoadingProfiles] = useState(true);
+  const profiles = preloadedProfiles.length > 0 ? preloadedProfiles : QUALITY_PROFILES;
 
   useEffect(() => {
-    setLoadingProfiles(true);
-    getQualityProfiles(pick.kind === "series" ? "tv" : "movie")
-      .then((ps) => {
-        setProfiles(ps);
-        onProfilesLoad(ps);
-        setQuality(ps[0]?.id ?? "default");
-      })
-      .catch(() => { /* keep static fallback */ })
-      .finally(() => setLoadingProfiles(false));
-  }, [pick.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+    onProfilesLoad(profiles);
+    setQuality(profiles[0]?.id ?? "default");
+  }, [profiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -186,14 +180,13 @@ function ConfirmStep({
         <Divider />
         <section>
           <SectionLabel>Quality profile</SectionLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8, opacity: loadingProfiles ? 0.45 : 1, transition: "opacity .2s" }}>
-            {(loadingProfiles ? QUALITY_PROFILES : profiles).map((p) => {
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
+            {profiles.map((p) => {
               const sel = quality === p.id;
               return (
                 <button
                   key={p.id}
                   type="button"
-                  disabled={loadingProfiles}
                   onClick={() => setQuality(p.id)}
                   style={{
                     display: "flex",
@@ -202,7 +195,7 @@ function ConfirmStep({
                     gap: 4,
                     padding: "11px 13px",
                     borderRadius: 11,
-                    cursor: loadingProfiles ? "default" : "pointer",
+                    cursor: "pointer",
                     textAlign: "left",
                     border: "1px solid " + (sel ? `color-mix(in srgb, ${REQ_C} 55%, transparent)` : "var(--outline-variant)"),
                     background: sel ? `color-mix(in srgb, ${REQ_C} 12%, transparent)` : "transparent",
@@ -383,6 +376,8 @@ export function RequestModal({
   const [pick, setPick] = useState<DiscoverItem | null>(null);
   const [quality, setQuality] = useState("default");
   const [qualityProfiles, setQualityProfiles] = useState<QualityProfile[]>(QUALITY_PROFILES);
+  const [movieProfiles, setMovieProfiles] = useState<QualityProfile[]>([]);
+  const [tvProfiles, setTvProfiles] = useState<QualityProfile[]>([]);
   const [seasons, setSeasons] = useState<Record<number, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const [note, setNote] = useState("");
@@ -406,7 +401,6 @@ export function RequestModal({
     if (open) {
       setQ(initialQuery || "");
       setQuality("default");
-      setQualityProfiles(QUALITY_PROFILES);
       setSubmitted(false);
       setNote("");
       if (initialPick) {
@@ -416,6 +410,8 @@ export function RequestModal({
         setSeasons({});
       }
       setDecision(null);
+      getQualityProfiles("movie").then(setMovieProfiles).catch(() => {});
+      getQualityProfiles("tv").then(setTvProfiles).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, request?.id]);
@@ -430,8 +426,10 @@ export function RequestModal({
 
   const requester = request ? users.find((u) => u.id === request.user) : undefined;
 
+  const canAct = request?.status === "pending";
+
   let footer: React.ReactNode = null;
-  if (review && request && !decision) {
+  if (review && request && !decision && canAct) {
     footer = (
       <>
         <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ marginRight: "auto" }}>
@@ -444,6 +442,12 @@ export function RequestModal({
           <Icon name="check" size={15} /> Approve
         </button>
       </>
+    );
+  } else if (review && request && !decision && !canAct) {
+    footer = (
+      <button onClick={onClose} className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }}>
+        Close
+      </button>
     );
   } else if (!review && pick && !submitted) {
     const qp = qualityProfiles.find((p) => p.id === quality) ?? qualityProfiles[0];
@@ -465,8 +469,17 @@ export function RequestModal({
     );
   }
 
+  const reviewSubMap: Partial<Record<string, string>> = {
+    approved: "Already approved — processing in the download queue.",
+    processing: "Already approved — processing in the download queue.",
+    available: "Already available in the library.",
+    declined: "This request was declined.",
+    failed: "This request failed to process.",
+  };
   const title = review ? "Review request" : "Request media";
-  const sub = review ? "Approve or decline — the member is notified." : "Search the catalog and send it to the request queue.";
+  const sub = review
+    ? (request && reviewSubMap[request.status]) ?? "Approve or decline — the member is notified."
+    : "Search the catalog and send it to the request queue.";
 
   return (
     <ModalShell open={open} onClose={onClose} accent={REQ_C} icon="playlist_add" title={title} sub={sub} footer={footer} width={review ? 560 : 600}>
@@ -514,7 +527,7 @@ export function RequestModal({
             }
           />
         ) : pick ? (
-          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} />
+          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} />
         ) : (
           <DiscoverStep me={me} q={q} setQ={setQ} onPick={choosePick} />
         )
