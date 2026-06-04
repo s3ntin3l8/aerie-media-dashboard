@@ -22,6 +22,8 @@ interface CardSettingsModalProps {
 
 export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsModalProps) {
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // Drag-reorder state for the serviceIds control: index being dragged + index hovered over.
+  const [dnd, setDnd] = useState<{ from: number; over: number } | null>(null);
   const { services, library } = useData();
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
       seed[spec.key] = v !== undefined ? String(v) : fallback;
     }
     setDraft(seed);
+    setDnd(null);
   }, [tile?.uid, tile?.type, open]);
 
   if (!tile || !open) return null;
@@ -209,19 +212,61 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
           if (spec.type === "serviceIds") {
             const allIds = services.map((s) => s.id);
             const raw = draft[spec.key] || "";
-            const selected = raw === "" ? new Set(allIds) : new Set(raw.split(",").filter(Boolean));
+            // serviceIds is an ORDERED list of visible ids; "" = all visible, default order.
+            const order = raw === "" ? allIds : raw.split(",").filter(Boolean);
+            const visible = raw === "" ? new Set(allIds) : new Set(order);
+            // Display: stored (still-existing) order first, then any hidden/new services in natural order.
+            const byId = new Map(services.map((s) => [s.id, s]));
+            const displayIds = [
+              ...order.filter((id) => byId.has(id)),
+              ...allIds.filter((id) => !order.includes(id)),
+            ];
+            // Collapse to "" only when every service is visible AND in natural order (keeps untouched widgets clean).
+            const serialize = (ids: string[], vis: Set<string>) => {
+              const vid = ids.filter((id) => vis.has(id));
+              const isDefault = vid.length === allIds.length && vid.every((id, i) => id === allIds[i]);
+              return isDefault ? "" : vid.join(",");
+            };
             const toggle = (id: string) => {
-              const next = new Set(selected);
-              next.has(id) ? next.delete(id) : next.add(id);
-              const val = next.size >= allIds.length ? "" : [...next].join(",");
-              setDraft((d) => ({ ...d, [spec.key]: val }));
+              const vis = new Set(visible);
+              vis.has(id) ? vis.delete(id) : vis.add(id);
+              setDraft((d) => ({ ...d, [spec.key]: serialize(displayIds, vis) }));
+            };
+            const reorder = (from: number, to: number) => {
+              if (from === to) return;
+              const next = [...displayIds];
+              const [moved] = next.splice(from, 1);
+              next.splice(to, 0, moved);
+              setDraft((d) => ({ ...d, [spec.key]: serialize(next, visible) }));
             };
             return (
               <Field key={spec.key} label={spec.label} hint={spec.hint}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 280, overflowY: "auto" }}>
-                  {services.map((s) => (
-                    <ToggleRow key={s.id} icon="apps" title={s.name} desc="" on={selected.has(s.id)} onChange={() => toggle(s.id)} color="var(--on-surface-variant)" />
-                  ))}
+                  {displayIds.map((id, i) => {
+                    const s = byId.get(id);
+                    if (!s) return null;
+                    const dragging = dnd?.from === i;
+                    const dropTarget = dnd != null && dnd.over === i && dnd.from !== i;
+                    return (
+                      <div
+                        key={s.id}
+                        draggable
+                        onDragStart={(e) => { setDnd({ from: i, over: i }); e.dataTransfer.effectAllowed = "move"; }}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dnd && dnd.over !== i) setDnd({ ...dnd, over: i }); }}
+                        onDrop={(e) => { e.preventDefault(); if (dnd) reorder(dnd.from, i); setDnd(null); }}
+                        onDragEnd={() => setDnd(null)}
+                        style={{
+                          cursor: "grab",
+                          opacity: dragging ? 0.4 : 1,
+                          borderRadius: 11,
+                          boxShadow: dropTarget ? "inset 0 2px 0 0 var(--primary)" : "none",
+                          transition: "opacity .12s, box-shadow .12s",
+                        }}
+                      >
+                        <ToggleRow icon="drag_indicator" title={s.name} desc="" on={visible.has(s.id)} onChange={() => toggle(s.id)} color="var(--on-surface-variant)" />
+                      </div>
+                    );
+                  })}
                   {services.length === 0 && (
                     <span style={{ fontSize: 12, color: "var(--on-surface-variant)" }}>No services configured yet.</span>
                   )}
