@@ -5,9 +5,9 @@
 // ============================================================
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Service, Role, DashboardStore } from "@/lib/types";
+import type { Service, Role, DashboardStore, DiscoverItem } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData } from "@/components/portal/DataProvider";
+import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
 import { getGreeting } from "@/lib/greeting";
 import { useRequestReview } from "@/components/hooks/useRequestReview";
@@ -15,9 +15,11 @@ import { Empty } from "@/components/panels";
 import { GridDashboard } from "@/components/portal/GridDashboard";
 import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
 import { CardSettingsModal } from "@/components/modals/CardSettingsModal";
+import { RequestModal } from "@/components/modals/RequestModal";
 import { compactAll, type Tile } from "@/components/portal/gridLayout";
 import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, resolveSettings, type WidgetCtx } from "@/components/portal/widgetCatalog";
 import { setDashboardsAction } from "@/app/(portal)/actions";
+import { submitRequest } from "@/app/(portal)/requests/actions";
 
 // 40px aggregate health ticker
 function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
@@ -156,9 +158,11 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   const { onAct } = useRequestReview();
   const openService = (s: Service) => router.push(`/s/${s.id}`);
 
+  const refresh = useRefresh();
   const [editing, setEditing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [configUid, setConfigUid] = useState<string | null>(null);
+  const [reqPick, setReqPick] = useState<DiscoverItem | null>(null);
 
   // Both role layouts live in one store; setLayout persists the whole store so a
   // member's arrangement survives while an admin edits theirs (and vice-versa).
@@ -182,7 +186,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   const updateSettings = (uid: string, settings: Record<string, string | number | boolean>) =>
     setLayout((l) => l.map((t) => (t.uid === uid ? { ...t, settings } : t)));
 
-  const ctx: WidgetCtx = { role, onNavigate: (path) => router.push(path), onOpenService: openService, onAct };
+  const ctx: WidgetCtx = { role, onNavigate: (path) => router.push(path), onOpenService: openService, onAct, onRequest: setReqPick };
   const renderWidget = (item: Tile) => {
     const m = WIDGET_CATALOG[item.type];
     if (!m) return <Empty icon="error" line="Unknown widget" sub={item.type} />;
@@ -291,6 +295,19 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
           setConfigUid(null);
         }}
       />
+      {reqPick && (
+        <RequestModal
+          open
+          mode="request"
+          initialPick={reqPick}
+          onClose={() => setReqPick(null)}
+          onSubmit={(pick, quality, seasons) => {
+            const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
+            void submitRequest(pick, picked, quality).then(() => refresh());
+          }}
+          onAct={onAct}
+        />
+      )}
     </section>
   );
 }

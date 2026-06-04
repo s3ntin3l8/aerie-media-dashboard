@@ -10,7 +10,7 @@
 // "Top Streamers" reuses the existing Tautulli-backed LeaderboardPanel.
 // ============================================================
 import React from "react";
-import type { Role, Service } from "@/lib/types";
+import type { Role, Service, DiscoverItem } from "@/lib/types";
 import { compactAll, findSlot, type Tile, type WidgetMeta } from "@/components/portal/gridLayout";
 import {
   CentralServices,
@@ -24,6 +24,7 @@ import {
   LeaderboardPanel,
   QueuePanel,
   DownloadsPanel,
+  DiscoverFeedPanel,
 } from "@/components/panels";
 import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget } from "@/components/widgets";
 
@@ -33,6 +34,7 @@ export interface WidgetCtx {
   onNavigate: (path: string) => void;
   onOpenService: (s: Service) => void;
   onAct?: (id: string, action: "approve" | "decline") => void;
+  onRequest?: (item: DiscoverItem) => void;
 }
 
 export type WidgetSettingSpec =
@@ -187,6 +189,56 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Local time, date and monitored-host uptime.",
     defaultW: 3, defaultH: 4, minW: 2, minH: 3, maxW: 6, maxH: 6,
     render: (_c, _s) => <ClockWidget fill />,
+  },
+  trendingMedia: {
+    type: "trendingMedia", name: "Trending Now", icon: "trending_up", accent: "var(--originator-court)", group: "Requests",
+    desc: "Trending movies and TV shows from TMDB — click to request.",
+    defaultW: 8, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
+    ],
+    render: (c, s) => <DiscoverFeedPanel fill feed="trending" onRequest={c.onRequest} limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
+  },
+  popularMovies: {
+    type: "popularMovies", name: "Popular Movies", icon: "movie", accent: "var(--originator-court)", group: "Requests",
+    desc: "Popular movies on TMDB right now — click to request.",
+    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
+    ],
+    render: (c, s) => <DiscoverFeedPanel fill feed="popularMovies" onRequest={c.onRequest} limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
+  },
+  popularTv: {
+    type: "popularTv", name: "Popular TV Shows", icon: "live_tv", accent: "var(--originator-court)", group: "Requests",
+    desc: "Popular TV shows on TMDB right now — click to request.",
+    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
+    ],
+    render: (c, s) => <DiscoverFeedPanel fill feed="popularTv" onRequest={c.onRequest} limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
+  },
+  upcomingMovies: {
+    type: "upcomingMovies", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Requests",
+    desc: "Upcoming movie releases from TMDB — click to request.",
+    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
+    ],
+    render: (c, s) => <DiscoverFeedPanel fill feed="upcomingMovies" onRequest={c.onRequest} limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
+  },
+  watchlist: {
+    type: "watchlist", name: "Plex Watchlist", icon: "bookmarks", accent: "var(--primary)", group: "Requests",
+    desc: "Titles from the Plex watchlist — click to request anything not already available.",
+    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
+      { key: "limit", label: "Items to show", type: "count", min: 3, max: 50, hint: "Auto = 50" },
+    ],
+    render: (c, s) => <DiscoverFeedPanel fill feed="watchlist" onRequest={c.onRequest} limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
   },
 };
 
