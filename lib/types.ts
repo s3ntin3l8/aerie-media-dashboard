@@ -61,8 +61,25 @@ export interface NowPlaying {
   paused: boolean;
   /** proxied cover-art URL (/api/artwork?…), if available */
   art?: string;
+  /** proxied wide backdrop/fanart URL (/api/artwork?…&kind=backdrop), if available */
+  backdrop?: string;
 
   // ── enrichment (all optional; Jellyfin/missing data degrades gracefully) ──
+  // — title detail —
+  /** plot/episode synopsis */
+  summary?: string;
+  /** season number (series only) */
+  season?: number;
+  /** episode number (series only) */
+  episode?: number;
+  /** original air / release date, ISO "YYYY-MM-DD" */
+  airDate?: string;
+  /** maturity rating, e.g. "TV-MA", "PG-13" */
+  contentRating?: string;
+  /** genre labels */
+  genres?: string[];
+  /** proxied user profile photo URL (/api/artwork?…&kind=avatar), if available */
+  userAvatar?: string;
   // — client / app —
   /** client app platform, e.g. "Chrome", "Android", "Roku" */
   platform?: string;
@@ -141,6 +158,8 @@ export interface MediaRequest {
   requesterName?: string;
   /** The requester's Overseerr email (used to resolve `portalUser`). */
   requesterEmail?: string;
+  /** Proxied Plex profile photo for the requester (from Tautulli `get_users`). */
+  requesterAvatar?: string;
   /** Portal account id resolved from `requesterEmail`, set in the snapshot. */
   portalUser?: string;
   /** Season numbers explicitly requested (TV only). */
@@ -180,6 +199,8 @@ export interface User {
   email: string;
   linked: boolean;
   groups: string[];
+  /** Proxied Plex profile photo (from Tautulli `get_users`), if matched. */
+  avatar?: string;
   /** null when user has no Overseerr account */
   movieQuota: OverseerrQuota | null;
   tvQuota: OverseerrQuota | null;
@@ -286,7 +307,7 @@ export interface DownloadEvent {
 
 /** Weekly leaderboard from Tautulli home stats. */
 export interface TopStats {
-  users: { name: string; plays: number }[];
+  users: { name: string; plays: number; avatar?: string }[];
   media: { title: string; plays: number; art?: string }[];
 }
 

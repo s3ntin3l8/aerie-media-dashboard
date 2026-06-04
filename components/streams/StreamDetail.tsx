@@ -7,7 +7,7 @@
 // returns null when it has no data, so missing fields just vanish.
 // ============================================================
 import React from "react";
-import { Icon } from "@/components/primitives";
+import { Icon, Avatar } from "@/components/primitives";
 import type { NowPlaying } from "@/lib/types";
 
 type Tone = "neutral" | "good" | "warn" | "bad";
@@ -61,56 +61,104 @@ function chLabel(ch?: number): string | undefined {
 }
 const isXcode = (d?: string) => d === "transcode" || d === "burn";
 
-// ── pipeline: Video / Audio / Subs / Container ───────────────
-export function StreamPipeline({ s }: { s: NowPlaying }) {
-  const chips: React.ReactNode[] = [];
+// ── meta: season·episode · air date · rating · genres ────────
+export function StreamMeta({ s }: { s: NowPlaying }) {
+  const se = s.season != null && s.episode != null ? `S${s.season} · E${s.episode}` : s.episode != null ? `E${s.episode}` : null;
+  const year = s.airDate ? s.airDate.slice(0, 4) : s.year != null ? String(s.year) : null;
+  const genres = s.genres?.slice(0, 3) ?? [];
+  if (!se && !year && !s.contentRating && !genres.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+      {se && <DChip tone="neutral" strong>{se}</DChip>}
+      {year && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{year}</span>}
+      {s.contentRating && (
+        <span
+          style={{
+            fontSize: 9.5,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            padding: "1px 6px",
+            borderRadius: 4,
+            border: "1px solid color-mix(in srgb, var(--outline-variant) 80%, transparent)",
+            color: "var(--on-surface-variant)",
+          }}
+        >
+          {s.contentRating}
+        </span>
+      )}
+      {genres.map((g) => (
+        <span key={g} style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+          {g}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── user badge: real Plex avatar (falls back to generated initials) ──
+export function StreamAvatar({ s, size = 17, color }: { s: NowPlaying; size?: number; color?: string }) {
+  return <Avatar name={s.user} src={s.userAvatar} size={size} color={color} />;
+}
+
+// ── tech spec grid: Video / Audio / Subtitles / Container / Engine ──
+// A scannable label→value table. Each value is tinted by tone (green = passed
+// through, amber = transcoded/remuxed, red = throttled), and "→" reads source→
+// delivered. Replaces the older free-floating chip rows for legibility.
+export function StreamTech({ s }: { s: NowPlaying }) {
+  const rows: { label: string; value: string; tone: Tone }[] = [];
 
   // Video
-  if (s.videoDecision || s.codec) {
+  if (s.videoDecision || (s.codec && s.codec !== "—")) {
     const x = isXcode(s.videoDecision);
-    chips.push(
-      <DChip key="v" tone={x ? "warn" : "good"}>
-        Video {x && s.streamCodec ? `${s.codec}→${s.streamCodec}` : s.codec}
-      </DChip>,
-    );
+    rows.push({ label: "Video", tone: x ? "warn" : "good", value: x && s.streamCodec ? `${s.codec} → ${s.streamCodec}` : s.codec });
   }
   // Audio
   if (s.audioDecision || s.audioCodec) {
     const x = isXcode(s.audioDecision);
     const src = [s.audioCodec, s.audioLayout].filter(Boolean).join(" ");
     const dst = [s.streamAudioCodec, chLabel(s.streamAudioChannels)].filter(Boolean).join(" ");
-    chips.push(
-      <DChip key="a" tone={x ? "warn" : "good"}>
-        Audio {x && dst ? `${src}→${dst}` : src || s.audioCodec}
-      </DChip>,
-    );
+    rows.push({ label: "Audio", tone: x ? "warn" : "good", value: x && dst ? `${src} → ${dst}` : src || s.audioCodec || "" });
   }
   // Subtitles
   if (s.subtitle?.codec) {
     const burn = s.subtitle.transcode;
-    chips.push(
-      <DChip key="s" tone={burn ? "warn" : "neutral"}>
-        Subs {burn ? "burn " : ""}
-        {s.subtitle.codec}
-      </DChip>,
-    );
+    rows.push({ label: "Subtitles", tone: burn ? "warn" : "neutral", value: `${s.subtitle.codec}${burn ? " · burned in" : ""}` });
   }
-  // Container remux
+  // Container
   if (s.sourceContainer && s.streamContainer && s.sourceContainer !== s.streamContainer) {
-    chips.push(
-      <DChip key="c" tone="warn">
-        {s.sourceContainer}→{s.streamContainer}
-      </DChip>,
-    );
+    rows.push({ label: "Container", tone: "warn", value: `${s.sourceContainer} → ${s.streamContainer}` });
+  } else if (s.sourceContainer) {
+    rows.push({ label: "Container", tone: "neutral", value: s.sourceContainer });
+  }
+  // Engine (transcode only): HW/SW · speed · throttle · buffer
+  if (s.play === "transcode") {
+    const slow = s.transcodeThrottled || (s.transcodeSpeed != null && s.transcodeSpeed > 0 && s.transcodeSpeed < 1);
+    const parts = [
+      s.hwTranscode ? "HW" : "SW",
+      s.transcodeSpeed != null ? `${s.transcodeSpeed.toFixed(1)}×` : null,
+      s.transcodeThrottled ? "throttled" : null,
+      s.transcodeProgress != null && s.transcodeProgress > 0 && s.transcodeProgress < 100 ? `buffer ${Math.round(s.transcodeProgress)}%` : null,
+    ].filter(Boolean);
+    if (parts.length) rows.push({ label: "Engine", tone: slow ? "bad" : "good", value: parts.join(" · ") });
   }
 
-  if (!chips.length) return null;
-  return <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{chips}</div>;
+  if (!rows.length) return null;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 14, rowGap: 4, alignItems: "baseline" }}>
+      {rows.map((r) => (
+        <React.Fragment key={r.label}>
+          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>{r.label}</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: TONE[r.tone] }}>{r.value}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
 }
 
-// ── quality: resolution · codec · HDR · fps + bitrate ────────
+// ── quality: resolution · HDR · fps + bitrate ────────────────
+// (codec is owned by the StreamTech spec grid below, so it's omitted here)
 export function StreamQuality({ s }: { s: NowPlaying }) {
-  const specs = [s.res !== "—" ? s.res : null, s.codec !== "—" ? s.codec : null, s.dynamicRange, s.framerate].filter(Boolean);
+  const specs = [s.res !== "—" ? s.res : null, s.dynamicRange, s.framerate].filter(Boolean);
   const src = mbps(s.sourceKbps);
   const rate = `${src && src !== s.bitrate ? `${src} → ` : ""}${s.bitrate} Mbps`;
   if (!specs.length && !s.bitrate) return null;
@@ -119,26 +167,6 @@ export function StreamQuality({ s }: { s: NowPlaying }) {
       {specs.length > 0 && <span style={{ color: "var(--on-surface)" }}>{specs.join(" · ")}</span>}
       <span>{rate}</span>
     </span>
-  );
-}
-
-// ── transcode health: HW/SW · speed · throttle (transcode only) ──
-export function TranscodeHealth({ s }: { s: NowPlaying }) {
-  if (s.play !== "transcode") return null;
-  const slow = s.transcodeThrottled || (s.transcodeSpeed != null && s.transcodeSpeed > 0 && s.transcodeSpeed < 1);
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-      <DChip tone={s.hwTranscode ? "good" : "neutral"} strong>
-        {s.hwTranscode ? "HW" : "SW"}
-      </DChip>
-      {s.transcodeSpeed != null && (
-        <DChip tone={slow ? "bad" : "good"}>{s.transcodeSpeed.toFixed(1)}×</DChip>
-      )}
-      {s.transcodeThrottled && <DChip tone="bad" strong>THROTTLED</DChip>}
-      {s.transcodeProgress != null && s.transcodeProgress > 0 && s.transcodeProgress < 100 && (
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)" }}>buffer {Math.round(s.transcodeProgress)}%</span>
-      )}
-    </div>
   );
 }
 

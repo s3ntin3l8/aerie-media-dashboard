@@ -31,7 +31,7 @@ import {
   REQ_LABEL as _REQ_LABEL,
 } from "@/lib/display";
 import { useStreamProgress } from "@/components/hooks/useStreamProgress";
-import { StreamPipeline, StreamQuality, TranscodeHealth, StreamClient, StreamNetwork } from "@/components/streams/StreamDetail";
+import { StreamQuality, StreamClient, StreamNetwork, StreamMeta, StreamTech, StreamAvatar } from "@/components/streams/StreamDetail";
 
 type CSS = React.CSSProperties;
 
@@ -282,7 +282,7 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           {role === "admin" && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <Avatar name={u ? u.name : s.user} size={16} color={accent} />
+              <Avatar name={u ? u.name : s.user} src={s.userAvatar ?? u?.avatar} size={16} color={accent} />
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
             </span>
           )}
@@ -349,68 +349,129 @@ export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: 
 }
 
 // ── Rich session card (full Now Playing page) ─────────────────
-// Expands a single stream into its full story: transcode pipeline,
-// quality, transcode health, client and network. Reuses the shared
-// StreamDetail fragments (which degrade to nothing on missing data).
+// Expands a single stream into its full story: a big cover anchors the left and
+// stretches to the connection footer, with the title, quality and transcode
+// spec grid reflowed into the right column. A wide backdrop/fanart image fills
+// the card behind a light scrim. Reuses the shared StreamDetail fragments
+// (which degrade to nothing on missing data); a missing/failed backdrop degrades
+// to the plain surface, so the layout never depends on the image loading.
+
+// Hairline section divider used to group the card's rows.
+const DIVIDER = "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)";
+
+// Backdrop image layer: the scrim is the base, art painted on top, failing to
+// nothing. The vertical scrim keeps the lower text legible while letting the
+// art show through up top, and only turns fully solid near the bottom so the
+// card's footer rows still sit on surface.
+const SCRIM =
+  "linear-gradient(180deg, color-mix(in srgb, var(--surface-container) 18%, transparent) 0%, color-mix(in srgb, var(--surface-container) 46%, transparent) 34%, color-mix(in srgb, var(--surface-container) 82%, transparent) 64%, var(--surface-container) 86%)";
+function Backdrop({ src }: { src?: string }) {
+  const [imgOk, setImgOk] = useState(true);
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", borderRadius: "inherit" }}>
+      {src && imgOk && (
+        <img
+          src={src}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          onError={() => setImgOk(false)}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      )}
+      <div style={{ position: "absolute", inset: 0, background: SCRIM }} />
+    </div>
+  );
+}
+
+// Big "fill" poster for the band layout: stretches to its flex row's height
+// (alignSelf: stretch) so the cover spans the whole card, the art cropped to
+// fill. Degrades to the same tinted-gradient + glyph as PosterTile.
+function PosterFill({ s, w }: { s: import("@/lib/types").NowPlaying; w: number }) {
+  const c = catColor("stream");
+  const glyph = s.kind === "series" ? "live_tv" : s.kind === "track" ? "album" : "movie";
+  const [imgOk, setImgOk] = useState(true);
+  return (
+    <div
+      style={{
+        width: w,
+        alignSelf: "stretch",
+        minHeight: Math.round(w * 1.5),
+        flexShrink: 0,
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: 12,
+        background: `linear-gradient(160deg, color-mix(in srgb, ${c} 26%, var(--surface-container)) 0%, var(--surface-container-high) 100%)`,
+        border: "1px solid color-mix(in srgb, var(--outline-variant) 70%, transparent)",
+        boxShadow: "0 8px 24px rgba(0,0,0,.5)",
+      }}
+    >
+      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Icon name={glyph} size={Math.round(w * 0.34)} color={`color-mix(in srgb, ${c} 75%, var(--on-surface-variant))`} />
+      </div>
+      {s.art && imgOk && (
+        <img src={s.art} alt={s.title} loading="lazy" onError={() => setImgOk(false)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+      )}
+    </div>
+  );
+}
+
 export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/types").NowPlaying; role: Role; allServices: Service[]; users: import("@/lib/types").User[] }) {
   const { cur, pct } = useStreamProgress(s);
   const svc = allServices.find((x) => x.id === s.src);
   const c = catColor("stream");
   const u = users.find((x) => x.id === s.user);
   const accent = s.src === "plex" ? "var(--originator-third-party)" : "var(--primary)";
-  return (
-    <div
-      style={{
-        position: "relative",
-        background: "var(--surface-container)",
-        border: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)",
-        borderRadius: 16,
-        padding: 16,
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-        overflow: "hidden",
-      }}
-    >
-      <span style={{ position: "absolute", left: 0, top: 14, bottom: 14, width: 3, borderRadius: 9999, background: accent }} />
-      {/* header */}
-      <div style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>
-        <PosterTile title={s.title} kind={s.kind} cat="stream" w={56} art={s.art} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
-            <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 16, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {s.title}
-            </span>
-            {s.paused ? <Icon name="pause_circle" size={15} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={12} /> : null}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {s.ep || (s.kind === "movie" ? s.year : "")}
-            {s.ep || s.year ? " · " : ""}
-            {s.device}
-          </div>
-          {role === "admin" && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 6 }}>
-              <Avatar name={u ? u.name : s.user} size={17} color={accent} />
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
-            </span>
-          )}
-        </div>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--on-surface-variant)", flexShrink: 0 }}>
-          {svc ? <ServiceLogo service={svc} size={15} radius={3} /> : <Icon name="play_circle" size={13} color={c} />}
-          {svc?.name ?? s.src}
+  const hasBg = Boolean(s.backdrop);
+  const posterW = s.kind === "track" ? 168 : 196;
+
+  // Title block: name, season·episode/year/rating/genres meta, device, user.
+  const titleBlock = (
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 17, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {s.title}
         </span>
+        {s.paused ? <Icon name="pause_circle" size={16} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={12} /> : null}
       </div>
-
-      {/* progress */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: accent, minWidth: 40 }}>{fmtTime(cur)}</span>
-        <div style={{ flex: 1 }}>
-          <ProgressBar pct={pct} color={accent} />
-        </div>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 40, textAlign: "right" }}>{fmtTime(s.dur * 60)}</span>
+      {s.ep && (
+        <div style={{ fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.ep}</div>
+      )}
+      <StreamMeta s={s} />
+      <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <Icon name="devices" size={12} color="var(--on-surface-variant)" />
+        {s.device}
       </div>
+      {role === "admin" && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 1 }}>
+          <StreamAvatar s={s} size={18} color={accent} />
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
+        </span>
+      )}
+    </div>
+  );
 
-      {/* quality + play mode */}
+  const serviceTag = (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--on-surface-variant)", flexShrink: 0 }}>
+      {svc ? <ServiceLogo service={svc} size={15} radius={3} /> : <Icon name="play_circle" size={13} color={c} />}
+      {svc?.name ?? s.src}
+    </span>
+  );
+
+  // Card sections, composed differently per layout.
+  const progressRow = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: accent, minWidth: 40 }}>{fmtTime(cur)}</span>
+      <div style={{ flex: 1 }}>
+        <ProgressBar pct={pct} color={accent} />
+      </div>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 40, textAlign: "right" }}>{fmtTime(s.dur * 60)}</span>
+    </div>
+  );
+
+  // stream: play-mode + quality headline, then the transcode spec grid
+  const streamSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 11, borderTop: DIVIDER }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span
           style={{
@@ -427,22 +488,55 @@ export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/t
         </span>
         <StreamQuality s={s} />
       </div>
+      <StreamTech s={s} />
+    </div>
+  );
 
-      {/* transcode pipeline + health */}
-      {(s.videoDecision || s.audioDecision || s.subtitle?.codec) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <StreamPipeline s={s} />
-          <TranscodeHealth s={s} />
+  // connection: client + network
+  const connectionSection = (s.product || s.platform || s.qualityProfile || s.location || s.geo || s.ipPublic) ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 11, borderTop: DIVIDER }}>
+      <StreamClient s={s} />
+      <StreamNetwork s={s} />
+    </div>
+  ) : null;
+
+  // Big cover on the left that stretches down to the connection footer, with the
+  // content reflowed into the right column. The backdrop fills the card behind a
+  // light scrim (art visible up top, solid before the footer); the header sits
+  // up in the art. A missing/failed backdrop degrades to the plain surface.
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: "var(--surface-container)",
+        border: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)",
+        borderRadius: 16,
+        overflow: "hidden",
+      }}
+    >
+      {hasBg && <Backdrop src={s.backdrop} />}
+      {/* service tag pinned to the art on a subtle scrim pill for legibility */}
+      {hasBg && (
+        <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, padding: "3px 8px", borderRadius: 999, background: "color-mix(in srgb, var(--surface-container) 68%, transparent)", backdropFilter: "blur(2px)" }}>
+          {serviceTag}
         </div>
       )}
-
-      {/* client + network */}
-      {(s.product || s.platform || s.qualityProfile || s.location || s.geo || s.ipPublic) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 11, borderTop: "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" }}>
-          <StreamClient s={s} />
-          <StreamNetwork s={s} />
+      <div style={{ position: "relative", padding: 16, display: "flex", flexDirection: "column", gap: 13 }}>
+        <span style={{ position: "absolute", left: 0, top: 2, bottom: 2, width: 3, borderRadius: 9999, background: accent }} />
+        {/* main: big cover left, content column right (poster stretches to match) */}
+        <div style={{ display: "flex", gap: 16, alignItems: "stretch" }}>
+          <PosterFill s={s} w={posterW} />
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 13 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              {titleBlock}
+              {!hasBg && serviceTag}
+            </div>
+            {progressRow}
+            {streamSection}
+          </div>
         </div>
-      )}
+        {connectionSection}
+      </div>
     </div>
   );
 }
@@ -882,7 +976,7 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
                 <div style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
                   {adminMode ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Avatar name={u?.name} size={13} color="var(--originator-court)" />
+                      <Avatar name={u?.name} src={u?.avatar ?? r.requesterAvatar} size={13} color="var(--originator-court)" />
                       {u?.name} · {r.requested}
                     </span>
                   ) : (
@@ -1221,7 +1315,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {displayUsers.map((u) => (
                 <div key={u.name} style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                  <Avatar name={u.name} size={20} color="var(--originator-own)" />
+                  <Avatar name={u.name} src={u.avatar} size={20} color="var(--originator-own)" />
                   <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: "0 0 110px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</span>
                   <div style={{ flex: 1 }}>
                     <ProgressBar pct={(u.plays / maxUser) * 100} color="var(--originator-own)" h={5} />

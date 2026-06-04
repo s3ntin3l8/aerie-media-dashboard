@@ -6,14 +6,32 @@ import { getServiceCredentials } from "@/lib/integrations/registry";
 // the bytes back. Used by PosterTile via /api/artwork?svc=…&ref=…
 export const dynamic = "force-dynamic";
 
-function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: string): string | null {
+type Kind = "poster" | "backdrop" | "avatar";
+
+// Target dimensions per artwork kind: tall poster, wide backdrop, square avatar.
+const DIMS: Record<Kind, { w: number; h: number }> = {
+  poster: { w: 300, h: 450 },
+  backdrop: { w: 960, h: 540 },
+  avatar: { w: 80, h: 80 },
+};
+
+function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: string, kind: Kind): string | null {
   const base = baseUrl.replace(/\/$/, "");
+  const { w, h } = DIMS[kind];
   switch (svc) {
     case "tautulli":
       if (!apiKey) return null;
-      return `${base}/api/v2?apikey=${apiKey}&cmd=pms_image_proxy&img=${encodeURIComponent(ref)}&width=300&height=450&fallback=poster`;
-    case "jellyfin":
-      return `${base}/Items/${encodeURIComponent(ref)}/Images/Primary?fillHeight=450&fillWidth=300&quality=90${apiKey ? `&api_key=${apiKey}` : ""}`;
+      // pms_image_proxy proxies both Plex library image paths and external URLs
+      // (e.g. a plex.tv user_thumb avatar), so the same call serves every kind.
+      return `${base}/api/v2?apikey=${apiKey}&cmd=pms_image_proxy&img=${encodeURIComponent(ref)}&width=${w}&height=${h}&fallback=${kind === "backdrop" ? "art" : "poster"}`;
+    case "jellyfin": {
+      if (kind === "avatar") {
+        // ref is a Jellyfin user id
+        return `${base}/Users/${encodeURIComponent(ref)}/Images/Primary?width=${w}&height=${h}&quality=90${apiKey ? `&api_key=${apiKey}` : ""}`;
+      }
+      const imageType = kind === "backdrop" ? "Backdrop" : "Primary";
+      return `${base}/Items/${encodeURIComponent(ref)}/Images/${imageType}?fillHeight=${h}&fillWidth=${w}&quality=${kind === "backdrop" ? 85 : 90}${apiKey ? `&api_key=${apiKey}` : ""}`;
+    }
     case "overseerr":
       // ref is a TMDB poster_path (e.g. "/b8VtW6I.jpg"); proxy through to avoid
       // exposing the TMDB CDN directly and to apply our cache headers.
@@ -31,12 +49,14 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
 export async function GET(req: NextRequest) {
   const svc = req.nextUrl.searchParams.get("svc") || "";
   const ref = req.nextUrl.searchParams.get("ref") || "";
+  const kindParam = req.nextUrl.searchParams.get("kind") || "poster";
+  const kind: Kind = kindParam === "backdrop" || kindParam === "avatar" ? kindParam : "poster";
   if (!svc || !ref) return new NextResponse("missing svc/ref", { status: 400 });
 
   const creds = await getServiceCredentials(svc);
   if (!creds) return new NextResponse("unknown service", { status: 404 });
 
-  const url = upstreamUrl(svc, creds.baseUrl, creds.apiKey, ref);
+  const url = upstreamUrl(svc, creds.baseUrl, creds.apiKey, ref, kind);
   if (!url) return new NextResponse("unsupported", { status: 400 });
 
   try {

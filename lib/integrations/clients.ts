@@ -298,6 +298,45 @@ export async function tautulliActivity(): Promise<TautulliActivity> {
   };
 }
 
+// ── Tautulli — all Plex users + their avatars (for avatars everywhere) ──
+interface TautulliUser {
+  user_id?: number;
+  username?: string;
+  friendly_name?: string;
+  email?: string;
+  user_thumb?: string;
+  thumb?: string;
+}
+/** A Plex identity → proxied avatar, used to attach profile photos to portal
+ *  users and request requesters (not just active streamers). */
+export interface PlexUserAvatar {
+  email?: string;
+  username?: string;
+  friendlyName?: string;
+  /** proxied avatar URL (/api/artwork?…&kind=avatar), or undefined */
+  avatar?: string;
+}
+/** `get_users` returns every Plex user with a `user_thumb` avatar. The roster
+ *  changes rarely and getSnapshot() polls every few seconds, so cache 30 min. */
+export async function tautulliUsers(): Promise<PlexUserAvatar[]> {
+  return cached("tautulli:users", 30 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("tautulli");
+    const data = await fetchJson<{ response: { data?: TautulliUser[] } }>(
+      `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_users`,
+      { service: "tautulli" },
+    );
+    return (data.response?.data ?? []).map((u) => {
+      const thumb = u.user_thumb || u.thumb;
+      return {
+        email: u.email || undefined,
+        username: u.username || undefined,
+        friendlyName: u.friendly_name || undefined,
+        avatar: thumb ? `/api/artwork?svc=tautulli&kind=avatar&ref=${encodeURIComponent(thumb)}` : undefined,
+      };
+    });
+  });
+}
+
 // ── Tautulli — library counts ──────────────────────────────
 interface TautulliLibrary {
   section_type: string; // movie | show | artist

@@ -5,12 +5,11 @@ import {
   Equalizer,
   ProgressBar,
   PosterTile,
-  Avatar,
 } from "@/components/primitives";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useStreamProgress } from "@/components/hooks/useStreamProgress";
-import { StreamPipeline, StreamQuality, TranscodeHealth, StreamClient, StreamNetwork } from "@/components/streams/StreamDetail";
+import { StreamQuality, StreamClient, StreamNetwork, StreamMeta, StreamTech, StreamAvatar } from "@/components/streams/StreamDetail";
 import type { NowPlaying } from "@/lib/types";
 
 function StreamCard({ s }: { s: NowPlaying }) {
@@ -97,18 +96,6 @@ function StreamCard({ s }: { s: NowPlaying }) {
             >
               {s.title}
             </span>
-            {s.year != null && (
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                  color: "var(--on-surface-variant)",
-                  flexShrink: 0,
-                }}
-              >
-                {s.year}
-              </span>
-            )}
             {s.paused && (
               <span
                 style={{
@@ -138,10 +125,11 @@ function StreamCard({ s }: { s: NowPlaying }) {
           >
             {(s.ep ? s.ep + " · " : "") + s.device}
           </div>
+          <StreamMeta s={s} />
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
           >
-            <Avatar name={s.user} size={18} />
+            <StreamAvatar s={s} size={18} />
             <span style={{ fontSize: 11, color: "var(--on-surface-variant)" }}>
               {s.user}
             </span>
@@ -202,8 +190,7 @@ function StreamCard({ s }: { s: NowPlaying }) {
           </span>
           <StreamQuality s={s} />
         </span>
-        {(s.videoDecision || s.audioDecision || s.subtitle?.codec) && <StreamPipeline s={s} />}
-        <TranscodeHealth s={s} />
+        <StreamTech s={s} />
       </div>
 
       {/* Client + network */}
