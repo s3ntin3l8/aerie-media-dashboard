@@ -502,32 +502,49 @@ interface QualityProfileMaps { movie: Record<number, string>; tv: Record<number,
 let qualityProfilesCache: { at: number; maps: QualityProfileMaps } | null = null;
 const QUALITY_PROFILES_TTL = 60 * 60 * 1000;
 
+async function arrQualityProfileMap(serviceId: "radarr" | "sonarr"): Promise<Record<number, string>> {
+  const { baseUrl, apiKey } = await creds(serviceId);
+  type ArrProfile = { id: number; name: string };
+  const profiles = await fetchJson<ArrProfile[]>(`${baseUrl}/api/v3/qualityprofile`, {
+    service: serviceId,
+    headers: { "X-Api-Key": apiKey },
+    timeoutMs: 5000,
+  });
+  const m: Record<number, string> = {};
+  for (const p of profiles) if (p.id != null && p.name) m[p.id] = p.name;
+  return m;
+}
+
 async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promise<QualityProfileMaps> {
   if (qualityProfilesCache && Date.now() - qualityProfilesCache.at < QUALITY_PROFILES_TTL) {
     return qualityProfilesCache.maps;
   }
-  // Use /settings endpoints — these return Overseerr's stored config (activeProfileId + name)
-  // without pinging the *arr service, so they're fast and reliable.
-  const h = { "X-Api-Key": apiKey };
-  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 5000 });
-  type SettingsEntry = { activeProfileId?: number; activeProfileName?: string };
-  const buildMap = (entries: SettingsEntry[]): Record<number, string> => {
-    const m: Record<number, string> = {};
-    for (const e of entries) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
-    return m;
-  };
-  try {
-    const [radarr, sonarr] = await Promise.all([
-      get<SettingsEntry[]>(`${baseUrl}/api/v1/settings/radarr`).catch(() => [] as SettingsEntry[]),
-      get<SettingsEntry[]>(`${baseUrl}/api/v1/settings/sonarr`).catch(() => [] as SettingsEntry[]),
-    ]);
-    const maps: QualityProfileMaps = { movie: buildMap(radarr), tv: buildMap(sonarr) };
-    qualityProfilesCache = { at: Date.now(), maps };
-    return maps;
-  } catch {
-    qualityProfilesCache = { at: Date.now(), maps: { movie: {}, tv: {} } };
-    return { movie: {}, tv: {} };
-  }
+
+  // Primary: call Radarr/Sonarr directly — gets ALL profiles, not just the active one.
+  // Falls back to Overseerr settings (active profile only) if *arr isn't configured in AERIE.
+  const [movieMap, tvMap] = await Promise.all([
+    arrQualityProfileMap("radarr").catch(async () => {
+      // Fallback: Overseerr settings knows the active profile without pinging *arr.
+      type S = { activeProfileId?: number; activeProfileName?: string };
+      const h = { "X-Api-Key": apiKey };
+      const rows = await fetchJson<S[]>(`${baseUrl}/api/v1/settings/radarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
+      const m: Record<number, string> = {};
+      for (const e of rows) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
+      return m;
+    }),
+    arrQualityProfileMap("sonarr").catch(async () => {
+      type S = { activeProfileId?: number; activeProfileName?: string };
+      const h = { "X-Api-Key": apiKey };
+      const rows = await fetchJson<S[]>(`${baseUrl}/api/v1/settings/sonarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
+      const m: Record<number, string> = {};
+      for (const e of rows) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
+      return m;
+    }),
+  ]);
+
+  const maps: QualityProfileMaps = { movie: movieMap, tv: tvMap };
+  qualityProfilesCache = { at: Date.now(), maps };
+  return maps;
 }
 
 // Per-type profile caches (movie = Radarr, TV = Sonarr) for the client-facing fetch.
@@ -535,10 +552,18 @@ let movieProfilesCache: { at: number; profiles: QualityProfile[] } | null = null
 let tvProfilesCache: { at: number; profiles: QualityProfile[] } | null = null;
 
 async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radarr" | "sonarr"): Promise<QualityProfile[]> {
-  const h = { "X-Api-Key": apiKey };
   const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
 
-  // Try the live service-proxy endpoint (requires Overseerr to ping the *arr instance).
+  // Primary: call *arr directly — fast, full list, no Overseerr service-proxy ping.
+  const direct = await arrQualityProfileMap(arr).catch(() => null);
+  if (direct && Object.keys(direct).length > 0) {
+    const live = Object.entries(direct).map(([id, name]) => ({ id, label: name, sub: "", icon: "high_quality" as const }));
+    return [DEFAULT, ...live];
+  }
+
+  // Fallback: Overseerr service proxy (pings *arr — slow, but works when *arr isn't
+  // configured separately in AERIE).
+  const h = { "X-Api-Key": apiKey };
   const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 20000 });
   type SvcEntry = { id: number };
   type ProfileEntry = { id: number; name?: string };
@@ -549,10 +574,9 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
     if (live.length > 0) return [DEFAULT, ...live];
   }
 
-  // Fallback: settings endpoint returns the active profile without pinging *arr.
+  // Last resort: Overseerr settings (active profile only).
   type SettingsEntry = { activeProfileId?: number; activeProfileName?: string };
-  const getSettings = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 5000 });
-  const settings = await getSettings<SettingsEntry[]>(`${baseUrl}/api/v1/settings/${arr}`).catch(() => [] as SettingsEntry[]);
+  const settings = await fetchJson<SettingsEntry[]>(`${baseUrl}/api/v1/settings/${arr}`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as SettingsEntry[]);
   const fromSettings: QualityProfile[] = settings
     .filter((e) => e.activeProfileId != null && e.activeProfileName)
     .map((e) => ({ id: String(e.activeProfileId!), label: e.activeProfileName!, sub: "active profile", icon: "high_quality" }));
@@ -664,7 +688,7 @@ export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const data = await fetchJson<{ results: OverseerrSearchResult[] }>(
     `${baseUrl}/api/v1/search?query=${encodeURIComponent(query || "a")}&page=1&language=en`,
-    { service: "overseerr", headers: { "X-Api-Key": apiKey } },
+    { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 12000 },
   );
   return (data.results ?? [])
     .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")

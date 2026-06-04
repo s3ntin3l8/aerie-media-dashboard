@@ -512,7 +512,7 @@ export function RequestModal({
             title="Request submitted"
             body={
               <>
-                <strong style={{ color: "var(--on-surface)" }}>{pick.title}</strong> is pending approval. You&rsquo;ll be notified when it&rsquo;s available to watch.
+                <strong style={{ color: "var(--on-surface)" }}>{pick.title}</strong>{" "}is pending approval. You&rsquo;ll be notified when it&rsquo;s available to watch.
               </>
             }
             onClose={onClose}
