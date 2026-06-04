@@ -134,6 +134,7 @@ function ConfirmStep({
   seasons,
   setSeasons,
   onBack,
+  onProfilesLoad,
 }: {
   pick: DiscoverItem;
   quality: string;
@@ -141,6 +142,7 @@ function ConfirmStep({
   seasons: Record<number, boolean>;
   setSeasons: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
   onBack: () => void;
+  onProfilesLoad: (ps: QualityProfile[]) => void;
 }) {
   const selCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
   const [profiles, setProfiles] = useState<QualityProfile[]>(QUALITY_PROFILES);
@@ -151,6 +153,7 @@ function ConfirmStep({
     getQualityProfiles(pick.kind === "series" ? "tv" : "movie")
       .then((ps) => {
         setProfiles(ps);
+        onProfilesLoad(ps);
         setQuality(ps[0]?.id ?? "default");
       })
       .catch(() => { /* keep static fallback */ })
@@ -379,6 +382,7 @@ export function RequestModal({
   const [q, setQ] = useState("");
   const [pick, setPick] = useState<DiscoverItem | null>(null);
   const [quality, setQuality] = useState("default");
+  const [qualityProfiles, setQualityProfiles] = useState<QualityProfile[]>(QUALITY_PROFILES);
   const [seasons, setSeasons] = useState<Record<number, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const [note, setNote] = useState("");
@@ -402,6 +406,7 @@ export function RequestModal({
     if (open) {
       setQ(initialQuery || "");
       setQuality("default");
+      setQualityProfiles(QUALITY_PROFILES);
       setSubmitted(false);
       setNote("");
       if (initialPick) {
@@ -441,7 +446,7 @@ export function RequestModal({
       </>
     );
   } else if (!review && pick && !submitted) {
-    const qp = QUALITY_PROFILES.find((p) => p.id === quality)!;
+    const qp = qualityProfiles.find((p) => p.id === quality) ?? qualityProfiles[0];
     const seasonCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
     const noSeasons = pick.kind === "series" && seasonCount === 0;
     footer = (
@@ -509,7 +514,7 @@ export function RequestModal({
             }
           />
         ) : pick ? (
-          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} />
+          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} />
         ) : (
           <DiscoverStep me={me} q={q} setQ={setQ} onPick={choosePick} />
         )
