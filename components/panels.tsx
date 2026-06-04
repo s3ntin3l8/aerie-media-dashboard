@@ -1474,20 +1474,26 @@ export function DiscoverPanel({
         (() => {
           const renderItem = (d: DiscoverItem) => {
             const requestable = !d.state || (d.state !== "available" && d.state !== "approved");
+            const viewable = !!d.state && !requestable;
             const tone = d.state ? DISCOVER_STATE_TONE[d.state] : undefined;
             const label = d.state ? DISCOVER_STATE_LABEL[d.state] : undefined;
             return (
               <div
                 key={d.id}
-                style={{ width: 76, flexShrink: 0, cursor: requestable && onRequest ? "pointer" : "default" }}
-                onClick={() => requestable && onRequest && onRequest(d)}
-                title={requestable ? `Request ${d.title}` : d.title}
+                style={{ width: 76, flexShrink: 0, cursor: onRequest ? "pointer" : "default" }}
+                onClick={() => onRequest && onRequest(d)}
+                title={d.title}
               >
                 <div style={{ position: "relative" }}>
                   <PosterTile title={d.title} kind={d.kind} cat="request" w={76} art={d.art} />
-                  {requestable && onRequest && !d.state && (
+                  {onRequest && !d.state && (
                     <div style={{ position: "absolute", top: 3, right: 3, background: "color-mix(in srgb, var(--surface-container) 75%, transparent)", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <Icon name="add" size={15} color="var(--originator-court)" />
+                    </div>
+                  )}
+                  {onRequest && viewable && (
+                    <div style={{ position: "absolute", top: 3, right: 3, background: "color-mix(in srgb, var(--surface-container) 75%, transparent)", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon name="info" size={14} color="var(--on-surface-variant)" />
                     </div>
                   )}
                 </div>

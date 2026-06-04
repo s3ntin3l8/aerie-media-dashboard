@@ -102,7 +102,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
             const inLib = d.state === "available";
             const requested = d.state === "pending" || d.state === "approved";
             const itemAtQuota = d.kind === "series" ? tvAtQuota : movieAtQuota;
-            const blocked = inLib || requested || itemAtQuota;
+            const blocked = itemAtQuota;
             return (
               <button
                 key={d.id}
@@ -131,6 +131,35 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
         )}
       </div>
     </>
+  );
+}
+
+function InfoStep({ pick }: { pick: DiscoverItem }) {
+  return (
+    <div style={{ padding: "18px 20px 22px" }}>
+      <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
+        <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+            <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
+            {pick.state && <StateBadge state={pick.state} />}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>
+            <Icon name={pick.kind === "series" ? "live_tv" : "movie"} size={13} />
+            {pick.kind === "series" ? "Series" : "Movie"} · {pick.year}
+            {pick.rating > 0 && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--amber)" }}>
+                <Icon name="star" size={13} fill />
+                {pick.rating}
+              </span>
+            )}
+          </div>
+          {pick.overview && (
+            <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 9, lineHeight: 1.5 }}>{pick.overview}</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -172,7 +201,7 @@ function ConfirmStep({
         <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ paddingLeft: 7, marginBottom: 12 }}>
           <Icon name="arrow_back" size={15} /> Back to results
         </button>
-        <div style={{ display: "flex", gap: 15 }}>
+        <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
           <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
@@ -289,7 +318,7 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
   );
   return (
     <div style={{ padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "flex", gap: 15 }}>
+      <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
         <PosterTile title={req.title} kind={req.kind} cat="request" w={68} art={req.art} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -488,6 +517,12 @@ export function RequestModal({
         Close
       </button>
     );
+  } else if (!review && pick && pick.state && !submitted) {
+    footer = (
+      <button onClick={onClose} className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }}>
+        Close
+      </button>
+    );
   } else if (!review && pick && !submitted) {
     const qp = qualityProfiles.find((p) => p.id === quality) ?? qualityProfiles[0];
     const seasonCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
@@ -591,6 +626,8 @@ export function RequestModal({
               }
             />
           )
+        ) : pick && pick.state ? (
+          <InfoStep pick={pick} />
         ) : pick ? (
           <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} />
         ) : (
