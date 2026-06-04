@@ -258,6 +258,17 @@ function relTime(iso: string | null): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+function relFuture(iso: string | null): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const s = (t - Date.now()) / 1000;
+  if (s <= 0) return "due";
+  if (s < 3600) return `in ${Math.max(1, Math.floor(s / 60))}m`;
+  if (s < 86400) return `in ${Math.floor(s / 3600)}h`;
+  return `in ${Math.floor(s / 86400)}d`;
+}
+
 // ── WIZARR — invite / user stats ───────────────────────────
 export function WizarrWidget({ fill }: { fill?: boolean } = {}) {
   const { wizarr } = useData();
@@ -306,7 +317,7 @@ export function AgregarrWidget({ fill }: { fill?: boolean } = {}) {
       ) : (
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14, height: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-            <Metric label="Collections" value={agregarr.totalCollections.toLocaleString("en-US")} icon="collections_bookmark" color="var(--primary)" />
+            <Metric label="Collections" value={agregarr.activeCollections === agregarr.collections ? agregarr.collections.toLocaleString("en-US") : `${agregarr.activeCollections}/${agregarr.collections}`} icon="collections_bookmark" color="var(--primary)" />
             <Metric label="Needs sync" value={agregarr.needingSync.toLocaleString("en-US")} icon="sync_problem" color={agregarr.needingSync > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />
           </div>
           {agregarr.running ? (
@@ -322,7 +333,9 @@ export function AgregarrWidget({ fill }: { fill?: boolean } = {}) {
           ) : (
             <div suppressHydrationWarning style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 11, color: "var(--on-surface-variant)" }}>
               <StatusDot status={agregarr.error ? "down" : "up"} size={6} />
-              {agregarr.error ? "Last sync failed" : `Last synced ${relTime(agregarr.lastSyncAt)}`}
+              {agregarr.error
+                ? "Last sync failed"
+                : `Last synced ${relTime(agregarr.lastSyncAt)}${relFuture(agregarr.nextSyncAt) ? ` · next ${relFuture(agregarr.nextSyncAt)}` : ""}`}
             </div>
           )}
         </div>

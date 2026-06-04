@@ -1454,37 +1454,55 @@ export async function prowlarrStats(): Promise<ProwlarrStats> {
   });
 }
 
-// ── Agregarr — collections sync status (cached) ────────────
+// ── Agregarr — collections + sync status (cached) ──────────
 export interface AgregarrStatus {
+  /** real configured-collection count (from /collections, not the sync run's counter) */
+  collections: number;
+  activeCollections: number;
   running: boolean;
-  totalCollections: number;
   needingSync: number;
   progress: number;
   currentStage: string | null;
   lastSyncAt: string | null;
+  nextSyncAt: string | null;
   error: string | null;
 }
 
-export async function agregarrStatus(): Promise<AgregarrStatus> {
-  return cached("agregarr:status", 60 * 1000, async () => {
-    const { baseUrl, apiKey } = await creds("agregarr");
-    const d = await fetchJson<{
+export async function agregarrStatus(serviceId = "agregarr"): Promise<AgregarrStatus> {
+  return cached(`agregarr:status:${serviceId}`, 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds(serviceId);
+    const headers = { "X-Api-Key": apiKey };
+    // The configured collections are the real count; sync/status.totalCollections is only the
+    // *current run's* counter (0 when idle), so read /collections for the headline figure.
+    const list = await fetchJson<{ collectionConfigs?: { isActive?: boolean }[] }>(
+      `${baseUrl}/api/v1/collections`,
+      { service: "agregarr", headers },
+    );
+    // sync/status is best-effort enrichment — don't blank the panel if it errors.
+    type AgSync = {
       running?: boolean;
-      totalCollections?: number;
       collectionsNeedingSync?: number;
       progress?: number;
       currentStage?: string;
       lastGlobalSyncAt?: string;
+      nextSyncAt?: string;
       globalSyncError?: string | null;
-    }>(`${baseUrl}/api/v1/collections/sync/status`, { service: "agregarr", headers: { "X-Api-Key": apiKey } });
+    };
+    const sync = await fetchJson<AgSync>(
+      `${baseUrl}/api/v1/collections/sync/status`,
+      { service: "agregarr", headers },
+    ).catch((): AgSync => ({}));
+    const cfgs = list.collectionConfigs ?? [];
     return {
-      running: d.running ?? false,
-      totalCollections: d.totalCollections ?? 0,
-      needingSync: d.collectionsNeedingSync ?? 0,
-      progress: d.progress ?? 0,
-      currentStage: d.currentStage ?? null,
-      lastSyncAt: d.lastGlobalSyncAt ?? null,
-      error: d.globalSyncError ?? null,
+      collections: cfgs.length,
+      activeCollections: cfgs.filter((c) => c.isActive !== false).length,
+      running: sync.running ?? false,
+      needingSync: sync.collectionsNeedingSync ?? 0,
+      progress: sync.progress ?? 0,
+      currentStage: sync.currentStage ?? null,
+      lastSyncAt: sync.lastGlobalSyncAt ?? null,
+      nextSyncAt: sync.nextSyncAt ?? null,
+      error: sync.globalSyncError ?? null,
     };
   });
 }
