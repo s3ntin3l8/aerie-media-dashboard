@@ -26,7 +26,7 @@ import {
   DownloadsPanel,
   DiscoverFeedPanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -241,6 +241,12 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Bazarr wanted (missing) subtitle counts for episodes and movies.",
     defaultW: 3, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 6,
     render: (_c, _s) => <BazarrWidget fill />,
+  },
+  nzbhydra: {
+    type: "nzbhydra", name: "NZBHydra2", icon: "manage_search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
+    desc: "NZBHydra2 usenet indexer health — enabled, disabled and errored indexers.",
+    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    render: (_c, _s) => <Nzbhydra2Widget fill />,
   },
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",

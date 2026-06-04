@@ -1533,6 +1533,44 @@ export async function bazarrWanted(): Promise<BazarrWanted> {
   });
 }
 
+// ── NZBHydra2 — indexer health (cached) ────────────────────
+export interface Nzbhydra2Stats {
+  total: number;
+  enabled: number;
+  disabled: number;
+  errored: number;
+}
+
+interface HydraIndexerStatus {
+  indexer?: string;
+  state?: string; // ENABLED | DISABLED_USER | DISABLED_SYSTEM | DISABLED_SYSTEM_TEMPORARY
+  lastError?: string | null;
+}
+
+// NZBHydra2's /api/stats/indexers is a POST taking an ApiHistoryRequest body — a GET (or a body
+// missing sortMode/column) returns HTTP 500. The apikey goes in both the query and the body, and
+// Content-Type must be set explicitly (fetchJson only sends Accept by default).
+async function nzbhydraIndexerStatuses(baseUrl: string, apiKey: string, service: string): Promise<HydraIndexerStatus[]> {
+  return fetchJson<HydraIndexerStatus[]>(`${baseUrl}/api/stats/indexers?apikey=${encodeURIComponent(apiKey)}`, {
+    service,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { apikey: apiKey, page: 1, limit: 100, filterModel: {}, sortMode: 2, column: "time" },
+  });
+}
+
+export async function nzbhydra2Stats(serviceId = "nzbhydra"): Promise<Nzbhydra2Stats> {
+  return cached(`nzbhydra2:stats:${serviceId}`, 5 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds(serviceId);
+    const items = (await nzbhydraIndexerStatuses(baseUrl, apiKey, "nzbhydra")) ?? [];
+    const enabled = items.filter((i) => (i.state ?? "").toUpperCase() === "ENABLED").length;
+    // System-disabled (auto, on repeated errors) or an active lastError counts as errored;
+    // DISABLED_USER is a deliberate off-switch, so it's only "disabled", not "errored".
+    const errored = items.filter((i) => !!i.lastError || (i.state ?? "").toUpperCase().startsWith("DISABLED_SYSTEM")).length;
+    return { total: items.length, enabled, disabled: items.length - enabled, errored };
+  });
+}
+
 // ── Version detection ──────────────────────────────────────
 
 type ServiceKind =
@@ -1544,6 +1582,7 @@ type ServiceKind =
   | "agregarr" // /api/v1/status (public)
   | "wizarr" // /api/status (X-API-Key; no version field)
   | "audiobookshelf" // /api/libraries (Bearer; no version field)
+  | "nzbhydra" // /api/stats/indexers POST (apikey query+body; caps XML omits version)
   | "tautulli"
   | "prometheus";
 
@@ -1557,6 +1596,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("agregarr")) return "agregarr";
   if (l.includes("wizarr")) return "wizarr";
   if (l.includes("audiobookshelf")) return "audiobookshelf";
+  if (l.includes("nzbhydra") || l.includes("hydra")) return "nzbhydra";
   if (l.includes("prowlarr") || l.includes("lidarr") || l.includes("readarr")) return "arr-v1";
   if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
   if (l.includes("tautulli")) return "tautulli";
@@ -1626,6 +1666,12 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
       service: "version-detect",
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     });
+    return "";
+  }
+  if (kind === "nzbhydra") {
+    // caps XML omits the app version → "" means "connected, version unknown". POST the stats
+    // endpoint (same call the widget uses) so a bad key / unreachable host fails the test.
+    await nzbhydraIndexerStatuses(b, apiKey, "version-detect");
     return "";
   }
   if (kind === "tautulli") {

@@ -307,6 +307,24 @@ export function ProwlarrWidget({ fill }: { fill?: boolean } = {}) {
   );
 }
 
+// ── NZBHYDRA2 — usenet indexer health ──────────────────────
+export function Nzbhydra2Widget({ fill }: { fill?: boolean } = {}) {
+  const { nzbhydra } = useData();
+  return (
+    <PanelShell fill={fill} title="NZBHydra2" icon="manage_search" accent="var(--originator-third-party)" live={!!nzbhydra}>
+      {!nzbhydra ? (
+        <Empty icon="manage_search" line="NZBHydra2 not connected" sub="Add NZBHydra2 and store its API key to see indexer health." />
+      ) : (
+        <StatRow>
+          <Metric label="Indexers" value={`${nzbhydra.enabled}/${nzbhydra.total}`} icon="dns" color="var(--primary)" />
+          <Metric label="Disabled" value={nzbhydra.disabled.toLocaleString("en-US")} icon="block" color="var(--on-surface-variant)" />
+          <Metric label="Errored" value={nzbhydra.errored.toLocaleString("en-US")} icon="error" color={nzbhydra.errored > 0 ? "var(--error)" : "var(--on-surface-variant)"} />
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
 // ── AGREGARR — Plex collections sync status ────────────────
 export function AgregarrWidget({ fill }: { fill?: boolean } = {}) {
   const { agregarr } = useData();
