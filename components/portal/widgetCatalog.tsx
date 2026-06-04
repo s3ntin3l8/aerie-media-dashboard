@@ -323,7 +323,7 @@ export function resolveSettings(
 const DEFAULT_TILES: Omit<Tile, "uid">[] = [
   { type: "centralServices", x: 0, y: 0, w: 12, h: 6 },
   { type: "libraryStats", x: 0, y: 6, w: 12, h: 3 },
-  { type: "upcoming", x: 0, y: 9, w: 12, h: 10 },
+  { type: "upcoming", x: 0, y: 9, w: 12, h: 6 },
   { type: "nowPlaying", x: 0, y: 19, w: 8, h: 11 },
   { type: "myRequests", x: 8, y: 19, w: 4, h: 8 },
   { type: "status", x: 8, y: 27, w: 4, h: 9 },
@@ -342,7 +342,8 @@ export function defaultLayout(role: Role): Tile[] {
 let __wuidN = 0;
 export function newWidgetInstance(type: string): Tile {
   const m = WIDGET_CATALOG[type];
-  return { uid: `${type}-${Date.now().toString(36)}-${(__wuidN++).toString(36)}`, type, w: m.defaultW, h: m.defaultH, x: 0, y: 0 };
+  const h = m.snapH ? Math.min(m.maxH ?? m.defaultH, Math.max(m.minH ?? 1, m.snapH(m.defaultH))) : m.defaultH;
+  return { uid: `${type}-${Date.now().toString(36)}-${(__wuidN++).toString(36)}`, type, w: m.defaultW, h, x: 0, y: 0 };
 }
 
 // Place a new widget at the first free slot of the given layout.
