@@ -18,6 +18,7 @@ export interface ServiceForm {
   logoSlug: string;
   scheme: "https" | "http";
   host: string;
+  internalScheme: "https" | "http";
   internalUrl: string;
   version: string;
   embeddable: boolean;
@@ -151,6 +152,7 @@ export function ServiceModal({
     logoSlug: "",
     scheme: "https",
     host: "",
+    internalScheme: "http",
     internalUrl: "",
     version: "",
     embeddable: true,
@@ -160,8 +162,15 @@ export function ServiceModal({
     apiKey: "",
     monitoringKey: "",
   });
+  // stored internalUrl is a full URL ("http://host:port"); split for the two-input form
+  const splitInternal = (u?: string): { scheme: "https" | "http"; rest: string } => {
+    if (!u) return { scheme: "http", rest: "" }; // default scheme http
+    const m = /^(https?):\/\/(.*)$/i.exec(u.trim());
+    return m ? { scheme: m[1].toLowerCase() as "https" | "http", rest: m[2] } : { scheme: "http", rest: u.trim() };
+  };
   const init = (): ServiceForm => {
     if (editing && service) {
+      const internal = splitInternal(service.internalUrl);
       return {
         ...blank(),
         name: service.name,
@@ -170,7 +179,8 @@ export function ServiceModal({
         logoSlug: service.logoSlug ?? "",
         scheme: service.scheme,
         host: service.host,
-        internalUrl: service.internalUrl ?? "", // seed from stored value so edits don't clobber the LAN URL
+        internalScheme: internal.scheme,
+        internalUrl: internal.rest, // seed from stored value so edits don't clobber the LAN URL
         version: service.version || "",
         embeddable: service.embeddable,
         central: Boolean(service.central),
@@ -202,7 +212,10 @@ export function ServiceModal({
 
   // The server calls the internal/LAN URL when set; mirror that here so the test/detect
   // probes the same endpoint the snapshot will actually hit.
-  const apiUrl = () => f.internalUrl.trim() || `${f.scheme}://${f.host}`;
+  const apiUrl = () => {
+    const rest = f.internalUrl.trim();
+    return rest ? `${f.internalScheme}://${rest}` : `${f.scheme}://${f.host}`;
+  };
 
   const handleDetect = async () => {
     if (!onDetectVersion || detecting) return;
@@ -325,13 +338,19 @@ export function ServiceModal({
                 </div>
             </Field>
             <Field label="API base URL" hint="internal — defaults to the public host">
-              <input
-                className="input"
-                style={{ ...fieldInput, fontFamily: "var(--font-mono)" }}
-                value={f.internalUrl}
-                onChange={(e) => set("internalUrl", e.target.value)}
-                placeholder="e.g. http://192.168.1.50:8181 — leave blank to use the host above"
-              />
+              <div style={{ display: "flex", gap: 7 }}>
+                <select className="input" value={f.internalScheme} onChange={(e) => set("internalScheme", e.target.value as "https" | "http")} style={{ ...fieldInput, fontFamily: "var(--font-mono)", width: "auto", flexShrink: 0 }}>
+                  <option value="https">https://</option>
+                  <option value="http">http://</option>
+                </select>
+                <input
+                  className="input"
+                  style={{ ...fieldInput, fontFamily: "var(--font-mono)", flex: 1, minWidth: 0 }}
+                  value={f.internalUrl}
+                  onChange={(e) => set("internalUrl", e.target.value)}
+                  placeholder="e.g. 192.168.1.50:8181 — leave blank to use the host above"
+                />
+              </div>
             </Field>
             <Field label="Internal note" hint="shown to admins only">
               <input className="input" style={fieldInput} value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="What is this service for?" />

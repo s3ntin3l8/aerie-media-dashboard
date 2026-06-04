@@ -319,6 +319,9 @@ export function Admin() {
     if (!editing && id !== lastAutoSavedId.current && (await serviceExists(id))) {
       return { error: `A service id "${id}" already exists` };
     }
+    // Rejoin the two-input API base URL into the stored full-URL form (null when blank).
+    const internalRest = form.internalUrl.trim();
+    const internalUrl = internalRest ? `${form.internalScheme}://${internalRest}` : null;
     await upsertService({
       id,
       name: form.name.trim(),
@@ -327,7 +330,7 @@ export function Admin() {
       logoSlug: form.logoSlug || null,
       host: form.host.trim(),
       baseUrl: `${form.scheme}://${form.host.trim()}`,
-      internalUrl: form.internalUrl.trim() || null,
+      internalUrl,
       embeddable: form.embeddable,
       central: form.central,
       centralLabel: form.central ? form.centralLabel || null : null,
@@ -342,8 +345,8 @@ export function Admin() {
 
     // Optimistically update the local snapshot so the service appears immediately.
     const optimisticService: Service = editing
-      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: form.internalUrl.trim() || undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
-      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: form.internalUrl.trim() || undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
+      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
     // Dedupe by id: in add mode the service may already be in the snapshot from a prior
     // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).
     patchData((s) => ({
