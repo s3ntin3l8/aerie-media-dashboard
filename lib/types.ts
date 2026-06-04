@@ -134,6 +134,43 @@ export interface NowPlaying {
   subtitle?: { codec?: string; language?: string; transcode?: boolean };
 }
 
+export interface StreamHistoryItem {
+  id: number;
+  /** Main display title: movie title, episode title, or track title. */
+  title: string;
+  /** Season name (TV) or album (music). */
+  parentTitle?: string;
+  /** Show name (TV) or artist (music). */
+  grandparentTitle?: string;
+  kind: "movie" | "episode" | "track";
+  year?: number;
+  /** Best available Plex thumb path for /api/artwork. */
+  thumb?: string;
+  ratingKey?: number;
+  /** Tautulli friendly_name. */
+  user: string;
+  userId?: number;
+  /** Unix timestamp (seconds). */
+  started: number;
+  /** Unix timestamp (seconds). */
+  stopped?: number;
+  /** Seconds actually watched. */
+  duration: number;
+  pausedCounter?: number;
+  platform?: string;
+  player?: string;
+  ipAddress?: string;
+  /** Kbps. */
+  bitrate?: number;
+  /** Episode number (TV only). */
+  mediaIndex?: number;
+  /** Season number (TV only). */
+  parentMediaIndex?: number;
+  transcodeDecision?: "direct play" | "copy" | "transcode";
+  /** 0 = in-progress, 1 = watched. */
+  watchedStatus: number;
+}
+
 export interface StreamGeo {
   city?: string;
   region?: string;

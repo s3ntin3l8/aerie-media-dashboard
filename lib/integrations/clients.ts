@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, IntegrationError } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, StreamGeo, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -402,6 +402,76 @@ export async function tautulliPlays24h(): Promise<TautulliPlays> {
       hourly[23 - hoursAgo] += 1;
     }
     return { total: d?.recordsFiltered ?? records.length, hourly };
+  });
+}
+
+// ── Tautulli — stream history ──────────────────────────────
+interface TautulliHistoryRecord {
+  row_id?: number;
+  title?: string;
+  parent_title?: string;
+  grandparent_title?: string;
+  media_type?: string;
+  year?: number;
+  rating_key?: number | string;
+  thumb?: string;
+  parent_thumb?: string;
+  grandparent_thumb?: string;
+  friendly_name?: string;
+  user_id?: number;
+  started?: number;
+  stopped?: number;
+  duration?: number;
+  paused_counter?: number;
+  platform?: string;
+  player?: string;
+  ip_address?: string;
+  bitrate?: number;
+  media_index?: number;
+  parent_media_index?: number;
+  transcode_decision?: string;
+  watched_status?: number;
+}
+
+export async function tautulliStreamHistory(days = 7, limit = 200): Promise<StreamHistoryItem[]> {
+  return cached("tautulli:history", 5 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("tautulli");
+    const afterDate = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const data = await fetchJson<{ response: { data: { data?: TautulliHistoryRecord[] } } }>(
+      `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_history&after=${afterDate}&length=${limit}&order_column=date&order_dir=desc`,
+      { service: "tautulli" },
+    );
+    const records = data.response?.data?.data ?? [];
+    return records.map((r): StreamHistoryItem => {
+      const kind: "movie" | "episode" | "track" =
+        r.media_type === "movie" ? "movie" : r.media_type === "track" ? "track" : "episode";
+      const thumb = r.grandparent_thumb || r.parent_thumb || r.thumb;
+      return {
+        id: r.row_id ?? 0,
+        title: r.title ?? "",
+        parentTitle: r.parent_title || undefined,
+        grandparentTitle: r.grandparent_title || undefined,
+        kind,
+        year: r.year || undefined,
+        thumb: thumb || undefined,
+        ratingKey: r.rating_key ? Number(r.rating_key) : undefined,
+        user: r.friendly_name ?? "",
+        userId: r.user_id,
+        started: r.started ?? 0,
+        stopped: r.stopped,
+        duration: r.duration ?? 0,
+        pausedCounter: r.paused_counter,
+        platform: r.platform || undefined,
+        player: r.player || undefined,
+        ipAddress: r.ip_address || undefined,
+        bitrate: r.bitrate || undefined,
+        mediaIndex: r.media_index,
+        parentMediaIndex: r.parent_media_index,
+        transcodeDecision: (r.transcode_decision === "direct play" || r.transcode_decision === "copy" || r.transcode_decision === "transcode")
+          ? r.transcode_decision : undefined,
+        watchedStatus: r.watched_status ?? 0,
+      };
+    });
   });
 }
 
