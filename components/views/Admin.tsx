@@ -13,11 +13,82 @@ import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { Toast } from "@/components/modals/Toast";
+import { useIsMobile } from "@/components/mobile/useIsMobile";
 
-function AdminServices({ onOpenService, onEdit }: { onOpenService: (s: Service) => void; onEdit: (s: Service) => void }) {
+function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void }) {
   const { services } = useData();
   const { favorites, toggleFavorite } = usePortal();
   const cols = "1.6fr 1fr 0.7fr 1.2fr 0.5fr";
+
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {services.map((s) => {
+          const pinned = favorites.includes(s.id);
+          return (
+            <div key={s.id} className="card" style={{ padding: 15, borderRadius: 18, background: "var(--surface-container-lowest)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <ServiceLogo service={s} size={36} radius={9} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "var(--on-surface)" }}>{s.name}</div>
+                  <div style={{ marginTop: 2 }}><CatBadge cat={s.cat} size="xs" /></div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <Eyebrow style={{ width: 52, flexShrink: 0 }}>Host</Eyebrow>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.host}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Eyebrow style={{ width: 52, flexShrink: 0 }}>Embed</Eyebrow>
+                  {s.embeddable
+                    ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--originator-own)" }}><Icon name="check" size={14} />Yes</span>
+                    : <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}><Icon name="open_in_new" size={13} />Opens new tab</span>
+                  }
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Eyebrow style={{ width: 52, flexShrink: 0 }}>API key</Eyebrow>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
+                    <Icon name="lock" size={12} color="var(--originator-own)" />
+                    ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
+                  </span>
+                </div>
+              </div>
+              <Divider style={{ margin: "12px 0 8px" }} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  onClick={() => toggleFavorite(s.id)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6, color: pinned ? "var(--amber)" : undefined }}
+                  title={pinned ? "Unpin from rail" : "Pin to rail"}
+                >
+                  <Icon name={pinned ? "star" : "star_border"} size={18} />
+                  {pinned ? "Pinned" : "Pin"}
+                </button>
+                <button
+                  onClick={() => onOpenService(s)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6 }}
+                  title="Open"
+                >
+                  <Icon name="open_in_full" size={18} />Open
+                </button>
+                <button
+                  onClick={() => onEdit(s)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6 }}
+                  title="Edit"
+                >
+                  <Icon name="edit" size={18} />Edit
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="aerie-x-scroll">
       <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
@@ -64,7 +135,7 @@ function AdminServices({ onOpenService, onEdit }: { onOpenService: (s: Service) 
   );
 }
 
-function QuotaEditor({ userId, linked, movieQuota, tvQuota }: { userId: string; linked: boolean; movieQuota: OverseerrQuota | null; tvQuota: OverseerrQuota | null }) {
+function QuotaEditor({ userId, linked, movieQuota, tvQuota, isMobile }: { userId: string; linked: boolean; movieQuota: OverseerrQuota | null; tvQuota: OverseerrQuota | null; isMobile: boolean }) {
   const refresh = useRefresh();
   const [pending, start] = useTransition();
 
@@ -98,7 +169,18 @@ function QuotaEditor({ userId, linked, movieQuota, tvQuota }: { userId: string; 
     });
   };
 
-  const inpStyle: React.CSSProperties = { width: 36, padding: "2px 4px", borderRadius: 6, border: "1px solid var(--outline-variant)", background: "var(--surface-container)", color: "var(--on-surface)", fontFamily: "var(--font-mono)", fontSize: 11, textAlign: "center" };
+  const inpStyle: React.CSSProperties = {
+    width: isMobile ? 48 : 36,
+    padding: isMobile ? "6px 4px" : "2px 4px",
+    height: isMobile ? 38 : "auto",
+    borderRadius: 6,
+    border: "1px solid var(--outline-variant)",
+    background: "var(--surface-container)",
+    color: "var(--on-surface)",
+    fontFamily: "var(--font-mono)",
+    fontSize: isMobile ? 13 : 11,
+    textAlign: "center",
+  };
   const disabled = !linked || pending;
 
   const row = (
@@ -113,6 +195,42 @@ function QuotaEditor({ userId, linked, movieQuota, tvQuota }: { userId: string; 
     const lim = quota?.limit ?? null;
     const pct = lim ? Math.min(100, (used / lim) * 100) : 0;
     const atLimit = quota?.restricted ?? false;
+
+    if (isMobile) {
+      return (
+        <div style={{ marginTop: 10, opacity: linked ? 1 : 0.45 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+            <Icon name={icon} size={13} color="var(--on-surface-variant)" />
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", width: 42, flexShrink: 0 }}>{label}</span>
+            {linked && !unlim && (
+              <div style={{ flex: 1, minWidth: 48 }}>
+                <ProgressBar pct={pct} color={atLimit ? "var(--amber)" : "var(--originator-court)"} h={5} />
+              </div>
+            )}
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: atLimit ? "var(--amber)" : "var(--on-surface-variant)" }}>
+              {used}/{lim ?? "∞"}
+            </span>
+          </div>
+          {linked && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 20 }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer", userSelect: "none", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface-variant)" }}>
+                <input type="checkbox" checked={unlim} disabled={pending} onChange={(e) => { onUnlim(e.target.checked); onToggleSave(e.target.checked); }} style={{ width: 16, height: 16, accentColor: "var(--primary)" }} />
+                Unlimited
+              </label>
+              {!unlim && (
+                <>
+                  <input type="number" min={1} value={limit} disabled={disabled} onChange={(e) => onLimit(e.target.value)} onBlur={() => save()} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} aria-label={`${label} quota limit`} style={inpStyle} />
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface-variant)" }}>/</span>
+                  <input type="number" min={1} value={days} disabled={disabled} onChange={(e) => onDays(e.target.value)} onBlur={() => save()} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} aria-label={`${label} quota days`} style={inpStyle} />
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface-variant)" }}>days</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, opacity: linked ? 1 : 0.45 }}>
         <Icon name={icon} size={12} color="var(--on-surface-variant)" />
@@ -152,13 +270,13 @@ function QuotaEditor({ userId, linked, movieQuota, tvQuota }: { userId: string; 
   );
 }
 
-function AdminMembers() {
+function AdminMembers({ isMobile }: { isMobile: boolean }) {
   const { users } = useData();
   const { user } = usePortal();
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
       {users.map((u) => (
-        <div key={u.id} style={{ padding: 15, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
+        <div key={u.id} style={{ padding: 15, borderRadius: isMobile ? 18 : 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
             <Avatar name={u.name} src={u.avatar} size={38} color={u.role === "admin" ? "var(--primary)" : "var(--originator-court)"} you={u.id === user.id} />
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -181,14 +299,14 @@ function AdminMembers() {
               {u.linked ? "linked" : "unlinked"}
             </span>
           </div>
-          <QuotaEditor userId={u.id} linked={u.linked} movieQuota={u.movieQuota} tvQuota={u.tvQuota} />
+          <QuotaEditor userId={u.id} linked={u.linked} movieQuota={u.movieQuota} tvQuota={u.tvQuota} isMobile={isMobile} />
         </div>
       ))}
     </div>
   );
 }
 
-function AdminVisibility() {
+function AdminVisibility({ isMobile }: { isMobile: boolean }) {
   const { services, groups, visibility } = useData();
   const [, startTransition] = useTransition();
   // Optimistic local state keyed by `${serviceId}:${groupName}`.
@@ -211,6 +329,51 @@ function AdminVisibility() {
       }
     });
   };
+
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {services.map((s) => (
+          <div key={s.id} className="card" style={{ padding: 15, borderRadius: 18, background: "var(--surface-container-lowest)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10 }}>
+              <ServiceLogo service={s} size={28} radius={7} />
+              <span style={{ fontWeight: 700, fontSize: 13.5, color: "var(--on-surface)" }}>{s.name}</span>
+            </div>
+            {groups.map((g, i) => {
+              const on = state[`${s.id}:${g.name}`] ?? false;
+              return (
+                <div key={g.name} style={{ borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                  <button
+                    onClick={() => toggle(s.id, g.name)}
+                    aria-label={`${s.name} visible to ${g.name}: ${on ? "on" : "off"}`}
+                    style={{ display: "flex", alignItems: "center", width: "100%", padding: "12px 0", background: "none", border: "none", cursor: "pointer", gap: 8 }}
+                  >
+                    <Icon name="group" size={14} color="var(--on-surface-variant)" />
+                    <span style={{ flex: 1, textAlign: "left", fontFamily: "var(--font-body)", fontSize: 13, color: "var(--on-surface)" }}>{g.name}</span>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 44,
+                        height: 26,
+                        borderRadius: 9999,
+                        position: "relative",
+                        display: "inline-flex",
+                        flexShrink: 0,
+                        background: on ? "color-mix(in srgb, var(--originator-own) 30%, transparent)" : "color-mix(in srgb, var(--on-surface-variant) 18%, transparent)",
+                        transition: "background .15s",
+                      }}
+                    >
+                      <span style={{ position: "absolute", top: 4, left: on ? 22 : 4, width: 18, height: 18, borderRadius: 9999, background: on ? "var(--originator-own)" : "var(--on-surface-variant)", transition: "left .15s" }} />
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="aerie-x-scroll">
@@ -272,16 +435,17 @@ export function Admin() {
   const { groups, visibility, adminGroup } = useData();
   const refresh = useRefresh();
   const patchData = usePatchData();
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState("services");
   const [svcModal, setSvcModal] = useState<{ mode: "add" | "edit"; service?: Service } | null>(null);
   // The id auto-saved by "Test connection" in add mode — lets a subsequent save/test of the
   // same id reconcile idempotently instead of tripping the duplicate-id guard.
   const lastAutoSavedId = useRef<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const tabs: [string, string, string][] = [
-    ["services", "Services & Secrets", "dns"],
-    ["members", "Members", "group"],
-    ["visibility", "Visibility", "visibility"],
+  const tabs: [string, string, string, string][] = [
+    ["services", "Services & Secrets", "Services", "dns"],
+    ["members", "Members", "Members", "group"],
+    ["visibility", "Visibility", "Visibility", "visibility"],
   ];
   const openService = (s: Service) => router.push(`/s/${s.id}`);
   const flash = (msg: string) => {
@@ -407,8 +571,8 @@ export function Admin() {
           <Icon name="add" size={15} /> Add service
         </button>
       </PageHeader>
-      <div style={{ display: "flex", gap: 4, padding: "12px 32px 0", borderBottom: "1px solid var(--outline-variant)", flexShrink: 0 }}>
-        {tabs.map(([id, label, icon]) => (
+      <div style={{ display: "flex", gap: 4, padding: `12px ${isMobile ? 16 : 32}px 0`, borderBottom: "1px solid var(--outline-variant)", flexShrink: 0 }}>
+        {tabs.map(([id, desktopLabel, mobileLabel, icon]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -430,15 +594,15 @@ export function Admin() {
             }}
           >
             <Icon name={icon} size={16} />
-            {label}
+            {isMobile ? mobileLabel : desktopLabel}
           </button>
         ))}
       </div>
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
         <div className="aerie-page-pad" style={{ maxWidth: 1080, margin: "0 auto" }}>
-          {tab === "services" && <AdminServices onOpenService={openService} onEdit={(s) => setSvcModal({ mode: "edit", service: s })} />}
-          {tab === "members" && <AdminMembers />}
-          {tab === "visibility" && <AdminVisibility />}
+          {tab === "services" && <AdminServices isMobile={isMobile} onOpenService={openService} onEdit={(s) => setSvcModal({ mode: "edit", service: s })} />}
+          {tab === "members" && <AdminMembers isMobile={isMobile} />}
+          {tab === "visibility" && <AdminVisibility isMobile={isMobile} />}
         </div>
       </div>
 
