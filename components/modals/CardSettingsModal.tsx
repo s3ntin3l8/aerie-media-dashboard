@@ -8,7 +8,9 @@
 import React, { useState, useEffect } from "react";
 import { ModalShell, Field, ToggleRow, fieldInput } from "@/components/modals/ModalShell";
 import { WIDGET_CATALOG, widgetSettings } from "@/components/portal/widgetCatalog";
+import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 import type { Tile } from "@/components/portal/gridLayout";
+import { Icon } from "@/components/primitives";
 
 interface CardSettingsModalProps {
   open: boolean;
@@ -25,7 +27,7 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
     const seed: Record<string, string> = {};
     for (const spec of widgetSettings(tile.type)) {
       const v = tile.settings?.[spec.key];
-      const fallback = spec.default !== undefined ? String(spec.default) : "";
+      const fallback = "default" in spec && spec.default !== undefined ? String(spec.default) : "";
       seed[spec.key] = v !== undefined ? String(v) : fallback;
     }
     setDraft(seed);
@@ -133,6 +135,72 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
                 onChange={(v) => setDraft((d) => ({ ...d, [spec.key]: String(v) }))}
                 color="var(--primary)"
               />
+            );
+          }
+
+          if (spec.type === "links") {
+            let links: ShortcutLink[] = [];
+            try { links = JSON.parse(draft[spec.key] || "[]"); } catch { /* keep empty */ }
+            const update = (next: ShortcutLink[]) =>
+              setDraft((d) => ({ ...d, [spec.key]: JSON.stringify(next) }));
+            return (
+              <Field key={spec.key} label={spec.label} hint={spec.hint}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {links.map((link, i) => (
+                    <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        className="input"
+                        style={{ ...fieldInput, width: 90, flexShrink: 0 }}
+                        type="text"
+                        placeholder="icon"
+                        title="Material Symbols icon name (e.g. play_circle)"
+                        value={link.icon ?? ""}
+                        onChange={(e) => {
+                          const next = links.map((l, j) => j === i ? { ...l, icon: e.target.value } : l);
+                          update(next);
+                        }}
+                      />
+                      <input
+                        className="input"
+                        style={{ ...fieldInput, flex: 1 }}
+                        type="text"
+                        placeholder="Label"
+                        value={link.label}
+                        onChange={(e) => {
+                          const next = links.map((l, j) => j === i ? { ...l, label: e.target.value } : l);
+                          update(next);
+                        }}
+                      />
+                      <input
+                        className="input"
+                        style={{ ...fieldInput, flex: 2 }}
+                        type="url"
+                        placeholder="https://…"
+                        value={link.url}
+                        onChange={(e) => {
+                          const next = links.map((l, j) => j === i ? { ...l, url: e.target.value } : l);
+                          update(next);
+                        }}
+                      />
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ padding: "4px 6px", flexShrink: 0 }}
+                        onClick={() => update(links.filter((_, j) => j !== i))}
+                        title="Remove"
+                      >
+                        <Icon name="close" size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ alignSelf: "flex-start", marginTop: 2 }}
+                    onClick={() => update([...links, { label: "", url: "", icon: "" }])}
+                  >
+                    <Icon name="add" size={14} /> Add link
+                  </button>
+                </div>
+              </Field>
             );
           }
 

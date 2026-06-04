@@ -41,7 +41,10 @@ export type WidgetSettingSpec =
   | { key: string; label: string; type: "count"; hint?: string; default?: number; min?: number; max?: number }
   | { key: string; label: string; type: "select"; hint?: string; default?: string; options: { value: string; label: string }[] }
   | { key: string; label: string; type: "text"; hint?: string; default?: string }
-  | { key: string; label: string; type: "toggle"; hint?: string; default?: boolean };
+  | { key: string; label: string; type: "toggle"; hint?: string; default?: boolean }
+  | { key: string; label: string; type: "links"; hint?: string };
+
+export interface ShortcutLink { label: string; url: string; icon?: string }
 
 export interface CatalogEntry extends WidgetMeta {
   name: string;
@@ -54,6 +57,10 @@ export interface CatalogEntry extends WidgetMeta {
   adminOnly?: boolean;
   settings?: WidgetSettingSpec[];
   render: (ctx: WidgetCtx, settings: Record<string, unknown>) => React.ReactNode;
+}
+
+function parseLinks(raw: unknown): ShortcutLink[] {
+  try { return JSON.parse(String(raw ?? "[]")) as ShortcutLink[]; } catch { return []; }
 }
 
 export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
@@ -174,9 +181,12 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   },
   shortcuts: {
     type: "shortcuts", name: "Shortcuts", icon: "bolt", accent: "var(--primary)", group: "Overview",
-    desc: "Custom quick-launch links (configurable soon).",
+    desc: "Custom quick-launch links — configure them via the widget settings gear.",
     defaultW: 4, defaultH: 5, minW: 3, minH: 3, maxW: 12, maxH: 10,
-    render: (_c, _s) => <ShortcutsWidget fill />,
+    settings: [
+      { key: "links", label: "Quick-launch links", type: "links", hint: "Each link opens in a new tab" },
+    ],
+    render: (_c, s) => <ShortcutsWidget fill links={parseLinks(s.links)} />,
   },
   announcements: {
     type: "announcements", name: "Announcements", icon: "campaign", accent: "var(--amber)", group: "Overview",
@@ -193,7 +203,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   trendingMedia: {
     type: "trendingMedia", name: "Trending Now", icon: "trending_up", accent: "var(--originator-court)", group: "Requests",
     desc: "Trending movies and TV shows from TMDB — click to request.",
-    defaultW: 8, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    defaultW: 8, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -203,7 +213,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   popularMovies: {
     type: "popularMovies", name: "Popular Movies", icon: "movie", accent: "var(--originator-court)", group: "Requests",
     desc: "Popular movies on TMDB right now — click to request.",
-    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -213,7 +223,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   popularTv: {
     type: "popularTv", name: "Popular TV Shows", icon: "live_tv", accent: "var(--originator-court)", group: "Requests",
     desc: "Popular TV shows on TMDB right now — click to request.",
-    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -223,7 +233,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   upcomingMovies: {
     type: "upcomingMovies", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Requests",
     desc: "Upcoming movie releases from TMDB — click to request.",
-    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -233,7 +243,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   watchlist: {
     type: "watchlist", name: "Plex Watchlist", icon: "bookmarks", accent: "var(--primary)", group: "Requests",
     desc: "Titles from the Plex watchlist — click to request anything not already available.",
-    defaultW: 6, defaultH: 5, minW: 4, minH: 4, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 50, hint: "Auto = 50" },
@@ -272,7 +282,8 @@ export function resolveSettings(
   for (const spec of specs) {
     const stored = raw?.[spec.key];
     // Treat empty string (saved "auto") or missing value as "use default"
-    out[spec.key] = stored !== undefined && stored !== "" ? stored : spec.default;
+    const def = "default" in spec ? (spec as { default?: unknown }).default : undefined;
+    out[spec.key] = stored !== undefined && stored !== "" ? stored : def;
   }
   return out;
 }

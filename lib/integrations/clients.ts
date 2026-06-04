@@ -772,10 +772,23 @@ export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
       `${baseUrl}/api/v1/discover/watchlist?page=1`,
       { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
     );
-    return (data.results ?? [])
+    const raw = (data.results ?? [])
       .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")
-      .slice(0, 50)
-      .map((r) => mapDiscoverResult({ ...r, id: r.tmdbId ?? r.id }));
+      .slice(0, 50);
+    // Watchlist items come from Plex and lack TMDB fields — enrich any that are missing art or date.
+    return Promise.all(raw.map(async (r) => {
+      const base = mapDiscoverResult({ ...r, id: r.tmdbId ?? r.id });
+      if (base.art && base.year) return base;
+      const tmdbId = r.tmdbId ?? r.id;
+      if (!tmdbId) return base;
+      const type = r.mediaType === "tv" ? "tv" : "movie";
+      const enriched = await enrichMedia(baseUrl, apiKey, type, tmdbId);
+      return {
+        ...base,
+        year: base.year || enriched.year || 0,
+        art: base.art ?? (enriched.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(enriched.posterPath)}` : undefined),
+      };
+    }));
   });
 }
 

@@ -9,6 +9,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useData } from "@/components/portal/DataProvider";
 import { PanelShell, Empty, useTick } from "@/components/panels";
 import { Icon, Eyebrow, StatusDot } from "@/components/primitives";
+import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 
 type CSS = React.CSSProperties;
 
@@ -186,10 +187,44 @@ export function ClockWidget({ fill }: { fill?: boolean } = {}) {
 // ── SHORTCUTS (backend deferred) ───────────────────────────
 // Custom quick-launch links will be admin/user-authored config (a future DB
 // table). Until then this renders a graceful "not configured" empty state.
-export function ShortcutsWidget({ fill }: { fill?: boolean } = {}) {
+export function ShortcutsWidget({ fill, links = [] }: { fill?: boolean; links?: ShortcutLink[] } = {}) {
   return (
     <PanelShell fill={fill} title="Shortcuts" icon="bolt" accent="var(--primary)">
-      <Empty icon="bolt" line="No shortcuts yet" sub="Custom quick-launch links are coming soon — they'll be editable from Admin." />
+      {links.length === 0 ? (
+        <Empty icon="bolt" line="No shortcuts yet" sub="Open widget settings to add quick-launch links." />
+      ) : (
+        <div style={{ padding: "10px 14px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 8, alignContent: "start" }}>
+          {links.map((link, i) => (
+            <a
+              key={i}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={link.label}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 5,
+                padding: "10px 6px 8px",
+                borderRadius: 8,
+                background: "var(--surface-container)",
+                color: "var(--on-surface)",
+                textDecoration: "none",
+                cursor: "pointer",
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-container-high)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-container)")}
+            >
+              <Icon name={link.icon || "link"} size={22} color="var(--primary)" />
+              <span style={{ fontSize: 11, fontWeight: 600, textAlign: "center", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>
+                {link.label || link.url}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
     </PanelShell>
   );
 }

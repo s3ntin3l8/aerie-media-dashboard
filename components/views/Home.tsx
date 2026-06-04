@@ -89,7 +89,6 @@ function GreetingHeader({
   editing,
   widgetCount,
   onOpenPalette,
-  onRequest,
   onToggleEdit,
   onReset,
 }: {
@@ -98,7 +97,6 @@ function GreetingHeader({
   editing: boolean;
   widgetCount: number;
   onOpenPalette: () => void;
-  onRequest: () => void;
   onToggleEdit: () => void;
   onReset: () => void;
 }) {
@@ -124,7 +122,7 @@ function GreetingHeader({
             {editing ? "Arrange your dashboard" : `${greet}, ${userName}.`}
           </h1>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 38 }}>
           {editing ? (
             <>
               <button onClick={onReset} className="btn btn-ghost btn-sm" title="Restore the default arrangement">
@@ -139,9 +137,6 @@ function GreetingHeader({
               <SearchField asButton onClick={onOpenPalette} placeholder="Search" kbd="⌘K" width={200} />
               <button onClick={onToggleEdit} className="btn btn-tonal btn-sm" title="Customize dashboard layout">
                 <Icon name="edit" size={15} /> Edit
-              </button>
-              <button onClick={onRequest} className="btn btn-primary btn-sm">
-                <Icon name="add" size={15} /> Request
               </button>
             </>
           )}
@@ -201,7 +196,6 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
         editing={editing}
         widgetCount={layout.length}
         onOpenPalette={() => setPaletteOpen(true)}
-        onRequest={() => router.push("/requests")}
         onToggleEdit={() => setEditing((e) => !e)}
         onReset={resetLayout}
       />

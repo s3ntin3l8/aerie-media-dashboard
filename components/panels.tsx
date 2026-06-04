@@ -1088,7 +1088,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
 export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { downloads } = useData();
   // In a grid tile, show as many rows as fit the height; the rest pages via ‹ ›.
-  const [fitRef, fitRows] = useFitRows(41);
+  const [fitRef, fitRows] = useFitRows(36);
   const pageSize = limit ?? (fill ? fitRows : 10);
   const { page, totalPages, slice, setPage } = usePagination(downloads, pageSize);
   const rowPadding = dense ? "5px 16px" : "9px 16px";
@@ -1208,23 +1208,25 @@ export function DiscoverPanel({
             return (
               <div
                 key={d.id}
-                style={{ width: 76, flexShrink: 0, cursor: requestable && onRequest ? "pointer" : "default", position: "relative" }}
+                style={{ width: 76, flexShrink: 0, cursor: requestable && onRequest ? "pointer" : "default" }}
                 onClick={() => requestable && onRequest && onRequest(d)}
                 title={requestable ? `Request ${d.title}` : d.title}
               >
-                <PosterTile title={d.title} kind={d.kind} cat="request" w={76} art={d.art} />
-                {tone && label && (
-                  <div style={{ position: "absolute", bottom: 2, left: 2, right: 2 }}>
-                    <Pill tone={tone} style={{ fontSize: 8.5, padding: "1px 5px", width: "100%", textAlign: "center", display: "block" }}>{label}</Pill>
-                  </div>
-                )}
-                {requestable && onRequest && !d.state && (
-                  <div style={{ position: "absolute", top: 3, right: 3, background: "color-mix(in srgb, var(--surface-container) 75%, transparent)", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Icon name="add" size={15} color="var(--originator-court)" />
-                  </div>
-                )}
+                <div style={{ position: "relative" }}>
+                  <PosterTile title={d.title} kind={d.kind} cat="request" w={76} art={d.art} />
+                  {tone && label && (
+                    <div style={{ position: "absolute", bottom: 2, left: 2, right: 2 }}>
+                      <Pill tone={tone} style={{ fontSize: 8.5, padding: "1px 5px", width: "100%", textAlign: "center", display: "block" }}>{label}</Pill>
+                    </div>
+                  )}
+                  {requestable && onRequest && !d.state && (
+                    <div style={{ position: "absolute", top: 3, right: 3, background: "color-mix(in srgb, var(--surface-container) 75%, transparent)", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Icon name="add" size={15} color="var(--originator-court)" />
+                    </div>
+                  )}
+                </div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{d.year}</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{d.year || ""}</div>
               </div>
             );
           };
