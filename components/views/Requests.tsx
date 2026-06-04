@@ -4,7 +4,7 @@
 // ============================================================
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DiscoverItem, MediaRequest } from "@/lib/types";
+import type { DiscoverItem, MediaRequest, RequestStatus } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { useRequestReview } from "@/components/hooks/useRequestReview";
@@ -13,13 +13,25 @@ import { PageHeader, StatTile } from "@/components/views/shared";
 import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
 import { RequestModal } from "@/components/modals/RequestModal";
 import { Toast } from "@/components/modals/Toast";
-import { submitRequest } from "@/app/(portal)/requests/actions";
+import { submitRequest, deleteRequest, editRequest } from "@/app/(portal)/requests/actions";
 
-type RequestStatusFilter = "all" | "pending" | "approved" | "available";
+type RequestStatusFilter = "all" | "pending" | "approved" | "available" | "processing" | "failed";
+type SortOrder = "added" | "modified";
 
-function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; adminMode: boolean; onAct: (id: string, action: "approve" | "decline") => void; onReview: (r: MediaRequest) => void }) {
+function RequestCard({
+  r, adminMode, portalUserId, onAct, onReview, onCancel, onEdit,
+}: {
+  r: MediaRequest; adminMode: boolean; portalUserId: string;
+  onAct: (id: string, action: "approve" | "decline") => void;
+  onReview: (r: MediaRequest) => void;
+  onCancel: (r: MediaRequest) => void;
+  onEdit: (r: MediaRequest) => void;
+}) {
   const { users } = useData();
   const u = users.find((x) => x.id === r.portalUser);
+  const isOwner = r.portalUser === portalUserId;
+  const canCancel = adminMode || (isOwner && (r.status === "pending" || r.status === "approved"));
+  const canEdit = (adminMode || isOwner) && r.status === "pending";
   return (
     <div
       className={adminMode ? "req-card" : undefined}
@@ -38,9 +50,9 @@ function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; admin
               </span>
             </div>
           </div>
-          <Pill tone={REQ_TONE[r.status]}>{REQ_LABEL[r.status]}</Pill>
+          <Pill tone={REQ_TONE[r.status]}>{REQ_LABEL[r.status] ?? r.status}</Pill>
         </div>
-        <div style={{ marginTop: "auto", paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ marginTop: "auto", paddingTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {adminMode ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
               <Avatar name={u?.name ?? r.requesterName} size={18} color="var(--originator-court)" />
@@ -53,7 +65,7 @@ function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; admin
             {r.eta ? <span style={{ color: "var(--originator-court)", fontWeight: 600 }}>{r.eta}</span> : `Requested ${r.requested}`}
           </span>
           {adminMode && r.status === "pending" && (
-            <div style={{ display: "flex", gap: 5, marginLeft: 4 }}>
+            <div style={{ display: "flex", gap: 5 }}>
               <button onClick={(e) => { e.stopPropagation(); onAct(r.id, "approve"); }} className="btn btn-tonal" style={{ color: "var(--originator-own)", background: "color-mix(in srgb, var(--originator-own) 12%, transparent)" }}>
                 Approve
               </button>
@@ -61,6 +73,16 @@ function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; admin
                 Decline
               </button>
             </div>
+          )}
+          {canEdit && (
+            <button onClick={(e) => { e.stopPropagation(); onEdit(r); }} className="btn btn-ghost btn-sm" title="Edit seasons/quality" style={{ color: "var(--on-surface-variant)" }}>
+              <Icon name="edit" size={14} />
+            </button>
+          )}
+          {canCancel && r.status !== "available" && (
+            <button onClick={(e) => { e.stopPropagation(); onCancel(r); }} className="btn btn-ghost btn-sm" title="Cancel request" style={{ color: "var(--error)" }}>
+              <Icon name="cancel" size={14} />
+            </button>
           )}
         </div>
       </div>
@@ -71,11 +93,12 @@ function RequestCard({ r, adminMode, onAct, onReview }: { r: MediaRequest; admin
 export function Requests() {
   const router = useRouter();
   const { role, user } = usePortal();
-  const { requests, users, issues } = useData();
+  const { requests, users, issues, requestCounts } = useData();
   const adminMode = role === "admin";
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
-  const [reqModal, setReqModal] = useState<{ mode: "request" | "review"; request?: MediaRequest } | null>(null);
+  const [sort, setSort] = useState<SortOrder>("added");
+  const [reqModal, setReqModal] = useState<{ mode: "request" | "review" | "edit"; request?: MediaRequest } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const { acted, onAct, applyActed } = useRequestReview();
   const refresh = useRefresh();
@@ -84,14 +107,23 @@ export function Requests() {
     setTimeout(() => setToast(null), 2600);
   };
 
-  const base = adminMode ? requests : requests.filter((r) => r.portalUser === user.id);
-  const filtered = applyActed(base).filter((r) => (filter === "all" ? true : r.status === filter));
+  const handleCancel = (r: MediaRequest) => {
+    void deleteRequest(r.id).then((res) => { flash(res.message); if (res.ok) refresh(); });
+  };
 
-  const counts: Record<RequestStatusFilter, number> = {
-    all: base.length,
-    pending: base.filter((r) => r.status === "pending" && !acted[r.id]).length,
-    approved: base.filter((r) => (acted[r.id] || r.status) === "approved").length,
-    available: base.filter((r) => r.status === "available").length,
+  const base = adminMode ? requests : requests.filter((r) => r.portalUser === user.id);
+  const sorted = sort === "modified"
+    ? [...base].sort((a, b) => (b.modified ?? b.requested).localeCompare(a.modified ?? a.requested))
+    : base;
+  const filtered = applyActed(sorted).filter((r) => (filter === "all" ? true : r.status === filter));
+
+  const counts = {
+    all: requestCounts?.total ?? base.length,
+    pending: requestCounts?.pending ?? base.filter((r) => r.status === "pending" && !acted[r.id]).length,
+    approved: requestCounts?.approved ?? base.filter((r) => (acted[r.id] || r.status) === "approved").length,
+    available: requestCounts?.available ?? base.filter((r) => r.status === "available").length,
+    processing: requestCounts?.processing ?? base.filter((r) => r.status === "processing").length,
+    failed: requestCounts?.failed ?? base.filter((r) => r.status === "failed").length,
   };
 
   return (
@@ -135,7 +167,8 @@ export function Requests() {
               </>
             ) : (
               <>
-                <StatTile label="Quota used" value={`${me.reqUsed}/${me.reqQuota}`} color="var(--originator-court)" icon="data_usage" />
+                {me.movieQuota != null && <StatTile label="Movies" value={`${me.movieQuota.used}/${me.movieQuota.limit ?? "∞"}`} color={me.movieQuota.restricted ? "var(--amber)" : "var(--originator-court)"} icon="movie" />}
+                {me.tvQuota != null && <StatTile label="TV quota" value={`${me.tvQuota.used}/${me.tvQuota.limit ?? "∞"}`} color={me.tvQuota.restricted ? "var(--amber)" : "var(--originator-court)"} icon="live_tv" />}
                 <StatTile label="Pending" value={counts.pending} color="var(--amber)" icon="pending" />
                 <StatTile label="Available" value={counts.available} color="var(--originator-own)" icon="download_done" />
               </>
@@ -143,7 +176,10 @@ export function Requests() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            {(["all", "pending", "approved", "available"] as RequestStatusFilter[]).map((f) => (
+            {([
+              ...["all", "pending", "approved", "available"] as RequestStatusFilter[],
+              ...(adminMode ? ["processing", "failed"] as RequestStatusFilter[] : []),
+            ]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -161,19 +197,40 @@ export function Requests() {
                   color: filter === f ? "var(--originator-court)" : "var(--on-surface-variant)",
                 }}
               >
-                {f} <span style={{ fontFamily: "var(--font-mono)", opacity: 0.7 }}>{counts[f]}</span>
+                {f} <span style={{ fontFamily: "var(--font-mono)", opacity: 0.7 }}>{counts[f as RequestStatusFilter] ?? 0}</span>
               </button>
             ))}
+            <button
+              onClick={() => setSort((s) => s === "added" ? "modified" : "added")}
+              style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 10.5, padding: "6px 10px", borderRadius: 9999, cursor: "pointer", border: "1px solid var(--outline-variant)", background: "transparent", color: "var(--on-surface-variant)", display: "inline-flex", alignItems: "center", gap: 5 }}
+              title={sort === "added" ? "Sort by last modified" : "Sort by date added"}
+            >
+              <Icon name="swap_vert" size={13} />
+              {sort === "added" ? "By date" : "By modified"}
+            </button>
           </div>
 
           {filtered.length === 0 ? (
             <Empty icon="bookmark_border" line="No requests here" sub="Search above to request a movie or show." />
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
-              {filtered.map((r) => (
-                <RequestCard key={r.id} r={r} adminMode={adminMode} onAct={onAct} onReview={(req) => setReqModal({ mode: "review", request: req })} />
-              ))}
-            </div>
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
+                {filtered.map((r) => (
+                  <RequestCard
+                    key={r.id} r={r} adminMode={adminMode} portalUserId={user.id}
+                    onAct={onAct}
+                    onReview={(req) => setReqModal({ mode: "review", request: req })}
+                    onCancel={handleCancel}
+                    onEdit={(req) => setReqModal({ mode: "edit", request: req })}
+                  />
+                ))}
+              </div>
+              {requestCounts && requestCounts.total > requests.length && (
+                <div style={{ textAlign: "center", fontSize: 11, color: "var(--on-surface-variant)", paddingTop: 4 }}>
+                  Showing {requests.length} of {requestCounts.total} total requests
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -181,15 +238,33 @@ export function Requests() {
       {reqModal && (
         <RequestModal
           open
-          mode={reqModal.mode}
-          request={reqModal.request}
+          mode={reqModal.mode === "edit" ? "request" : reqModal.mode}
+          request={reqModal.mode === "review" ? reqModal.request : undefined}
+          initialPick={reqModal.mode === "edit" && reqModal.request ? {
+            id: reqModal.request.id.replace(/^os-/, ""),
+            title: reqModal.request.title,
+            kind: reqModal.request.kind,
+            year: reqModal.request.year,
+            rating: 0,
+            state: reqModal.request.status as RequestStatus,
+            overview: reqModal.request.overview ?? "",
+            art: reqModal.request.art,
+            seasons: reqModal.request.seasons?.length ? reqModal.request.seasons.length : undefined,
+          } : undefined}
           onClose={() => setReqModal(null)}
-          onSubmit={(pick: DiscoverItem, _quality: string, seasons: Record<number, boolean>) => {
+          onSubmit={(pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => {
             const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
-            void submitRequest(pick, picked).then((r) => {
-              flash(r.message);
-              refresh();
-            });
+            if (reqModal.mode === "edit" && reqModal.request) {
+              void editRequest(reqModal.request.id, picked, quality).then((r) => {
+                flash(r.message);
+                if (r.ok) refresh();
+              });
+            } else {
+              void submitRequest(pick, picked, quality).then((r) => {
+                flash(r.message);
+                refresh();
+              });
+            }
           }}
           onAct={onAct}
         />

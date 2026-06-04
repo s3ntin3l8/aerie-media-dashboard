@@ -59,6 +59,8 @@ export const REQ_TONE: Record<string, string> = {
   approved: "originator-court",
   pending: "amber",
   declined: "error",
+  processing: "primary",
+  failed: "error",
 };
 
 /** Display label per request status. */
@@ -67,4 +69,6 @@ export const REQ_LABEL: Record<string, string> = {
   approved: "Approved",
   pending: "Pending",
   declined: "Declined",
+  processing: "Processing",
+  failed: "Failed",
 };
