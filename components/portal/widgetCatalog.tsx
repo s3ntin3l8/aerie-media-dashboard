@@ -233,13 +233,13 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   agregarr: {
     type: "agregarr", name: "Collections", icon: "collections", accent: "var(--originator-court)", group: "Automation", adminOnly: true,
     desc: "Agregarr Plex collections — total, pending sync, and live sync progress.",
-    defaultW: 4, defaultH: 5, minW: 3, minH: 4, maxW: 8, maxH: 7,
+    defaultW: 3, defaultH: 4, minW: 3, minH: 4, maxW: 8, maxH: 7,
     render: (_c, _s) => <AgregarrWidget fill />,
   },
   bazarr: {
     type: "bazarr", name: "Subtitles", icon: "subtitles", accent: "var(--primary)", group: "Automation", adminOnly: true,
     desc: "Bazarr wanted (missing) subtitle counts for episodes and movies.",
-    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    defaultW: 3, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 6,
     render: (_c, _s) => <BazarrWidget fill />,
   },
   clock: {
