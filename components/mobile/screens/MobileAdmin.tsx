@@ -28,7 +28,7 @@ function MemberRow({ u, nowPlaying }: { u: User; nowPlaying: NowPlaying[] }) {
   const session = u.watching ? nowPlaying.find((np) => np.id === u.watching) : undefined;
   return (
     <div style={{ display: "flex", gap: 12, padding: "13px 0", alignItems: "flex-start" }}>
-      <Avatar name={u.name} size={38} />
+      <Avatar name={u.name} src={u.avatar} size={38} />
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: "var(--on-surface)" }}>{u.name}</span>
@@ -119,7 +119,7 @@ export function MobileAdmin({ onClose }: { onClose: () => void }) {
       <div className="aerie-mobile-scroll" style={{ flex: 1, minHeight: 0, padding: 18, paddingTop: 14, display: "flex", flexDirection: "column", gap: 26 }}>
         {/* Profile card */}
         <div className="card" style={{ padding: 15, borderRadius: 18, background: "var(--surface-container)", display: "flex", alignItems: "center", gap: 13 }}>
-          <Avatar name={user.name} size={52} you />
+          <Avatar name={user.name} src={users.find((u) => u.id === user.id)?.avatar} size={52} you />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <span style={{ fontFamily: "var(--font-headline)", fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--on-surface)" }}>{user.name}</span>

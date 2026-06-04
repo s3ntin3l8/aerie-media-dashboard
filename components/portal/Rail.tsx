@@ -185,9 +185,10 @@ export function Rail() {
   const router = useRouter();
   const pathname = usePathname();
   const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut, favorites, lastOpened } = usePortal();
-  const { services, requests, visibility } = useData();
+  const { services, requests, visibility, users } = useData();
 
   const me = user;
+  const myAvatar = users.find((u) => u.id === me.id)?.avatar;
   const downCount = services.filter((s) => s.status === "down").length;
   const pendingCount = requests.filter((r) => r.status === "pending").length;
   const go = (href: string) => router.push(href);
@@ -270,7 +271,7 @@ export function Rail() {
         <RailCtrl icon="logout" label="Sign out" onClick={signOut} />
         <RailTip label={`${me.name}${me.email ? ` · ${me.email}` : ""}`}>
           <div style={{ marginTop: 2, cursor: "pointer" }}>
-            <Avatar name={me.name} size={32} you />
+            <Avatar name={me.name} src={myAvatar} size={32} you />
           </div>
         </RailTip>
       </div>

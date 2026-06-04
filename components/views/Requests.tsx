@@ -61,7 +61,7 @@ function RequestCard({
         <div style={{ marginTop: "auto", paddingTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {adminMode ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <Avatar name={u?.name ?? r.requesterName} size={18} color="var(--originator-court)" />
+              <Avatar name={u?.name ?? r.requesterName} src={u?.avatar ?? r.requesterAvatar} size={18} color="var(--originator-court)" />
               <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>{u?.name ?? r.requesterName}</span>
             </span>
           ) : (

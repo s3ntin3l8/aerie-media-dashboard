@@ -380,7 +380,10 @@ export function CatBadge({ cat, size = "sm" }: { cat: Category; size?: "sm" | "x
   );
 }
 
-export function Avatar({ name, size = 28, color = "var(--primary)", you = false }: { name?: string; size?: number; color?: string; you?: boolean }) {
+export function Avatar({ name, size = 28, color = "var(--primary)", you = false, src }: { name?: string; size?: number; color?: string; you?: boolean; src?: string }) {
+  // Show a real profile photo when available; fall back to the tinted initials
+  // (also the fallback if the image fails to load).
+  const [imgOk, setImgOk] = useState(true);
   const initials = name
     ? name
         .trim()
@@ -390,6 +393,7 @@ export function Avatar({ name, size = 28, color = "var(--primary)", you = false 
         .join("")
         .toUpperCase()
     : "?";
+  const showImg = Boolean(src) && imgOk;
   return (
     <div
       style={{
@@ -397,6 +401,7 @@ export function Avatar({ name, size = 28, color = "var(--primary)", you = false 
         height: size,
         borderRadius: 9999,
         flexShrink: 0,
+        overflow: "hidden",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -409,7 +414,17 @@ export function Avatar({ name, size = 28, color = "var(--primary)", you = false 
         border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
       }}
     >
-      {initials}
+      {showImg ? (
+        <img
+          src={src}
+          alt={name || ""}
+          loading="lazy"
+          onError={() => setImgOk(false)}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : (
+        initials
+      )}
     </div>
   );
 }

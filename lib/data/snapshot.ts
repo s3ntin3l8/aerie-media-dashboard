@@ -11,6 +11,7 @@ import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembe
 import {
   gatusHealth,
   tautulliActivity,
+  tautulliUsers,
   jellyfinNowPlaying,
   jellyfinLibraries,
   jellyfinRecentlyAdded,
@@ -161,6 +162,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     jfLibs, jfRecent, osVersion,
     osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
+    ttUsers,
   ] = await Promise.all([
     gatusOn ? safe(gatusHealth) : Promise.resolve(null),
     ttOn ? safe(tautulliActivity) : Promise.resolve(null),
@@ -201,6 +203,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     agregarrOn ? safe(agregarrStatus) : Promise.resolve(null),
     bazarrOn ? safe(bazarrWanted) : Promise.resolve(null),
     nzbhydraOn ? safe(nzbhydra2Stats) : Promise.resolve(null),
+    ttOn ? safe(tautulliUsers) : Promise.resolve(null),
   ]);
 
   // services: DB config merged with live Gatus health. Without a Gatus
@@ -247,9 +250,26 @@ export async function getSnapshot(): Promise<Snapshot> {
     const key = m.email?.trim().toLowerCase();
     if (key) emailToPortalId.set(key, m.id);
   }
+
+  // ── Plex avatars: Tautulli `get_users` gives every Plex user a `user_thumb`.
+  // Index by email + username + friendly_name so we can attach a real profile
+  // photo to portal users and request requesters anywhere they appear. ──
+  const avatarByEmail = new Map<string, string>();
+  const avatarByName = new Map<string, string>();
+  for (const p of ttUsers ?? []) {
+    if (!p.avatar) continue;
+    if (p.email) avatarByEmail.set(p.email.trim().toLowerCase(), p.avatar);
+    if (p.username) avatarByName.set(p.username.trim().toLowerCase(), p.avatar);
+    if (p.friendlyName) avatarByName.set(p.friendlyName.trim().toLowerCase(), p.avatar);
+  }
+  const avatarFor = (email?: string, name?: string): string | undefined =>
+    (email ? avatarByEmail.get(email.trim().toLowerCase()) : undefined) ??
+    (name ? avatarByName.get(name.trim().toLowerCase()) : undefined);
+
   const requests: MediaRequest[] = (osReq ?? []).map((r) => ({
     ...r,
     portalUser: r.requesterEmail ? emailToPortalId.get(r.requesterEmail.trim().toLowerCase()) : undefined,
+    requesterAvatar: r.requesterAvatar ?? avatarFor(r.requesterEmail, r.requesterName),
   }));
 
   // Portal ids whose email resolves to a real Overseerr account → "linked".
@@ -267,6 +287,7 @@ export async function getSnapshot(): Promise<Snapshot> {
         role: m.role,
         email: m.email,
         linked: overseerrEmails.has(m.email?.trim().toLowerCase()) || m.linked,
+        avatar: avatarFor(m.email, m.name),
         groups: m.role === "admin" ? [env.adminGroup] : ["friends"],
         movieQuota: quota?.movie ?? null,
         tvQuota: quota?.tv ?? null,
@@ -308,7 +329,11 @@ export async function getSnapshot(): Promise<Snapshot> {
   const downloads: DownloadEvent[] = [...(sonarrHist ?? []), ...(radarrHist ?? [])]
     .sort((a, b) => Date.parse(b.when) - Date.parse(a.when))
     .slice(0, 30);
-  const topStats: TopStats | null = ttTop ?? null;
+  // Attach Plex avatars to the "top viewers" leaderboard (names are Plex
+  // friendly names → match the avatar roster built above).
+  const topStats: TopStats | null = ttTop
+    ? { ...ttTop, users: ttTop.users.map((u) => ({ ...u, avatar: avatarFor(undefined, u.name) })) }
+    : null;
 
   const discover = osOn && (osTrending || osPopularMovies || osPopularTv || osUpcomingMovies || osWatchlist)
     ? {

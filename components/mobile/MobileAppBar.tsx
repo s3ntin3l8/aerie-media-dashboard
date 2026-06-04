@@ -3,9 +3,12 @@ import React from "react";
 import { BrandBadge } from "@/components/brand/Brand";
 import { Icon, Avatar } from "@/components/primitives";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { useData } from "@/components/portal/DataProvider";
 
 export function MobileAppBar({ onAdmin }: { onAdmin: () => void }) {
   const { user, theme, toggleTheme, setPaletteOpen, role } = usePortal();
+  const { users } = useData();
+  const myAvatar = users.find((u) => u.id === user.id)?.avatar;
 
   return (
     <div
@@ -56,7 +59,7 @@ export function MobileAppBar({ onAdmin }: { onAdmin: () => void }) {
         aria-label={role === "admin" ? "Open admin panel" : "Profile"}
         style={{ marginLeft: 2, border: "none", background: "none", padding: 0, cursor: "pointer", borderRadius: 9999 }}
       >
-        <Avatar name={user.name} size={32} you />
+        <Avatar name={user.name} src={myAvatar} size={32} you />
       </button>
     </div>
   );

@@ -86,7 +86,7 @@ export function ApprovalRow({ r, onReq, onTap }: { r: MediaRequest; onReq: (id: 
           <Pill tone={REQ_TONE[r.status] || "amber"}>{REQ_LABEL[r.status] || r.status}</Pill>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <Avatar name={userName} size={18} />
+          <Avatar name={userName} src={r.requesterAvatar} size={18} />
           <span style={{ fontSize: 11, color: "var(--on-surface-variant)" }}>{userName}</span>
           <span style={{ width: 3, height: 3, borderRadius: 9999, background: "var(--outline-variant)" }} />
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{r.requested}</span>
