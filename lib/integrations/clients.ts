@@ -1023,7 +1023,7 @@ export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<Upcom
   return cached(`calendar:${serviceId}`, 15 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds(serviceId);
     const start = new Date().toISOString();
-    const end = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const end = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
     const data = await fetchJson<ArrCalendarRecord[]>(
       `${baseUrl}/api/v3/calendar?start=${start}&end=${end}&includeSeries=true`,
       { service: serviceId, headers: { "X-Api-Key": apiKey } },

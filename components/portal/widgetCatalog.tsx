@@ -43,7 +43,8 @@ export type WidgetSettingSpec =
   | { key: string; label: string; type: "text"; hint?: string; default?: string }
   | { key: string; label: string; type: "toggle"; hint?: string; default?: boolean }
   | { key: string; label: string; type: "links"; hint?: string }
-  | { key: string; label: string; type: "serviceIds"; hint?: string };
+  | { key: string; label: string; type: "serviceIds"; hint?: string }
+  | { key: string; label: string; type: "libraryIds"; hint?: string };
 
 export interface ShortcutLink { label: string; url: string; icon?: string }
 
@@ -89,7 +90,10 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     type: "libraryStats", name: "Library Stats", icon: "video_library", accent: "var(--primary)", group: "Overview",
     desc: "Movie, show and music counts with weekly deltas.",
     defaultW: 12, defaultH: 3, minW: 3, minH: 2, maxW: 12, maxH: 4,
-    render: (_c, _s) => <LibraryStats fill />,
+    settings: [
+      { key: "libraryIds", label: "Visible cards", type: "libraryIds", hint: "All on by default — toggle off to hide." },
+    ],
+    render: (_c, s) => <LibraryStats fill visibleIds={s.libraryIds as string | undefined} />,
   },
   nowPlaying: {
     type: "nowPlaying", name: "Now Playing", icon: "play_circle", accent: "var(--primary)", group: "Streaming",
@@ -102,7 +106,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Launcher grid of every service with status and latency.",
     defaultW: 8, defaultH: 8, minW: 3, minH: 4, maxW: 12, maxH: 18,
     settings: [
-      { key: "serviceIds", label: "Show only", type: "serviceIds", hint: "Leave blank to show all visible services" },
+      { key: "serviceIds", label: "Show only", type: "serviceIds", hint: "All on by default — toggle off to hide." },
     ],
     render: (c, s) => <ServiceTiles fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} serviceIds={s.serviceIds as string | undefined} />,
   },
@@ -148,7 +152,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   upcoming: {
     type: "upcoming", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Streaming",
     desc: "Upcoming releases from your *arr calendars (next 7 days).",
-    defaultW: 12, defaultH: 10, minW: 4, minH: 6, maxW: 12, maxH: 14,
+    defaultW: 12, defaultH: 6, minW: 4, minH: 6, maxW: 12, maxH: 14,
     snapH: (h) => posterSnapH(h, 6, 150),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
@@ -217,7 +221,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",
     desc: "Local time, date and monitored-host uptime.",
-    defaultW: 3, defaultH: 4, minW: 2, minH: 3, maxW: 6, maxH: 6,
+    defaultW: 2, defaultH: 5, minW: 2, minH: 3, maxW: 6, maxH: 6,
     render: (_c, _s) => <ClockWidget fill />,
   },
   trendingMedia: {

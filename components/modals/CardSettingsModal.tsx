@@ -22,7 +22,7 @@ interface CardSettingsModalProps {
 
 export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsModalProps) {
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const { services } = useData();
+  const { services, library } = useData();
 
   useEffect(() => {
     if (!tile || !open) return;
@@ -207,23 +207,47 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
           }
 
           if (spec.type === "serviceIds") {
-            const selected = new Set((draft[spec.key] || "").split(",").filter(Boolean));
+            const allIds = services.map((s) => s.id);
+            const raw = draft[spec.key] || "";
+            const selected = raw === "" ? new Set(allIds) : new Set(raw.split(",").filter(Boolean));
             const toggle = (id: string) => {
               const next = new Set(selected);
               next.has(id) ? next.delete(id) : next.add(id);
-              setDraft((d) => ({ ...d, [spec.key]: [...next].join(",") }));
+              const val = next.size >= allIds.length ? "" : [...next].join(",");
+              setDraft((d) => ({ ...d, [spec.key]: val }));
             };
             return (
               <Field key={spec.key} label={spec.label} hint={spec.hint}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 240, overflowY: "auto" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 280, overflowY: "auto" }}>
                   {services.map((s) => (
-                    <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
-                      <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
-                      <span style={{ color: "var(--on-surface)" }}>{s.name}</span>
-                    </label>
+                    <ToggleRow key={s.id} icon="apps" title={s.name} desc="" on={selected.has(s.id)} onChange={() => toggle(s.id)} color="var(--on-surface-variant)" />
                   ))}
                   {services.length === 0 && (
                     <span style={{ fontSize: 12, color: "var(--on-surface-variant)" }}>No services configured yet.</span>
+                  )}
+                </div>
+              </Field>
+            );
+          }
+
+          if (spec.type === "libraryIds") {
+            const allIds = library.map((l) => l.id);
+            const raw = draft[spec.key] || "";
+            const selected = raw === "" ? new Set(allIds) : new Set(raw.split(",").filter(Boolean));
+            const toggle = (id: string) => {
+              const next = new Set(selected);
+              next.has(id) ? next.delete(id) : next.add(id);
+              const val = next.size >= allIds.length ? "" : [...next].join(",");
+              setDraft((d) => ({ ...d, [spec.key]: val }));
+            };
+            return (
+              <Field key={spec.key} label={spec.label} hint={spec.hint}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 280, overflowY: "auto" }}>
+                  {library.map((l) => (
+                    <ToggleRow key={l.id} icon="video_library" title={l.label} desc="" on={selected.has(l.id)} onChange={() => toggle(l.id)} color="var(--primary)" />
+                  ))}
+                  {library.length === 0 && (
+                    <span style={{ fontSize: 12, color: "var(--on-surface-variant)" }}>No library stats available yet.</span>
                   )}
                 </div>
               </Field>

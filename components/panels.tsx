@@ -741,9 +741,12 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
 }
 
 // ── LIBRARY STAT STRIP ─────────────────────────────────────
-export function LibraryStats({ fill }: { fill?: boolean } = {}) {
+export function LibraryStats({ fill, visibleIds }: { fill?: boolean; visibleIds?: string } = {}) {
   const { library } = useData();
-  if (library.length === 0)
+  const visible = visibleIds
+    ? (() => { const s = new Set(visibleIds.split(",").filter(Boolean)); return library.filter(l => s.has(l.id)); })()
+    : library;
+  if (visible.length === 0)
     return fill ? (
       <PanelShell fill title="Library Stats" icon="video_library" accent="var(--primary)">
         <Empty icon="video_library" line="No library stats" sub="Connect Tautulli or Jellyfin to show movie, show and music counts." />
@@ -751,7 +754,7 @@ export function LibraryStats({ fill }: { fill?: boolean } = {}) {
     ) : null;
   return (
     <div className="aerie-lib-grid" style={fill ? { height: "100%", gridAutoRows: "1fr" } : undefined}>
-      {library.map((l) => (
+      {visible.map((l) => (
         <div key={l.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Eyebrow>{l.label}</Eyebrow>
@@ -925,7 +928,7 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
   const { queue } = useData();
   // In a grid tile, show as many rows as fit the height (no scrolling); the rest
   // is reachable via the ‹ › pager.
-  const [fitRef, fitRows] = useFitRows(61);
+  const [fitRef, fitRows] = useFitRows(dense ? 53 : 61);
   const pageSize = limit ?? (fill ? fitRows : 10);
   const { page, totalPages, slice, setPage } = usePagination(queue, pageSize);
   const rowPadding = dense ? "7px 16px" : "11px 16px";
@@ -1092,7 +1095,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
 export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { downloads } = useData();
   // In a grid tile, show as many rows as fit the height; the rest pages via ‹ ›.
-  const [fitRef, fitRows] = useFitRows(36);
+  const [fitRef, fitRows] = useFitRows(dense ? 28 : 36);
   const pageSize = limit ?? (fill ? fitRows : 10);
   const { page, totalPages, slice, setPage } = usePagination(downloads, pageSize);
   const rowPadding = dense ? "5px 16px" : "9px 16px";
@@ -1218,11 +1221,6 @@ export function DiscoverPanel({
               >
                 <div style={{ position: "relative" }}>
                   <PosterTile title={d.title} kind={d.kind} cat="request" w={76} art={d.art} />
-                  {tone && label && (
-                    <div style={{ position: "absolute", bottom: 2, left: 2, right: 2 }}>
-                      <Pill tone={tone} style={{ fontSize: 8.5, padding: "1px 5px", width: "100%", textAlign: "center", display: "block" }}>{label}</Pill>
-                    </div>
-                  )}
                   {requestable && onRequest && !d.state && (
                     <div style={{ position: "absolute", top: 3, right: 3, background: "color-mix(in srgb, var(--surface-container) 75%, transparent)", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <Icon name="add" size={15} color="var(--originator-court)" />
@@ -1231,11 +1229,14 @@ export function DiscoverPanel({
                 </div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</div>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{d.year || ""}</div>
+                {tone && label && (
+                  <Pill tone={tone} style={{ fontSize: 8.5, padding: "1px 5px", marginTop: 3, width: "100%", textAlign: "center", display: "block" }}>{label}</Pill>
+                )}
               </div>
             );
           };
           return fill
-            ? <FlowGrid items={displayItems} itemW={76} itemH={155} render={renderItem} />
+            ? <FlowGrid items={displayItems} itemW={76} itemH={168} render={renderItem} />
             : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
         })()
       )}
