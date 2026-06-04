@@ -506,26 +506,22 @@ async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promis
   if (qualityProfilesCache && Date.now() - qualityProfilesCache.at < QUALITY_PROFILES_TTL) {
     return qualityProfilesCache.maps;
   }
+  // Use /settings endpoints — these return Overseerr's stored config (activeProfileId + name)
+  // without pinging the *arr service, so they're fast and reliable.
   const h = { "X-Api-Key": apiKey };
-  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 20000 });
-  type SvcEntry = { id: number };
-  type ProfileEntry = { id: number; name?: string };
-  const toMap = (ps: ProfileEntry[]): Record<number, string> => {
+  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 5000 });
+  type SettingsEntry = { activeProfileId?: number; activeProfileName?: string };
+  const buildMap = (entries: SettingsEntry[]): Record<number, string> => {
     const m: Record<number, string> = {};
-    for (const p of ps) if (p.id != null && p.name) m[p.id] = p.name;
+    for (const e of entries) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
     return m;
   };
-
   try {
-    const [radarrSvcs, sonarrSvcs] = await Promise.all([
-      get<SvcEntry[]>(`${baseUrl}/api/v1/service/radarr`).catch(() => [] as SvcEntry[]),
-      get<SvcEntry[]>(`${baseUrl}/api/v1/service/sonarr`).catch(() => [] as SvcEntry[]),
+    const [radarr, sonarr] = await Promise.all([
+      get<SettingsEntry[]>(`${baseUrl}/api/v1/settings/radarr`).catch(() => [] as SettingsEntry[]),
+      get<SettingsEntry[]>(`${baseUrl}/api/v1/settings/sonarr`).catch(() => [] as SettingsEntry[]),
     ]);
-    const [movieRaw, tvRaw] = await Promise.all([
-      radarrSvcs[0] ? get<ProfileEntry[]>(`${baseUrl}/api/v1/service/radarr/${radarrSvcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]) : Promise.resolve([] as ProfileEntry[]),
-      sonarrSvcs[0] ? get<ProfileEntry[]>(`${baseUrl}/api/v1/service/sonarr/${sonarrSvcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]) : Promise.resolve([] as ProfileEntry[]),
-    ]);
-    const maps: QualityProfileMaps = { movie: toMap(movieRaw), tv: toMap(tvRaw) };
+    const maps: QualityProfileMaps = { movie: buildMap(radarr), tv: buildMap(sonarr) };
     qualityProfilesCache = { at: Date.now(), maps };
     return maps;
   } catch {
@@ -540,15 +536,27 @@ let tvProfilesCache: { at: number; profiles: QualityProfile[] } | null = null;
 
 async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radarr" | "sonarr"): Promise<QualityProfile[]> {
   const h = { "X-Api-Key": apiKey };
+  const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
+
+  // Try the live service-proxy endpoint (requires Overseerr to ping the *arr instance).
   const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 20000 });
   type SvcEntry = { id: number };
   type ProfileEntry = { id: number; name?: string };
   const svcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/${arr}`).catch(() => [] as SvcEntry[]);
-  if (svcs.length === 0) return [];
-  const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]);
-  const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
-  const live: QualityProfile[] = raw.filter((p) => p.id != null && p.name).map((p) => ({ id: String(p.id), label: p.name!, sub: "", icon: "high_quality" }));
-  return [DEFAULT, ...live];
+  if (svcs.length > 0) {
+    const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]);
+    const live: QualityProfile[] = raw.filter((p) => p.id != null && p.name).map((p) => ({ id: String(p.id), label: p.name!, sub: "", icon: "high_quality" }));
+    if (live.length > 0) return [DEFAULT, ...live];
+  }
+
+  // Fallback: settings endpoint returns the active profile without pinging *arr.
+  type SettingsEntry = { activeProfileId?: number; activeProfileName?: string };
+  const getSettings = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 5000 });
+  const settings = await getSettings<SettingsEntry[]>(`${baseUrl}/api/v1/settings/${arr}`).catch(() => [] as SettingsEntry[]);
+  const fromSettings: QualityProfile[] = settings
+    .filter((e) => e.activeProfileId != null && e.activeProfileName)
+    .map((e) => ({ id: String(e.activeProfileId!), label: e.activeProfileName!, sub: "active profile", icon: "high_quality" }));
+  return [DEFAULT, ...fromSettings];
 }
 
 /** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
