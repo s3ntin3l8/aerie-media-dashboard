@@ -8,7 +8,7 @@ import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { isVisible } from "@/lib/visibility";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
-import { PanelShell, StoragePanel, timeAgo, fmtBytes } from "@/components/panels";
+import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
@@ -259,8 +259,6 @@ export function Status() {
               ))}
             </div>
           </PanelShell>
-
-          <StoragePanel />
 
           {role === "admin" && arrHealth.length > 0 && (
             <PanelShell title="Service Warnings" icon="warning" accent="var(--amber)" count={`${arrHealth.length}`}>
