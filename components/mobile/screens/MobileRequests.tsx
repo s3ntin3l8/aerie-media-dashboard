@@ -1,11 +1,14 @@
 "use client";
 import React, { useState } from "react";
 import { Icon, Eyebrow } from "@/components/primitives";
-import { useData } from "@/components/portal/DataProvider";
+import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { ApprovalRow, MiniStat } from "@/components/mobile/mcommon";
 import { useRequestReview } from "@/components/hooks/useRequestReview";
-import type { RequestStatus } from "@/lib/types";
+import { RequestModal } from "@/components/modals/RequestModal";
+import { Toast } from "@/components/modals/Toast";
+import { submitRequest } from "@/app/(portal)/requests/actions";
+import type { DiscoverItem, MediaRequest, RequestStatus } from "@/lib/types";
 
 type Filter = "all" | RequestStatus;
 
@@ -14,6 +17,16 @@ export function MobileRequests() {
   const { role, user } = usePortal();
   const [filter, setFilter] = useState<Filter>("all");
   const { acted, onAct, applyActed } = useRequestReview();
+  const refresh = useRefresh();
+  const [reqModal, setReqModal] = useState<{ mode: "request" | "review"; request?: MediaRequest } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+
+  const handleSubmit = (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => {
+    const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
+    void submitRequest(pick, picked, quality).then((r) => { flash(r.message); refresh(); });
+  };
 
   const base =
     role === "admin"
@@ -179,10 +192,53 @@ export function MobileRequests() {
           </div>
         ) : (
           displayed.map((r) => (
-            <ApprovalRow key={r.id} r={r} onReq={onAct} />
+            <ApprovalRow
+              key={r.id}
+              r={r}
+              onReq={onAct}
+              onTap={role === "admin" ? () => setReqModal({ mode: "review", request: r }) : undefined}
+            />
           ))
         )}
       </div>
+
+      {/* FAB — request new media */}
+      <button
+        onClick={() => setReqModal({ mode: "request" })}
+        style={{
+          position: "fixed",
+          bottom: 88,
+          right: 20,
+          zIndex: 50,
+          width: 56,
+          height: 56,
+          borderRadius: 9999,
+          border: "none",
+          background: "var(--originator-court)",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          boxShadow: "0 4px 16px color-mix(in srgb, var(--originator-court) 40%, transparent)",
+        }}
+        aria-label="Request new media"
+        title="Request new media"
+      >
+        <Icon name="add" size={26} />
+      </button>
+
+      {reqModal && (
+        <RequestModal
+          open
+          mode={reqModal.mode}
+          request={reqModal.mode === "review" ? reqModal.request : undefined}
+          onClose={() => setReqModal(null)}
+          onSubmit={handleSubmit}
+          onAct={onAct}
+        />
+      )}
+      <Toast message={toast} />
     </div>
   );
 }

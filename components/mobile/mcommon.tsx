@@ -53,13 +53,14 @@ export function MiniStat({ label, value, icon, color = "var(--primary)" }: {
 
 // ── ApprovalRow ─────────────────────────────────────────────
 // Shared request card for Home queue + Requests screen
-export function ApprovalRow({ r, onReq }: { r: MediaRequest; onReq: (id: string, action: "approve" | "decline") => void }) {
+export function ApprovalRow({ r, onReq, onTap }: { r: MediaRequest; onReq: (id: string, action: "approve" | "decline") => void; onTap?: () => void }) {
   const userName = r.requesterName || r.user;
   const isPending = r.status === "pending";
 
   return (
     <div
       className="req-card card"
+      onClick={onTap}
       style={{
         padding: 15,
         borderRadius: 18,
@@ -67,6 +68,7 @@ export function ApprovalRow({ r, onReq }: { r: MediaRequest; onReq: (id: string,
         display: "flex",
         gap: 12,
         transition: "border-color .15s, background .15s",
+        cursor: onTap ? "pointer" : "default",
       }}
     >
       <PosterTile title={r.title} kind={r.kind} cat="request" w={44} ratio={1.4} rounded={8} art={r.art} />
