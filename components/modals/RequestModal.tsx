@@ -14,10 +14,17 @@ import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { QUALITY_PROFILES } from "@/lib/categories";
-import { getQualityProfiles } from "@/app/(portal)/requests/actions";
+import { getQualityProfiles, type SubmitResult } from "@/app/(portal)/requests/actions";
 import { REQ_TONE as RQ_TONE, REQ_LABEL as RQ_LABEL } from "@/lib/display";
 
 const REQ_C = "var(--originator-court)";
+
+// "Default" sends no profileId override. Sending an explicit profile is an
+// Overseerr *advanced* request option that requires the REQUEST_ADVANCED
+// permission — non-privileged users get a 403 if we force one. Defaulting to
+// the server profile keeps requests working for everyone; picking a specific
+// profile stays available for users who have the permission.
+const DEFAULT_PROFILE: QualityProfile = { id: "default", label: "Default", sub: "Server default", icon: "auto_awesome" };
 
 function StateBadge({ state }: { state: RequestStatus | null }) {
   if (!state) return null;
@@ -147,11 +154,16 @@ function ConfirmStep({
   preloadedProfiles: QualityProfile[];
 }) {
   const selCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
-  const profiles = preloadedProfiles.length > 0 ? preloadedProfiles : QUALITY_PROFILES;
+  // Prepend the "Default" (no-override) option so requests don't carry an
+  // advanced profileId unless the user deliberately picks a specific profile.
+  const profiles = React.useMemo(
+    () => [DEFAULT_PROFILE, ...(preloadedProfiles.length > 0 ? preloadedProfiles : QUALITY_PROFILES).filter((p) => p.id !== "default")],
+    [preloadedProfiles],
+  );
 
   useEffect(() => {
     onProfilesLoad(profiles);
-    setQuality(profiles[0]?.id ?? "default");
+    setQuality("default");
   }, [profiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -374,7 +386,7 @@ export function RequestModal({
   /** Exact season numbers to preselect when editing an existing TV request. */
   initialSelectedSeasons?: number[];
   onClose: () => void;
-  onSubmit: (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => void;
+  onSubmit: (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => void | Promise<SubmitResult | void>;
   onAct: (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => void;
 }) {
   const { users } = useData();
@@ -390,6 +402,8 @@ export function RequestModal({
   const [tvProfiles, setTvProfiles] = useState<QualityProfile[]>([]);
   const [seasons, setSeasons] = useState<Record<number, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<SubmitResult | null>(null);
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<"approved" | "declined" | null>(null);
 
@@ -412,6 +426,8 @@ export function RequestModal({
       setQ(initialQuery || "");
       setQuality("default");
       setSubmitted(false);
+      setSubmitting(false);
+      setResult(null);
       setNote("");
       if (initialPick) {
         choosePick(initialPick, initialSelectedSeasons);
@@ -428,8 +444,18 @@ export function RequestModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, request?.id]);
-  const submitRequest = () => {
-    if (pick) onSubmit(pick, quality, seasons);
+  const submitRequest = async () => {
+    if (!pick) return;
+    setSubmitting(true);
+    let r: SubmitResult | void;
+    try {
+      r = await onSubmit(pick, quality, seasons);
+    } catch (e) {
+      r = { ok: false, message: e instanceof Error ? e.message : "Request failed" };
+    }
+    setSubmitting(false);
+    // Older callers may not return a result; treat that as a plain success.
+    setResult(r ?? { ok: true, message: "Request submitted" });
     setSubmitted(true);
   };
   const act = (verdict: "approved" | "declined") => {
@@ -475,8 +501,8 @@ export function RequestModal({
         <button onClick={() => setPick(null)} className="btn btn-secondary btn-sm">
           Back
         </button>
-        <button onClick={submitRequest} disabled={noSeasons} className="btn btn-primary btn-sm">
-          <Icon name="send" size={15} /> Submit request
+        <button onClick={submitRequest} disabled={noSeasons || submitting} className="btn btn-primary btn-sm">
+          <Icon name="send" size={15} /> {submitting ? "Submitting…" : "Submit request"}
         </button>
       </>
     );
@@ -516,29 +542,55 @@ export function RequestModal({
       )}
       {open && !review && (
         submitted && pick ? (
-          <ResultPanel
-            icon="check"
-            color="var(--originator-own)"
-            title="Request submitted"
-            body={
-              <>
-                <strong style={{ color: "var(--on-surface)" }}>{pick.title}</strong>{" "}is pending approval. You&rsquo;ll be notified when it&rsquo;s available to watch.
-              </>
-            }
-            onClose={onClose}
-            extra={
-              <button
-                onClick={() => {
-                  setSubmitted(false);
-                  setPick(null);
-                  setQ("");
-                }}
-                className="btn btn-secondary btn-sm"
-              >
-                <Icon name="add" size={15} /> Request another
-              </button>
-            }
-          />
+          result && !result.ok ? (
+            <ResultPanel
+              icon="error"
+              color="var(--error)"
+              title="Request failed"
+              body={
+                <>
+                  Couldn&rsquo;t request <strong style={{ color: "var(--on-surface)" }}>{pick.title}</strong>. {result.message}
+                </>
+              }
+              onClose={onClose}
+              extra={
+                <button onClick={() => { setSubmitted(false); setResult(null); }} className="btn btn-secondary btn-sm">
+                  <Icon name="refresh" size={15} /> Try again
+                </button>
+              }
+            />
+          ) : (
+            <ResultPanel
+              icon="check"
+              color="var(--originator-own)"
+              title={result?.autoApproved ? "Request approved" : "Request submitted"}
+              body={
+                result?.autoApproved ? (
+                  <>
+                    <strong style={{ color: "var(--on-surface)" }}>{pick.title}</strong>{" "}was approved and is being added now. You&rsquo;ll be notified when it&rsquo;s ready to watch.
+                  </>
+                ) : (
+                  <>
+                    <strong style={{ color: "var(--on-surface)" }}>{pick.title}</strong>{" "}is pending approval. You&rsquo;ll be notified when it&rsquo;s available to watch.
+                  </>
+                )
+              }
+              onClose={onClose}
+              extra={
+                <button
+                  onClick={() => {
+                    setSubmitted(false);
+                    setResult(null);
+                    setPick(null);
+                    setQ("");
+                  }}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <Icon name="add" size={15} /> Request another
+                </button>
+              }
+            />
+          )
         ) : pick ? (
           <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} />
         ) : (

@@ -267,19 +267,18 @@ export function Requests() {
           } : undefined}
           initialSelectedSeasons={reqModal.mode === "edit" ? reqModal.request?.seasons : undefined}
           onClose={() => setReqModal(null)}
-          onSubmit={(pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => {
+          onSubmit={async (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => {
             const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
             if (reqModal.mode === "edit" && reqModal.request) {
-              void editRequest(reqModal.request.id, picked, quality).then((r) => {
-                flash(r.message);
-                if (r.ok) refresh();
-              });
-            } else {
-              void submitRequest(pick, picked, quality).then((r) => {
-                flash(r.message);
-                refresh();
-              });
+              const r = await editRequest(reqModal.request.id, picked, quality);
+              flash(r.message);
+              if (r.ok) refresh();
+              return r;
             }
+            const r = await submitRequest(pick, picked, quality);
+            flash(r.message);
+            refresh();
+            return r;
           }}
           onAct={onAct}
         />

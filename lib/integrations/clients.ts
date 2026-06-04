@@ -108,6 +108,16 @@ interface TautulliSession {
   state?: string;
   thumb?: string;
   grandparent_thumb?: string;
+  // — wide art / metadata —
+  art?: string;
+  grandparent_art?: string;
+  summary?: string;
+  media_index?: string | number;
+  parent_media_index?: string | number;
+  originally_available_at?: string;
+  content_rating?: string;
+  genres?: string[];
+  user_thumb?: string;
   // — client / app —
   platform?: string;
   platform_version?: string;
@@ -153,9 +163,14 @@ const ttBool = (v: string | number | undefined): boolean => v === "1" || v === 1
 /** Strip channel-layout qualifiers, e.g. "5.1(side)" → "5.1". */
 const cleanLayout = (v: string | undefined): string | undefined => v?.replace(/\s*\([^)]*\)\s*/g, "").trim() || undefined;
 
+/** Parse a Tautulli numeric-ish field to a number, or undefined when empty. */
+const ttNum = (v: string | number | undefined): number | undefined => (v != null && v !== "" ? n(v) : undefined);
+
 function mapTautulliSession(s: TautulliSession): NowPlaying {
   const kind: MediaKind = s.media_type === "episode" ? "series" : s.media_type === "track" ? "track" : "movie";
   const thumb = kind === "series" ? s.grandparent_thumb || s.thumb : s.thumb;
+  // Wide backdrop/fanart: series art lives on the grandparent (show), movies on the item.
+  const wideArt = kind === "series" ? s.grandparent_art || s.art : s.art;
   return {
     id: `tt-${s.session_key}`,
     title: kind === "series" ? s.grandparent_title || s.full_title : s.title || s.full_title,
@@ -173,6 +188,15 @@ function mapTautulliSession(s: TautulliSession): NowPlaying {
     dur: s.duration ? Math.round(Number(s.duration) / 60000) : 0,
     paused: s.state === "paused",
     art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
+    backdrop: wideArt ? `/api/artwork?svc=tautulli&kind=backdrop&ref=${encodeURIComponent(wideArt)}` : undefined,
+    // — title detail —
+    summary: s.summary || undefined,
+    season: kind === "series" ? ttNum(s.parent_media_index) : undefined,
+    episode: kind === "series" ? ttNum(s.media_index) : undefined,
+    airDate: s.originally_available_at || undefined,
+    contentRating: s.content_rating || undefined,
+    genres: Array.isArray(s.genres) && s.genres.length ? s.genres : undefined,
+    userAvatar: s.user_thumb ? `/api/artwork?svc=tautulli&kind=avatar&ref=${encodeURIComponent(s.user_thumb)}` : undefined,
     // — client / app —
     platform: s.platform || undefined,
     platformVersion: s.platform_version || undefined,
@@ -436,6 +460,8 @@ interface JellyfinSession {
   Client?: string;
   ApplicationVersion?: string;
   RemoteEndPoint?: string;
+  /** present when the user has a profile photo */
+  UserPrimaryImageTag?: string;
   NowPlayingItem?: {
     Id: string;
     Name: string;
@@ -443,9 +469,16 @@ interface JellyfinSession {
     ProductionYear?: number;
     SeriesName?: string;
     SeriesId?: string;
+    ParentBackdropItemId?: string;
     RunTimeTicks?: number;
     Height?: number;
     Container?: string;
+    Overview?: string;
+    IndexNumber?: number;
+    ParentIndexNumber?: number;
+    PremiereDate?: string;
+    OfficialRating?: string;
+    Genres?: string[];
     MediaStreams?: JellyfinMediaStream[];
   };
   PlayState?: { IsPaused?: boolean; PositionTicks?: number; PlayMethod?: string };
@@ -519,6 +552,8 @@ export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
       const fps = video?.RealFrameRate ?? video?.AverageFrameRate;
       const ip = s.RemoteEndPoint?.replace(/:\d+$/, "").replace(/^::ffff:/i, "");
       const lan = isLanIp(s.RemoteEndPoint);
+      // Episodes rarely carry their own backdrop — it lives on the parent series.
+      const backdropId = kind === "series" ? item.ParentBackdropItemId || item.SeriesId : item.Id;
       return {
         id: `jf-${s.Id}`,
         title: kind === "series" ? item.SeriesName || item.Name : item.Name,
@@ -536,6 +571,15 @@ export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
         dur: durMin,
         paused: Boolean(s.PlayState?.IsPaused),
         art: item.Id ? `/api/artwork?svc=jellyfin&ref=${encodeURIComponent(kind === "series" && item.SeriesId ? item.SeriesId : item.Id)}` : undefined,
+        backdrop: backdropId ? `/api/artwork?svc=jellyfin&kind=backdrop&ref=${encodeURIComponent(backdropId)}` : undefined,
+        // — title detail —
+        summary: item.Overview || undefined,
+        season: kind === "series" ? item.ParentIndexNumber : undefined,
+        episode: kind === "series" ? item.IndexNumber : undefined,
+        airDate: item.PremiereDate ? item.PremiereDate.slice(0, 10) : undefined,
+        contentRating: item.OfficialRating || undefined,
+        genres: item.Genres && item.Genres.length ? item.Genres : undefined,
+        userAvatar: s.UserPrimaryImageTag ? `/api/artwork?svc=jellyfin&kind=avatar&ref=${encodeURIComponent(s.UserId)}` : undefined,
         // — client / app —
         product: s.Client || undefined,
         productVersion: s.ApplicationVersion || undefined,
@@ -1056,13 +1100,16 @@ export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
   });
 }
 
-export async function overseerrCreateRequest(input: { tmdbId: number; mediaType: "movie" | "tv"; seasons?: number[]; userId?: number; profileId?: number }): Promise<void> {
+export async function overseerrCreateRequest(input: { tmdbId: number; mediaType: "movie" | "tv"; seasons?: number[]; userId?: number; profileId?: number }): Promise<{ status: number; mediaStatus?: number }> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const body: Record<string, unknown> = { mediaType: input.mediaType, mediaId: input.tmdbId };
   if (input.mediaType === "tv") body.seasons = input.seasons && input.seasons.length ? input.seasons : "all";
   if (input.userId) body.userId = input.userId;
   if (input.profileId) body.profileId = input.profileId;
-  await fetchJson(`${baseUrl}/api/v1/request`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body });
+  // The POST response is the created MediaRequest: `status` is 1 pending / 2 approved
+  // (auto-approve), so the caller can tell whether the request needs approval.
+  const res = await fetchJson<{ status?: number; media?: { status?: number } }>(`${baseUrl}/api/v1/request`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body });
+  return { status: typeof res?.status === "number" ? res.status : 1, mediaStatus: res?.media?.status };
 }
 
 export async function overseerrReview(requestId: number, action: "approve" | "decline"): Promise<void> {

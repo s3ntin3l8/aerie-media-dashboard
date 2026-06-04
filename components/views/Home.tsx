@@ -295,9 +295,11 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
           mode="request"
           initialPick={reqPick}
           onClose={() => setReqPick(null)}
-          onSubmit={(pick, quality, seasons) => {
+          onSubmit={async (pick, quality, seasons) => {
             const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
-            void submitRequest(pick, picked, quality).then(() => refresh());
+            const r = await submitRequest(pick, picked, quality);
+            refresh();
+            return r;
           }}
           onAct={onAct}
         />

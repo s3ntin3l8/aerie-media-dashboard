@@ -23,9 +23,12 @@ export function MobileRequests() {
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
 
-  const handleSubmit = (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => {
+  const handleSubmit = async (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => {
     const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
-    void submitRequest(pick, picked, quality).then((r) => { flash(r.message); refresh(); });
+    const r = await submitRequest(pick, picked, quality);
+    flash(r.message);
+    refresh();
+    return r;
   };
 
   const base =

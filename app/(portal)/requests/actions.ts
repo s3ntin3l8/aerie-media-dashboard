@@ -67,6 +67,8 @@ async function canMutateRequest(user: AppUser, requestId: number): Promise<{ ok:
 export interface SubmitResult {
   ok: boolean;
   message: string;
+  /** True when Overseerr auto-approved the request (no admin approval needed). */
+  autoApproved?: boolean;
 }
 
 /** Return live quality profiles for the request modal. Falls back to static list when Overseerr is not configured. */
@@ -98,14 +100,20 @@ export async function submitRequest(pick: DiscoverItem, seasons: number[], quali
       }
     }
     const profileId = quality && quality !== "default" ? (Number(quality) || undefined) : undefined;
-    await overseerrCreateRequest({
+    const created = await overseerrCreateRequest({
       tmdbId: Number(pick.id),
       mediaType: pick.kind === "series" ? "tv" : "movie",
       seasons: pick.kind === "series" ? seasons : undefined,
       userId,
       profileId,
     });
-    return { ok: true, message: `Requested "${pick.title}"` };
+    // Overseerr request status 2 = approved (auto-approve); 1 = pending admin approval.
+    const autoApproved = created.status === 2;
+    return {
+      ok: true,
+      autoApproved,
+      message: autoApproved ? `Approved "${pick.title}"` : `Requested "${pick.title}"`,
+    };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Request failed" };
   }
