@@ -516,8 +516,10 @@ export function ServiceTiles({ role, onOpen, onAll, services, fill, serviceIds }
   // Allow an explicit `services` prop override (e.g. admin panel passes a pre-filtered list).
   let list = services ?? visibleServices;
   if (serviceIds && serviceIds.length > 0) {
-    const ids = new Set(serviceIds.split(",").filter(Boolean));
-    list = list.filter((s) => ids.has(s.id));
+    // serviceIds is an ordered list of visible ids — filter to those, then honor that order.
+    const order = serviceIds.split(",").filter(Boolean);
+    const pos = new Map(order.map((id, i) => [id, i]));
+    list = list.filter((s) => pos.has(s.id)).sort((a, b) => pos.get(a.id)! - pos.get(b.id)!);
   }
 
   const Tile = ({ s }: { s: Service }) => {
