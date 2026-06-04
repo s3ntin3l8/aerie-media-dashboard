@@ -432,6 +432,14 @@ interface OverseerrRequest {
   profileId?: number;
 }
 
+export interface OverseerrRequestDetails {
+  id: number;
+  requesterId?: number;
+  requesterEmail?: string;
+  status: MediaRequest["status"];
+  seasons?: number[];
+}
+
 interface OverseerrMediaDetails {
   title?: string;       // movies
   name?: string;        // tv shows
@@ -700,6 +708,24 @@ export async function overseerrUpcomingMovies(): Promise<DiscoverItem[]> {
 export async function overseerrDeleteRequest(requestId: number): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
   await fetchJson(`${baseUrl}/api/v1/request/${requestId}`, { service: "overseerr", method: "DELETE", headers: { "X-Api-Key": apiKey } });
+}
+
+export async function overseerrRequestDetails(requestId: number): Promise<OverseerrRequestDetails> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const r = await fetchJson<OverseerrRequest>(`${baseUrl}/api/v1/request/${requestId}`, {
+    service: "overseerr",
+    headers: { "X-Api-Key": apiKey },
+  });
+  const seasons = r.seasons?.map((s) => s.seasonNumber).filter((n) => n > 0);
+  return {
+    id: r.id,
+    requesterId: r.requestedBy?.id,
+    requesterEmail: r.requestedBy?.email,
+    status: r.media?.status === 5 ? "available"
+      : (r.media?.status === 3 || r.media?.status === 4) ? "processing"
+      : (OVERSEERR_STATUS[r.status] ?? "pending"),
+    seasons: seasons && seasons.length > 0 ? seasons : undefined,
+  };
 }
 
 export async function overseerrEditRequest(requestId: number, changes: { seasons?: number[]; profileId?: number }): Promise<void> {

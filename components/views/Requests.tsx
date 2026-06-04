@@ -30,7 +30,7 @@ function RequestCard({
   const { users } = useData();
   const u = users.find((x) => x.id === r.portalUser);
   const isOwner = r.portalUser === portalUserId;
-  const canCancel = adminMode || (isOwner && (r.status === "pending" || r.status === "approved"));
+  const canCancel = (adminMode || isOwner) && (r.status === "pending" || r.status === "approved");
   const canEdit = (adminMode || isOwner) && r.status === "pending";
   return (
     <div
@@ -79,7 +79,7 @@ function RequestCard({
               <Icon name="edit" size={14} />
             </button>
           )}
-          {canCancel && r.status !== "available" && (
+          {canCancel && (
             <button onClick={(e) => { e.stopPropagation(); onCancel(r); }} className="btn btn-ghost btn-sm" title="Cancel request" style={{ color: "var(--error)" }}>
               <Icon name="cancel" size={14} />
             </button>
@@ -117,14 +117,22 @@ export function Requests() {
     : base;
   const filtered = applyActed(sorted).filter((r) => (filter === "all" ? true : r.status === filter));
 
-  const counts = {
-    all: requestCounts?.total ?? base.length,
-    pending: requestCounts?.pending ?? base.filter((r) => r.status === "pending" && !acted[r.id]).length,
-    approved: requestCounts?.approved ?? base.filter((r) => (acted[r.id] || r.status) === "approved").length,
-    available: requestCounts?.available ?? base.filter((r) => r.status === "available").length,
-    processing: requestCounts?.processing ?? base.filter((r) => r.status === "processing").length,
-    failed: requestCounts?.failed ?? base.filter((r) => r.status === "failed").length,
+  const localCounts = {
+    all: base.length,
+    pending: base.filter((r) => r.status === "pending" && !acted[r.id]).length,
+    approved: base.filter((r) => (acted[r.id] || r.status) === "approved").length,
+    available: base.filter((r) => r.status === "available").length,
+    processing: base.filter((r) => r.status === "processing").length,
+    failed: base.filter((r) => r.status === "failed").length,
   };
+  const counts = adminMode && requestCounts ? {
+    all: requestCounts.total,
+    pending: requestCounts.pending,
+    approved: requestCounts.approved,
+    available: requestCounts.available,
+    processing: requestCounts.processing,
+    failed: requestCounts.failed,
+  } : localCounts;
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
@@ -225,7 +233,7 @@ export function Requests() {
                   />
                 ))}
               </div>
-              {requestCounts && requestCounts.total > requests.length && (
+              {adminMode && requestCounts && requestCounts.total > requests.length && (
                 <div style={{ textAlign: "center", fontSize: 11, color: "var(--on-surface-variant)", paddingTop: 4 }}>
                   Showing {requests.length} of {requestCounts.total} total requests
                 </div>
@@ -249,8 +257,9 @@ export function Requests() {
             state: reqModal.request.status as RequestStatus,
             overview: reqModal.request.overview ?? "",
             art: reqModal.request.art,
-            seasons: reqModal.request.seasons?.length ? reqModal.request.seasons.length : undefined,
+            seasons: reqModal.request.seasons?.length ? Math.max(...reqModal.request.seasons) : undefined,
           } : undefined}
+          initialSelectedSeasons={reqModal.mode === "edit" ? reqModal.request?.seasons : undefined}
           onClose={() => setReqModal(null)}
           onSubmit={(pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => {
             const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);

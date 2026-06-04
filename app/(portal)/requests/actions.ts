@@ -9,9 +9,9 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { getSessionUser } from "@/lib/session";
 import { getServiceSecret } from "@/lib/integrations/registry";
-import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
+import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
 import { QUALITY_PROFILES } from "@/lib/categories";
-import type { AppUser, DiscoverItem, QualityProfile } from "@/lib/types";
+import type { AppUser, DiscoverItem, QualityProfile, RequestStatus } from "@/lib/types";
 
 async function overseerrOn(): Promise<boolean> {
   return (await getServiceSecret("overseerr")) != null;
@@ -41,6 +41,27 @@ async function resolveOverseerrUserId(user: AppUser): Promise<number | undefined
   } catch {
     return undefined;
   }
+}
+
+function parseRequestId(id: string): number | null {
+  const numeric = Number(id.replace(/^os-/, ""));
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function sameEmail(a: string | undefined, b: string | undefined): boolean {
+  const left = a?.trim().toLowerCase();
+  const right = b?.trim().toLowerCase();
+  return Boolean(left && right && left === right);
+}
+
+async function canMutateRequest(user: AppUser, requestId: number): Promise<{ ok: true; status: RequestStatus } | { ok: false; message: string }> {
+  const request = await overseerrRequestDetails(requestId);
+  if (user.role === "admin") return { ok: true, status: request.status };
+
+  const userId = await resolveOverseerrUserId(user);
+  const ownsById = userId != null && request.requesterId === userId;
+  const ownsByEmail = sameEmail(request.requesterEmail, user.email);
+  return ownsById || ownsByEmail ? { ok: true, status: request.status } : { ok: false, message: "forbidden" };
 }
 
 export interface SubmitResult {
@@ -95,8 +116,8 @@ export async function reviewRequest(id: string, action: "approve" | "decline", n
   const user = await getSessionUser();
   if (user.role !== "admin") return { ok: false, message: "forbidden" };
   if (!(await overseerrOn())) return { ok: true, message: action === "approve" ? "Approved" : "Declined" };
-  const numeric = Number(id.replace(/^os-/, ""));
-  if (!Number.isFinite(numeric)) return { ok: true, message: "Updated" }; // mock id → no upstream
+  const numeric = parseRequestId(id);
+  if (numeric == null) return { ok: true, message: "Updated" }; // mock id → no upstream
   try {
     await overseerrReview(numeric, action);
     if (note?.trim() && mediaOverseerrId) {
@@ -109,12 +130,18 @@ export async function reviewRequest(id: string, action: "approve" | "decline", n
   }
 }
 
-/** Cancel/delete a request. Overseerr enforces ownership — users can delete their own pending requests; admins can delete any. */
+/** Cancel/delete a request. Server-side ownership is enforced before using the shared Overseerr mutation path. */
 export async function deleteRequest(id: string): Promise<SubmitResult> {
   if (!(await overseerrOn())) return { ok: true, message: "Deleted" };
-  const numeric = Number(id.replace(/^os-/, ""));
-  if (!Number.isFinite(numeric)) return { ok: true, message: "Deleted" };
+  const numeric = parseRequestId(id);
+  if (numeric == null) return { ok: true, message: "Deleted" };
   try {
+    const user = await getSessionUser();
+    const allowed = await canMutateRequest(user, numeric);
+    if (!allowed.ok) return { ok: false, message: allowed.message };
+    if (allowed.status !== "pending" && allowed.status !== "approved") {
+      return { ok: false, message: "Cannot cancel this request" };
+    }
     await overseerrDeleteRequest(numeric);
     bustCache("overseerr:requestCounts");
     return { ok: true, message: "Request cancelled" };
@@ -126,9 +153,13 @@ export async function deleteRequest(id: string): Promise<SubmitResult> {
 /** Edit an existing pending request (seasons + quality profile). */
 export async function editRequest(id: string, seasons: number[], quality?: string): Promise<SubmitResult> {
   if (!(await overseerrOn())) return { ok: true, message: "Updated" };
-  const numeric = Number(id.replace(/^os-/, ""));
-  if (!Number.isFinite(numeric)) return { ok: true, message: "Updated" };
+  const numeric = parseRequestId(id);
+  if (numeric == null) return { ok: true, message: "Updated" };
   try {
+    const user = await getSessionUser();
+    const allowed = await canMutateRequest(user, numeric);
+    if (!allowed.ok) return { ok: false, message: allowed.message };
+    if (allowed.status !== "pending") return { ok: false, message: "Only pending requests can be edited" };
     const profileId = quality && quality !== "default" ? (Number(quality) || undefined) : undefined;
     await overseerrEditRequest(numeric, { seasons, profileId });
     bustCache("overseerr:requestCounts");

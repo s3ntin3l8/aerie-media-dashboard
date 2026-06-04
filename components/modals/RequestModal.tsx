@@ -354,6 +354,7 @@ export function RequestModal({
   request,
   initialQuery,
   initialPick,
+  initialSelectedSeasons,
   onClose,
   onSubmit,
   onAct,
@@ -364,6 +365,8 @@ export function RequestModal({
   initialQuery?: string;
   /** When set, skip the DiscoverStep and open ConfirmStep with this item pre-selected. */
   initialPick?: DiscoverItem | null;
+  /** Exact season numbers to preselect when editing an existing TV request. */
+  initialSelectedSeasons?: number[];
   onClose: () => void;
   onSubmit: (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => void;
   onAct: (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => void;
@@ -381,11 +384,15 @@ export function RequestModal({
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<"approved" | "declined" | null>(null);
 
-  const choosePick = (d: DiscoverItem) => {
+  const choosePick = (d: DiscoverItem, selectedSeasons?: number[]) => {
     setPick(d);
     if (d.kind === "series") {
       const s: Record<number, boolean> = {};
-      for (let i = 1; i <= (d.seasons || 1); i++) s[i] = true;
+      if (selectedSeasons) {
+        for (const season of selectedSeasons) s[season] = true;
+      } else {
+        for (let i = 1; i <= (d.seasons || 1); i++) s[i] = true;
+      }
       setSeasons(s);
     }
     setQuality("default");
@@ -398,7 +405,7 @@ export function RequestModal({
       setSubmitted(false);
       setNote("");
       if (initialPick) {
-        choosePick(initialPick);
+        choosePick(initialPick, initialSelectedSeasons);
       } else {
         setPick(null);
         setSeasons({});
