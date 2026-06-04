@@ -2,7 +2,7 @@
 // ============================================================
 // AERIE — Admin area (services · members · visibility)
 // ============================================================
-import React, { useEffect, useState, useTransition } from "react";
+import React, { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
@@ -274,6 +274,9 @@ export function Admin() {
   const patchData = usePatchData();
   const [tab, setTab] = useState("services");
   const [svcModal, setSvcModal] = useState<{ mode: "add" | "edit"; service?: Service } | null>(null);
+  // The id auto-saved by "Test connection" in add mode — lets a subsequent save/test of the
+  // same id reconcile idempotently instead of tripping the duplicate-id guard.
+  const lastAutoSavedId = useRef<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const tabs: [string, string, string][] = [
     ["services", "Services & Secrets", "dns"],
@@ -301,13 +304,20 @@ export function Admin() {
     return m;
   };
 
-  const onSave = async (form: ServiceForm, vis: Record<string, boolean>) => {
+  // Persist a service (config + secret + visibility) and patch the local snapshot,
+  // WITHOUT closing the modal. Shared by the Save button and the auto-save-on-Test flow.
+  // Returns the saved id + optimistic Service, or an error message to flash.
+  const persistService = async (
+    form: ServiceForm,
+    vis: Record<string, boolean>,
+  ): Promise<{ id: string; service: Service } | { error: string }> => {
     const editing = svcModal?.mode === "edit";
     const id = editing ? svcModal!.service!.id : slug(form.name);
-    if (!id) return;
-    if (!editing && (await serviceExists(id))) {
-      flash(`A service id "${id}" already exists`);
-      return;
+    if (!id) return { error: "Enter a service name first" };
+    // In add mode, reject a duplicate id — UNLESS it's the one we just auto-saved for a test
+    // (re-saving / re-testing the same nascent service is an idempotent update, not a clash).
+    if (!editing && id !== lastAutoSavedId.current && (await serviceExists(id))) {
+      return { error: `A service id "${id}" already exists` };
     }
     await upsertService({
       id,
@@ -334,12 +344,37 @@ export function Admin() {
     const optimisticService: Service = editing
       ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: form.internalUrl.trim() || undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
       : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: form.internalUrl.trim() || undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+    // Dedupe by id: in add mode the service may already be in the snapshot from a prior
+    // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).
     patchData((s) => ({
       ...s,
-      services: editing
-        ? s.services.map((svc) => svc.id === id ? optimisticService : svc)
+      services: s.services.some((svc) => svc.id === id)
+        ? s.services.map((svc) => (svc.id === id ? optimisticService : svc))
         : [...s.services, optimisticService],
     }));
+    return { id, service: optimisticService };
+  };
+
+  // Auto-save on "Test connection" (add mode): persist config + secret without closing the
+  // modal (it stays in add mode, so no remount/state reset), then the modal tests the *stored*
+  // connection by id. Remember the id so the duplicate-id guard treats re-saves as updates.
+  const onSaveAndTest = async (form: ServiceForm, vis: Record<string, boolean>): Promise<string | null> => {
+    const wasEditing = svcModal?.mode === "edit";
+    const res = await persistService(form, vis);
+    if ("error" in res) { flash(res.error); return null; }
+    if (!wasEditing) {
+      lastAutoSavedId.current = res.id;
+      flash(`${form.name.trim()} saved — testing connection…`);
+    }
+    refresh();
+    return res.id;
+  };
+
+  const onSave = async (form: ServiceForm, vis: Record<string, boolean>) => {
+    const editing = svcModal?.mode === "edit";
+    const res = await persistService(form, vis);
+    if ("error" in res) { flash(res.error); return; }
+    const { id } = res;
 
     setSvcModal(null);
     refresh();
@@ -365,7 +400,7 @@ export function Admin() {
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
       <PageHeader eyebrow="Lead operator" title="Admin" icon="tune" accent="var(--primary)" sub="Manage services, members and what each group can see.">
-        <button onClick={() => setSvcModal({ mode: "add" })} className="btn btn-primary btn-sm">
+        <button onClick={() => { lastAutoSavedId.current = null; setSvcModal({ mode: "add" }); }} className="btn btn-primary btn-sm">
           <Icon name="add" size={15} /> Add service
         </button>
       </PageHeader>
@@ -412,7 +447,7 @@ export function Admin() {
           groups={groups}
           adminGroup={adminGroup}
           initialVisibility={svcModal.mode === "edit" && svcModal.service ? visForService(svcModal.service.id) : addDefaults()}
-          onClose={() => setSvcModal(null)}
+          onClose={() => { lastAutoSavedId.current = null; setSvcModal(null); }}
           onSave={onSave}
           onDelete={onDelete}
           onDetectVersion={async (baseUrl, apiKey, name) => {
@@ -429,6 +464,8 @@ export function Admin() {
             }
             return probeServiceVersion(baseUrl, apiKey, slug(name));
           }}
+          onSaveAndTest={onSaveAndTest}
+          onTestSaved={(id) => testStoredConnection(id)}
         />
       )}
       <Toast message={toast} />

@@ -120,6 +120,8 @@ export function ServiceModal({
   onDelete,
   onDetectVersion,
   onTestConnection,
+  onSaveAndTest,
+  onTestSaved,
 }: {
   open: boolean;
   mode: "add" | "edit";
@@ -132,6 +134,10 @@ export function ServiceModal({
   onDelete: (service: Service) => void;
   onDetectVersion?: (baseUrl: string, apiKey: string, name: string) => Promise<string | null>;
   onTestConnection?: (baseUrl: string, apiKey: string, name: string) => Promise<string | null>;
+  /** Add-mode: persist the service (config + secret + visibility) without closing, returns its id (null on failure). */
+  onSaveAndTest?: (form: ServiceForm, vis: Record<string, boolean>) => Promise<string | null>;
+  /** Test the stored connection for a saved service by id. */
+  onTestSaved?: (id: string) => Promise<string | null>;
 }) {
   const editing = mode === "edit";
   const { favorites, toggleFavorite } = usePortal();
@@ -209,12 +215,24 @@ export function ServiceModal({
   const canDetect = Boolean(onDetectVersion) && (editing || f.host.trim() !== "");
 
   const handleTest = async () => {
-    if (!onTestConnection) return;
     setConnStatus({ state: "testing" });
-    const result = await onTestConnection(apiUrl(), f.apiKey, f.name);
+    let result: string | null;
+    if (!editing && onSaveAndTest && onTestSaved) {
+      // Add mode: persist first (config + secret), then test the *stored* connection —
+      // testing the typed-but-unsaved key is unreliable, so we save-then-test in one click.
+      const id = await onSaveAndTest(f, vis);
+      if (!id) { setConnStatus({ state: "err" }); return; }
+      result = await onTestSaved(id);
+    } else if (onTestConnection) {
+      result = await onTestConnection(apiUrl(), f.apiKey, f.name);
+    } else {
+      return;
+    }
     setConnStatus(result !== null ? { state: "ok", version: result } : { state: "err" });
   };
-  const canTest = Boolean(onTestConnection) && (editing || (f.host.trim() !== "" && f.apiKey.trim() !== ""));
+  const canTest =
+    (editing && Boolean(onTestConnection)) ||
+    (!editing && Boolean(onSaveAndTest) && f.name.trim() !== "" && f.host.trim() !== "" && f.apiKey.trim() !== "");
 
   const set = <K extends keyof ServiceForm>(k: K, v: ServiceForm[K]) => setF((prev) => ({ ...prev, [k]: v }));
   const c = catColor(f.cat as Service["cat"]);
@@ -357,13 +375,13 @@ export function ServiceModal({
                 <button type="button" onClick={() => setRevealKey((r) => !r)} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title={revealKey ? "Hide" : "Reveal"}>
                   <Icon name={revealKey ? "visibility_off" : "visibility"} size={16} />
                 </button>
-                <button type="button" onClick={handleTest} disabled={!canTest || connStatus.state === "testing"} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title="Test connection">
+                <button type="button" onClick={handleTest} disabled={!canTest || connStatus.state === "testing"} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title={editing ? "Test connection" : "Save and test connection"}>
                   {connStatus.state === "testing" ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>…</span> : <Icon name="wifi_find" size={16} />}
                 </button>
               </div>
               {connStatus.state !== "idle" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: 11, fontFamily: "var(--font-mono)" }}>
-                  {connStatus.state === "testing" && <span style={{ color: "var(--on-surface-variant)" }}>Testing…</span>}
+                  {connStatus.state === "testing" && <span style={{ color: "var(--on-surface-variant)" }}>{editing ? "Testing…" : "Saving & testing…"}</span>}
                   {connStatus.state === "ok" && (
                     <>
                       <StatusDot status="up" size={7} />
