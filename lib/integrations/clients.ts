@@ -543,14 +543,19 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
   const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 8000 });
   type SvcEntry = { id: number };
   type ProfileEntry = { id: number; name?: string };
-  const svcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/${arr}`).catch(() => [] as SvcEntry[]);
+  const svcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/${arr}`).catch((e) => {
+    console.warn(`[overseerr] ${arr} service list failed: ${e}`);
+    return [] as SvcEntry[];
+  });
   if (svcs.length === 0) return [];
-  const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch(() => [] as ProfileEntry[]);
+  console.info(`[overseerr] ${arr} services: ${JSON.stringify(svcs)}`);
+  const raw = await get<ProfileEntry[]>(`${baseUrl}/api/v1/service/${arr}/${svcs[0].id}/profiles`).catch((e) => {
+    console.warn(`[overseerr] ${arr} profiles fetch failed (svc id=${svcs[0].id}): ${e}`);
+    return [] as ProfileEntry[];
+  });
+  console.info(`[overseerr] ${arr} raw profiles: ${JSON.stringify(raw)}`);
   const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
   const live: QualityProfile[] = raw.filter((p) => p.id != null && p.name).map((p) => ({ id: String(p.id), label: p.name!, sub: "", icon: "high_quality" }));
-  if (live.length === 0) {
-    console.warn(`[overseerr] No ${arr} quality profiles returned from ${baseUrl}. Check that the ${arr} instance is configured and reachable from Overseerr.`);
-  }
   return [DEFAULT, ...live];
 }
 
