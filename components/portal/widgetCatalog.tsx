@@ -321,17 +321,17 @@ export function resolveSettings(
 // 12-col grid (non-overlapping so admin sees it verbatim; members get the
 // admin-only tiles stripped and the rest compacted upward).
 const DEFAULT_TILES: Omit<Tile, "uid">[] = [
-  { type: "centralServices", x: 0, y: 0, w: 12, h: 6 },
-  { type: "libraryStats", x: 0, y: 6, w: 12, h: 3 },
-  { type: "upcoming", x: 0, y: 9, w: 12, h: 6 },
-  { type: "nowPlaying", x: 0, y: 19, w: 8, h: 11 },
-  { type: "myRequests", x: 8, y: 19, w: 4, h: 8 },
-  { type: "status", x: 8, y: 27, w: 4, h: 9 },
-  { type: "serviceTiles", x: 0, y: 30, w: 8, h: 8 },
-  { type: "leaderboard", x: 8, y: 36, w: 4, h: 7 },
-  { type: "queue", x: 0, y: 38, w: 8, h: 6 },
-  { type: "recentlyAdded", x: 8, y: 43, w: 4, h: 6 },
-  { type: "downloads", x: 0, y: 44, w: 8, h: 6 },
+  { type: "centralServices", x: 0, y: 0,  w: 12, h: 6 },
+  { type: "libraryStats",    x: 0, y: 6,  w: 12, h: 3 },
+  { type: "upcoming",        x: 0, y: 9,  w: 12, h: 6 },
+  { type: "nowPlaying",      x: 0, y: 15, w: 8,  h: 11 },
+  { type: "myRequests",      x: 8, y: 15, w: 4,  h: 8 },
+  { type: "status",          x: 8, y: 23, w: 4,  h: 9 },
+  { type: "serviceTiles",    x: 0, y: 26, w: 8,  h: 8 },
+  { type: "leaderboard",     x: 8, y: 32, w: 4,  h: 8 },
+  { type: "queue",           x: 0, y: 34, w: 8,  h: 6 },
+  { type: "downloads",       x: 0, y: 40, w: 8,  h: 6 },
+  { type: "recentlyAdded",   x: 8, y: 40, w: 4,  h: 6 },
 ];
 
 export function defaultLayout(role: Role): Tile[] {
