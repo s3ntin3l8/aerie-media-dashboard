@@ -322,7 +322,7 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
           })()}
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, padding: "13px 15px", borderRadius: 12, background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: req.fileInfo ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 14, padding: "13px 15px", borderRadius: 12, background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
         {fact("Requested", req.requested)}
         {fact("Quality", req.qualityProfile ?? "—", true)}
         {fact(
@@ -333,6 +333,16 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
               : "All"
             : "Movie",
         )}
+        {req.fileInfo && fact("File", (
+          <span>
+            {req.fileInfo.label}
+            {req.fileInfo.sizeBytes != null && (
+              <span style={{ fontWeight: 400, color: "var(--on-surface-variant)", marginLeft: 4 }}>
+                ({(req.fileInfo.sizeBytes / 1e9).toFixed(1)} GB)
+              </span>
+            )}
+          </span>
+        ), true)}
       </div>
       {req.overview && (
         <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", lineHeight: 1.5, margin: 0 }}>{req.overview}</p>

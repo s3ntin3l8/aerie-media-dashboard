@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, IntegrationError } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile } from "@/lib/types";
+import type { MediaKind, NowPlaying, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -583,6 +583,42 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
   return [DEFAULT, ...fromSettings];
 }
 
+const MOVIE_FILE_INDEX_TTL = 30 * 60 * 1000;
+let movieFileIndexCache: { at: number; index: Map<number, FileInfo> } | null = null;
+
+async function arrMovieFileIndex(): Promise<Map<number, FileInfo>> {
+  if (movieFileIndexCache && Date.now() - movieFileIndexCache.at < MOVIE_FILE_INDEX_TTL) {
+    return movieFileIndexCache.index;
+  }
+  const { baseUrl, apiKey } = await creds("radarr");
+  type RMovie = {
+    tmdbId: number;
+    movieFile?: {
+      size?: number;
+      quality?: { quality?: { resolution?: number; source?: string } };
+      mediaInfo?: { videoCodec?: string };
+    };
+  };
+  const movies = await fetchJson<RMovie[]>(`${baseUrl}/api/v3/movie`, {
+    service: "radarr",
+    headers: { "X-Api-Key": apiKey },
+    timeoutMs: 10000,
+  });
+  const SOURCE: Record<string, string> = { bluray: "Blu-ray", webrip: "WEBRip", webdl: "WEB-DL", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
+  const index = new Map<number, FileInfo>();
+  for (const m of movies) {
+    if (!m.movieFile || !m.tmdbId) continue;
+    const q = m.movieFile.quality?.quality;
+    const res = q?.resolution ? `${q.resolution}p` : undefined;
+    const src = q?.source ? (SOURCE[q.source] ?? q.source) : undefined;
+    const codec = m.movieFile.mediaInfo?.videoCodec?.toUpperCase() ?? undefined;
+    const parts = [res, src, codec ? `· ${codec}` : undefined].filter(Boolean);
+    index.set(m.tmdbId, { label: parts.join(" ") || "Unknown", sizeBytes: m.movieFile.size });
+  }
+  movieFileIndexCache = { at: Date.now(), index };
+  return index;
+}
+
 /** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
 export async function overseerrMovieProfiles(): Promise<QualityProfile[]> {
   if (movieProfilesCache && Date.now() - movieProfilesCache.at < QUALITY_PROFILES_TTL) return movieProfilesCache.profiles;
@@ -603,13 +639,14 @@ export async function overseerrTvProfiles(): Promise<QualityProfile[]> {
 
 export async function overseerrRequests(): Promise<MediaRequest[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  const [data, profileMaps] = await Promise.all([
+  const [data, profileMaps, fileIndex] = await Promise.all([
     fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=250&sort=added`, {
       service: "overseerr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 10000,
     }),
     overseerrQualityProfiles(baseUrl, apiKey!).catch(() => ({ movie: {}, tv: {} } as { movie: Record<number, string>; tv: Record<number, string> })),
+    arrMovieFileIndex().catch(() => new Map<number, FileInfo>()),
   ]);
   const results = data.results ?? [];
 
@@ -644,6 +681,7 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       qualityProfile: r.profileId != null ? (profileMaps[r.type === "tv" ? "tv" : "movie"][r.profileId] ?? `Profile ${r.profileId}`) : undefined,
       mediaOverseerrId: r.media?.id,
       modified: r.updatedAt ?? r.createdAt,
+      fileInfo: r.type === "movie" && r.media?.tmdbId ? fileIndex.get(r.media.tmdbId) : undefined,
     };
   });
 }

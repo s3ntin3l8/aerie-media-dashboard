@@ -89,6 +89,14 @@ export interface MediaRequest {
   mediaOverseerrId?: number;
   /** ISO timestamp of last modification (status change etc.) — used for sort-by-modified. */
   modified?: string;
+  /** Actual downloaded file quality from Radarr (movies only). */
+  fileInfo?: FileInfo;
+}
+
+export interface FileInfo {
+  /** Human-readable label, e.g. "2160p Blu-ray · x265". */
+  label: string;
+  sizeBytes?: number;
 }
 
 export interface OverseerrQuota {

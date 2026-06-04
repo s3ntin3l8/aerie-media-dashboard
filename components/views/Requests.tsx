@@ -50,7 +50,13 @@ function RequestCard({
               </span>
             </div>
           </div>
-          <Pill tone={REQ_TONE[r.status]}>{REQ_LABEL[r.status] ?? r.status}</Pill>
+          <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+            {r.status === "available" && r.kind === "movie" && r.fileInfo && (() => {
+              const res = r.fileInfo.label.match(/\d+p/)?.[0];
+              return res ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: "color-mix(in srgb, var(--originator-own) 15%, transparent)", color: "var(--originator-own)" }}>{res}</span> : null;
+            })()}
+            <Pill tone={REQ_TONE[r.status]}>{REQ_LABEL[r.status] ?? r.status}</Pill>
+          </div>
         </div>
         <div style={{ marginTop: "auto", paddingTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {adminMode ? (
