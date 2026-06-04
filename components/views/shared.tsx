@@ -3,6 +3,7 @@
 // AERIE — shared page chrome: PageHeader + StatTile
 // ============================================================
 import React from "react";
+import { useRouter } from "next/navigation";
 import { Icon, Eyebrow } from "@/components/primitives";
 
 export function PageHeader({
@@ -11,6 +12,7 @@ export function PageHeader({
   sub,
   icon,
   accent = "var(--primary)",
+  back,
   children,
 }: {
   eyebrow?: string;
@@ -18,8 +20,11 @@ export function PageHeader({
   sub?: string;
   icon?: string;
   accent?: string;
+  /** Optional left-aligned back button (e.g. for full-page deep views). */
+  back?: { href: string; label: string };
   children?: React.ReactNode;
 }) {
+  const router = useRouter();
   return (
     <div
       style={{
@@ -31,6 +36,15 @@ export function PageHeader({
     >
       <div className="aerie-header-row">
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          {back && (
+            <button
+              onClick={() => router.push(back.href)}
+              className="btn btn-ghost btn-sm"
+              style={{ paddingLeft: 8, paddingRight: 12 }}
+            >
+              <Icon name="arrow_back" size={16} /> {back.label}
+            </button>
+          )}
           {icon && (
             <div
               style={{

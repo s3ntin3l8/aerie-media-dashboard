@@ -30,8 +30,8 @@ export interface NavItem {
   adminOnly?: boolean;
   /**
    * When true, the item only appears in the mobile bottom nav, not the
-   * desktop rail or command palette (e.g. the dedicated Streams screen
-   * that overlaps with the embedded NowPlayingPanel on desktop).
+   * desktop rail or command palette. (Currently unused — kept as a hook for
+   * mobile-specific destinations.)
    */
   mobileOnly?: boolean;
   /** Returns true when the current pathname should make this item active. */
@@ -52,7 +52,6 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/streams",
     icon: "play_circle",
     label: "Streams",
-    mobileOnly: true,
     isActive: (p) => p === "/streams" || p.startsWith("/streams/"),
   },
   {

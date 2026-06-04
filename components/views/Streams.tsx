@@ -18,6 +18,7 @@ export function Streams() {
         title={role === "admin" ? "Now Playing" : "Your Session"}
         icon="play_circle"
         accent="var(--primary)"
+        back={{ href: "/", label: "Dashboard" }}
       />
       <div
         className="custom-scrollbar aerie-page-pad"
