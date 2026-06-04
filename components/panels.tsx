@@ -492,10 +492,10 @@ export function StreamsView({ role }: { role: Role }) {
   const { user } = usePortal();
   const visible = role !== "admin" ? nowPlaying.filter((s) => s.user === user.id) : nowPlaying;
   if (visible.length === 0) {
+    // The page (views/Streams.tsx) already renders a PageHeader title, so render
+    // the empty state bare — no second PanelShell title.
     return (
-      <PanelShell title={role === "admin" ? "Now Playing" : "Your Session"} icon="play_circle" accent="var(--primary)">
-        <Empty icon="play_disabled" line="Nothing playing" sub="Active streams will appear here with full transcode, quality, client and network detail." />
-      </PanelShell>
+      <Empty icon="play_disabled" line="Nothing playing" sub="Active streams will appear here with full transcode, quality, client and network detail." />
     );
   }
   return (
