@@ -343,10 +343,14 @@ export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: 
 }
 
 // ── SERVICE TILES (stripe) ─────────────────────────────────
-export function ServiceTiles({ role, onOpen, onAll, services, fill }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[]; fill?: boolean }) {
+export function ServiceTiles({ role, onOpen, onAll, services, fill, serviceIds }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[]; fill?: boolean; serviceIds?: string }) {
   const visibleServices = useVisibleServices("launcher");
   // Allow an explicit `services` prop override (e.g. admin panel passes a pre-filtered list).
-  const list = services ?? visibleServices;
+  let list = services ?? visibleServices;
+  if (serviceIds && serviceIds.length > 0) {
+    const ids = new Set(serviceIds.split(",").filter(Boolean));
+    list = list.filter((s) => ids.has(s.id));
+  }
 
   const Tile = ({ s }: { s: Service }) => {
     const c = catColor(s.cat);

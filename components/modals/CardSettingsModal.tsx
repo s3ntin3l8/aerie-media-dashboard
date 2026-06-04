@@ -11,6 +11,7 @@ import { WIDGET_CATALOG, widgetSettings } from "@/components/portal/widgetCatalo
 import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 import type { Tile } from "@/components/portal/gridLayout";
 import { Icon } from "@/components/primitives";
+import { useData } from "@/components/portal/DataProvider";
 
 interface CardSettingsModalProps {
   open: boolean;
@@ -21,6 +22,7 @@ interface CardSettingsModalProps {
 
 export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsModalProps) {
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const { services } = useData();
 
   useEffect(() => {
     if (!tile || !open) return;
@@ -199,6 +201,30 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
                   >
                     <Icon name="add" size={14} /> Add link
                   </button>
+                </div>
+              </Field>
+            );
+          }
+
+          if (spec.type === "serviceIds") {
+            const selected = new Set((draft[spec.key] || "").split(",").filter(Boolean));
+            const toggle = (id: string) => {
+              const next = new Set(selected);
+              next.has(id) ? next.delete(id) : next.add(id);
+              setDraft((d) => ({ ...d, [spec.key]: [...next].join(",") }));
+            };
+            return (
+              <Field key={spec.key} label={spec.label} hint={spec.hint}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 240, overflowY: "auto" }}>
+                  {services.map((s) => (
+                    <label key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+                      <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
+                      <span style={{ color: "var(--on-surface)" }}>{s.name}</span>
+                    </label>
+                  ))}
+                  {services.length === 0 && (
+                    <span style={{ fontSize: 12, color: "var(--on-surface-variant)" }}>No services configured yet.</span>
+                  )}
                 </div>
               </Field>
             );

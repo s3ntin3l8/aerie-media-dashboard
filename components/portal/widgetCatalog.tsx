@@ -42,7 +42,8 @@ export type WidgetSettingSpec =
   | { key: string; label: string; type: "select"; hint?: string; default?: string; options: { value: string; label: string }[] }
   | { key: string; label: string; type: "text"; hint?: string; default?: string }
   | { key: string; label: string; type: "toggle"; hint?: string; default?: boolean }
-  | { key: string; label: string; type: "links"; hint?: string };
+  | { key: string; label: string; type: "links"; hint?: string }
+  | { key: string; label: string; type: "serviceIds"; hint?: string };
 
 export interface ShortcutLink { label: string; url: string; icon?: string }
 
@@ -100,7 +101,10 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     type: "serviceTiles", name: "Services", icon: "apps", accent: "var(--on-surface-variant)", group: "Services",
     desc: "Launcher grid of every service with status and latency.",
     defaultW: 8, defaultH: 8, minW: 3, minH: 4, maxW: 12, maxH: 18,
-    render: (c, _s) => <ServiceTiles fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} />,
+    settings: [
+      { key: "serviceIds", label: "Show only", type: "serviceIds", hint: "Leave blank to show all visible services" },
+    ],
+    render: (c, s) => <ServiceTiles fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} serviceIds={s.serviceIds as string | undefined} />,
   },
   status: {
     type: "status", name: "System Status", icon: "favorite", accent: "var(--originator-own)", group: "Monitoring",
