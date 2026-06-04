@@ -56,7 +56,21 @@ export interface CatalogEntry extends WidgetMeta {
   defaultH: number;
   adminOnly?: boolean;
   settings?: WidgetSettingSpec[];
+  /** Snap h to the nearest "clean" height (complete content rows, no clipping). Called on resize release. */
+  snapH?: (h: number) => number;
   render: (ctx: WidgetCtx, settings: Record<string, unknown>) => React.ReactNode;
+}
+
+// Snaps a grid height unit to the minimum h that fits exactly N complete poster rows without
+// clipping. Formula: inner = 44h − 71, rowsFit = floor((inner + gap) / (itemH + gap)).
+// Used by all FlowGrid poster widgets so resize always lands on a clean boundary.
+function posterSnapH(h: number, minH: number, itemH = 155): number {
+  const CELL = 44, OVERHEAD = 71, GAP = 12; // overhead = header(33) + padY*2(24) + formula-offset(14)
+  const inner = CELL * h - OVERHEAD;
+  const rows = Math.max(1, Math.floor((inner + GAP) / (itemH + GAP)));
+  const targetInner = rows * itemH + (rows - 1) * GAP;
+  const targetPx = targetInner + OVERHEAD;
+  return Math.max(minH, Math.ceil(targetPx / CELL));
 }
 
 function parseLinks(raw: unknown): ShortcutLink[] {
@@ -113,7 +127,8 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   recentlyAdded: {
     type: "recentlyAdded", name: "Recently Added", icon: "new_releases", accent: "var(--primary)", group: "Streaming",
     desc: "Newest titles across your libraries.",
-    defaultW: 4, defaultH: 6, minW: 3, minH: 5, maxW: 12, maxH: 16,
+    defaultW: 4, defaultH: 6, minW: 5, minH: 5, maxW: 12, maxH: 16,
+    snapH: (h) => posterSnapH(h, 5, 150),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 24, hint: "Auto = show all matching items" },
@@ -129,7 +144,8 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   upcoming: {
     type: "upcoming", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Streaming",
     desc: "Upcoming releases from your *arr calendars (next 7 days).",
-    defaultW: 12, defaultH: 10, minW: 4, minH: 4, maxW: 12, maxH: 14,
+    defaultW: 12, defaultH: 10, minW: 4, minH: 6, maxW: 12, maxH: 14,
+    snapH: (h) => posterSnapH(h, 6, 150),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 30, hint: "Auto = up to 20 items" },
@@ -203,7 +219,8 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   trendingMedia: {
     type: "trendingMedia", name: "Trending Now", icon: "trending_up", accent: "var(--originator-court)", group: "Requests",
     desc: "Trending movies and TV shows from TMDB — click to request.",
-    defaultW: 8, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    defaultW: 8, defaultH: 6, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    snapH: (h) => posterSnapH(h, 6),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -213,7 +230,8 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   popularMovies: {
     type: "popularMovies", name: "Popular Movies", icon: "movie", accent: "var(--originator-court)", group: "Requests",
     desc: "Popular movies on TMDB right now — click to request.",
-    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 6, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    snapH: (h) => posterSnapH(h, 6),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -223,7 +241,8 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   popularTv: {
     type: "popularTv", name: "Popular TV Shows", icon: "live_tv", accent: "var(--originator-court)", group: "Requests",
     desc: "Popular TV shows on TMDB right now — click to request.",
-    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 6, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    snapH: (h) => posterSnapH(h, 6),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -233,7 +252,8 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   upcomingMovies: {
     type: "upcomingMovies", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Requests",
     desc: "Upcoming movie releases from TMDB — click to request.",
-    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 6, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    snapH: (h) => posterSnapH(h, 6),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 20, hint: "Auto = 20" },
@@ -243,7 +263,8 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
   watchlist: {
     type: "watchlist", name: "Plex Watchlist", icon: "bookmarks", accent: "var(--primary)", group: "Requests",
     desc: "Titles from the Plex watchlist — click to request anything not already available.",
-    defaultW: 6, defaultH: 7, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    defaultW: 6, defaultH: 6, minW: 4, minH: 6, maxW: 12, maxH: 10,
+    snapH: (h) => posterSnapH(h, 6),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank for default" },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 50, hint: "Auto = 50" },

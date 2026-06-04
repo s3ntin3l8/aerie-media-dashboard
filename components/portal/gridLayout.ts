@@ -17,6 +17,7 @@ export interface WidgetMeta {
   minH: number;
   maxW: number;
   maxH: number;
+  snapH?: (h: number) => number;
 }
 
 export const GRID = { cols: 12, rowH: 30, gap: 14, stackBelow: 720 } as const;

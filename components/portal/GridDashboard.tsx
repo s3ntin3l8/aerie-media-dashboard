@@ -167,7 +167,17 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       const a = actRef.current;
-      if (a && a.preview) onChange(a.preview);
+      if (a?.preview) {
+        let preview = a.preview;
+        if (m.snapH) {
+          const snappedH = Math.min(m.maxH, Math.max(m.minH, m.snapH(a.h)));
+          if (snappedH !== a.h) {
+            const refit = layout.map((t) => (t.uid === item.uid ? { ...t, w: a.w, h: snappedH } : t));
+            preview = packAround(refit, item.uid);
+          }
+        }
+        onChange(preview);
+      }
       setActBoth(null);
     };
     window.addEventListener("pointermove", onMove);

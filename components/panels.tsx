@@ -867,7 +867,7 @@ function FlowGrid<T>({
             {row.map((item, j) => render(item, r * perRow + j))}
           </div>
         ) : (
-          <div key={r} style={{ display: "flex", gap, flex: 1, minHeight: itemH, alignItems: "flex-start" }}>
+          <div key={r} style={{ display: "flex", gap, flex: 1, minHeight: itemH, alignItems: "center" }}>
             {stretch
               ? row.map((item, j) => (
                   <div key={r * perRow + j} style={{ flex: `0 0 ${itemW}px`, minWidth: 0 }}>
