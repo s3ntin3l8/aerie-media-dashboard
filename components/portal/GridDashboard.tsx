@@ -6,7 +6,7 @@
 // Grid feel is locked to "lift" (the design-time switcher was dropped,
 // matching the committed-defaults policy in CLAUDE.md).
 // ============================================================
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/primitives";
 import { GRID, gridSort, packAround, type Tile } from "@/components/portal/gridLayout";
 import { widgetMeta, hasSettings } from "@/components/portal/widgetCatalog";
@@ -86,10 +86,6 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
   const { cols, rowH, gap, stackBelow } = GRID;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(1180);
-  // Transitions are suppressed until after the first measured render has been painted.
-  // This prevents the SSR W=1180 baseline from animating to the real container width
-  // on every page load (the browser paints the SSR HTML before React can correct it).
-  const [ready, setReady] = useState(false);
   const [act, setAct] = useState<ActiveDrag | null>(null);
   const actRef = useRef<ActiveDrag | null>(null);
   const setActBoth = (v: ActiveDrag | null) => {
@@ -110,8 +106,6 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // Enable transitions after the first corrected render has been painted.
-  useEffect(() => { setReady(true); }, []);
 
   const stacked = W < stackBelow;
   const colW = Math.max(1, (W - gap * (cols - 1)) / cols);
@@ -233,7 +227,7 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
   const hPx = Math.max(rows * cellH - gap, 120);
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", width: "100%", height: hPx, transition: ready ? "height .18s" : "none" }}>
+    <div ref={wrapRef} style={{ position: "relative", width: "100%", height: hPx, transition: "height .18s" }}>
       {/* drop placeholder */}
       {act &&
         (() => {
@@ -275,7 +269,10 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
               width: p.width,
               height: p.height,
               zIndex: isActive ? 30 : 2,
-              transition: isActive ? "none" : ready ? "left .18s cubic-bezier(.2,.7,.2,1), top .18s cubic-bezier(.2,.7,.2,1), width .18s, height .18s, opacity .18s" : "none",
+              // Only animate position/size while editing (drag/resize/auto-pack). In view mode
+              // the layout is static, so a transition here would only make the post-mount width
+              // correction (W: 1180 guess → measured) visible as an "expand to the right".
+              transition: editing && !isActive ? "left .18s cubic-bezier(.2,.7,.2,1), top .18s cubic-bezier(.2,.7,.2,1), width .18s, height .18s, opacity .18s" : "none",
               cursor: editing ? (isActive ? "grabbing" : "grab") : "default",
               userSelect: editing ? "none" : "auto",
               borderRadius: "var(--radius-xl)",
