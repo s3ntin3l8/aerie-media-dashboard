@@ -45,7 +45,7 @@ export function usePatchData(): (patch: (s: Snapshot) => Snapshot) => void {
   return useContext(PatchCtx);
 }
 
-export function DataProvider({ initial, children }: { initial: Snapshot; children: React.ReactNode }) {
+export function DataProvider({ initial, initialStale = false, children }: { initial: Snapshot; initialStale?: boolean; children: React.ReactNode }) {
   const [data, setData] = useState<Snapshot>(initial);
   const [fetchedAt, setFetchedAt] = useState<number>(() => Date.now());
 
@@ -99,6 +99,9 @@ export function DataProvider({ initial, children }: { initial: Snapshot; childre
 
   // Kick off polling and re-fetch immediately when tab becomes visible
   useEffect(() => {
+    // The server served a stale/last-known snapshot (a fresh one would have blocked the
+    // shell on a cold upstream). Pull fresh data right away instead of waiting a full poll.
+    if (initialStale) void fetchSnapshot();
     scheduleNext(dataRef.current);
 
     const onVisible = () => {
@@ -110,7 +113,7 @@ export function DataProvider({ initial, children }: { initial: Snapshot; childre
       document.removeEventListener("visibilitychange", onVisible);
       if (timerRef.current != null) clearTimeout(timerRef.current);
     };
-  }, [fetchSnapshot, scheduleNext]);
+  }, [fetchSnapshot, scheduleNext, initialStale]);
 
   return (
     <FetchedAtCtx.Provider value={fetchedAt}>
