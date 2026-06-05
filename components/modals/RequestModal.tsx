@@ -140,7 +140,7 @@ function InfoStep({ pick }: { pick: DiscoverItem }) {
       <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
         <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
+          <h3 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
             <Icon name={pick.kind === "series" ? "live_tv" : "movie"} size={13} />
             {pick.kind === "series" ? "Series" : "Movie"} · {pick.year}
@@ -202,7 +202,7 @@ function ConfirmStep({
         <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
           <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>
               <Icon name={pick.kind === "series" ? "live_tv" : "movie"} size={13} />
               {pick.kind === "series" ? "Series" : "Movie"} · {pick.year}
@@ -320,7 +320,7 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
         <PosterTile title={req.title} kind={req.kind} cat="request" w={68} art={req.art} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-            <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{req.title}</h3>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{req.title}</h3>
             <span style={{ marginLeft: "auto" }}>
               <Pill tone={RQ_TONE[req.status]}>{RQ_LABEL[req.status]}</Pill>
             </span>
