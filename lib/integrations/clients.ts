@@ -1752,11 +1752,14 @@ type ServiceKind =
   | "arr-v1" // Prowlarr/Lidarr/Readarr — /api/v1
   | "bazarr" // own Flask API — /api/system/status?apikey=
   | "agregarr" // /api/v1/status (public)
-  | "wizarr" // /api/status (X-API-Key; no version field)
+  | "wizarr" // /api/swagger.json info.version (X-API-Key)
   | "audiobookshelf" // /api/libraries (Bearer; no version field)
-  | "nzbhydra" // /api/stats/indexers POST (apikey query+body; caps XML omits version)
+  | "nzbhydra" // /internalapi/updates/infos?apikey= → currentVersion
   | "tautulli"
-  | "prometheus";
+  | "prometheus"
+  | "gatus" // /api/v1/endpoints/statuses (optional Bearer; no version field)
+  | "beszel" // PocketBase auth → /api/health (no version field)
+  | "plex"; // /identity (no auth needed) → MediaContainer.version
 
 function serviceKind(id: string): ServiceKind | null {
   const l = id.toLowerCase();
@@ -1773,6 +1776,9 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
   if (l.includes("tautulli")) return "tautulli";
   if (l.includes("prometheus")) return "prometheus";
+  if (l.includes("gatus")) return "gatus";
+  if (l.includes("beszel")) return "beszel";
+  if (l.includes("plex")) return "plex";
   return null;
 }
 
@@ -1825,12 +1831,13 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     return normalizeVersion(d.version);
   }
   if (kind === "wizarr") {
-    // /api/status is authenticated but returns no version → "" means "connected, version unknown".
-    await fetchJson<unknown>(`${b}/api/status`, {
+    // The auto-generated swagger spec's info.version holds the app version.
+    // /api/swagger.json is accessible without auth (or with the API key).
+    const d = await fetchJson<{ info?: { version?: string } }>(`${b}/api/swagger.json`, {
       service: "version-detect",
       headers: apiKey ? { "X-API-Key": apiKey } : {},
     });
-    return "";
+    return normalizeVersion(d.info?.version) ?? "";
   }
   if (kind === "audiobookshelf") {
     // Hit an authenticated endpoint so a bad token fails; no plain version endpoint.
@@ -1841,10 +1848,13 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     return "";
   }
   if (kind === "nzbhydra") {
-    // caps XML omits the app version → "" means "connected, version unknown". POST the stats
-    // endpoint (same call the widget uses) so a bad key / unreachable host fails the test.
-    await nzbhydraIndexerStatuses(b, apiKey, "version-detect");
-    return "";
+    // Spring Boot actuator /info is empty in the default LSIO package; use the internal
+    // updates API which exposes currentVersion as plain JSON.
+    const d = await fetchJson<{ currentVersion?: string }>(
+      `${b}/internalapi/updates/infos?apikey=${encodeURIComponent(apiKey)}`,
+      { service: "version-detect" },
+    );
+    return normalizeVersion(d.currentVersion) ?? "";
   }
   if (kind === "tautulli") {
     const d = await fetchJson<{ response?: { data?: { tautulli_version?: string } } }>(
@@ -1852,6 +1862,28 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
       { service: "version-detect" },
     );
     return normalizeVersion(d.response?.data?.tautulli_version);
+  }
+  if (kind === "gatus") {
+    // Gatus exposes no version endpoint; hit the status endpoint to verify connectivity.
+    await fetchJson<unknown>(`${b}/api/v1/endpoints/statuses`, {
+      service: "version-detect",
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    });
+    return "";
+  }
+  if (kind === "beszel") {
+    // Authenticate via PocketBase superuser and verify the connection; no version endpoint.
+    await beszelGet<unknown>(b, apiKey, "/api/health");
+    return "";
+  }
+  if (kind === "plex") {
+    // /identity is unauthenticated and returns the server version as JSON (Accept: application/json
+    // is already set by fetchJson). Pass the token if available for future-proofing.
+    const d = await fetchJson<{ MediaContainer?: { version?: string } }>(`${b}/identity`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-Plex-Token": apiKey } : {},
+    });
+    return normalizeVersion(d.MediaContainer?.version) ?? "";
   }
   // prometheus
   const d = await fetchJson<{ data?: { version?: string } }>(`${b}/api/v1/status/buildinfo`, {
