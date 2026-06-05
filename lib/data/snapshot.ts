@@ -113,12 +113,23 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   }
 }
 
+// Opt-in perf tracing (AERIE_PERF_LOG=1). Times individual upstream calls and the
+// snapshot's phase boundaries so we can see which section dominates a cold load.
+// Off by default → zero overhead in normal runs.
+const PERF = process.env.AERIE_PERF_LOG === "1" || process.env.AERIE_PERF_LOG === "true";
+function perf<T>(label: string, p: Promise<T>): Promise<T> {
+  if (!PERF) return p;
+  const t0 = Date.now();
+  return p.finally(() => console.log(`[perf] ${label}: ${Date.now() - t0}ms`));
+}
+
 function padBeats(beats: number[]): number[] {
   if (beats.length >= 30) return beats.slice(-30);
   return [...Array(30 - beats.length).fill(1), ...beats];
 }
 
 export async function getSnapshot(): Promise<Snapshot> {
+  const tStart = Date.now();
   const [configs, groups, visibility] = await Promise.all([getServiceConfigs(), getGroups(), getVisibility()]);
 
   // Which services have a stored secret → eligible for a live call.
@@ -156,6 +167,8 @@ export async function getSnapshot(): Promise<Snapshot> {
     : "prometheus";
   const beszelSystemId = beszelSystemSetting && beszelSystemSetting.trim() ? beszelSystemSetting.trim() : null;
 
+  if (PERF) console.log(`[perf] pre-wave (DB config/secret/settings): ${Date.now() - tStart}ms`);
+  const tWave = Date.now();
   const [
     health, ttAct, jfNow, osReq, osUsers, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members, metricsResult,
     sonarrDisk, radarrDisk, sonarrHealth, radarrHealth, osIssues, sonarrCal, radarrCal, sonarrHist, radarrHist, ttTop,
@@ -164,19 +177,19 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers,
   ] = await Promise.all([
-    gatusOn ? safe(gatusHealth) : Promise.resolve(null),
-    ttOn ? safe(tautulliActivity) : Promise.resolve(null),
-    jfOn ? safe(jellyfinNowPlaying) : Promise.resolve(null),
-    osOn ? safe(overseerrRequests) : Promise.resolve(null),
+    gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
+    ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
+    jfOn ? perf("live:jellyfinNowPlaying", safe(jellyfinNowPlaying)) : Promise.resolve(null),
+    osOn ? perf("live:overseerrRequests", safe(overseerrRequests)) : Promise.resolve(null),
     osOn ? safe(overseerrUsers) : Promise.resolve(null),
-    sonarrOn ? safe(() => arrQueue("sonarr")) : Promise.resolve(null),
-    radarrOn ? safe(() => arrQueue("radarr")) : Promise.resolve(null),
+    sonarrOn ? perf("live:arrQueue(sonarr)", safe(() => arrQueue("sonarr"))) : Promise.resolve(null),
+    radarrOn ? perf("live:arrQueue(radarr)", safe(() => arrQueue("radarr"))) : Promise.resolve(null),
     ttOn ? safe(tautulliLibraries) : Promise.resolve(null),
     ttOn ? safe(tautulliRecentlyAdded) : Promise.resolve(null),
     ttOn ? safe(tautulliPlays24h) : Promise.resolve(null),
     getMembers(),
     // Only the active source makes a live call — Beszel implies beszelOn (see resolution above).
-    metricsSource === "beszel" ? safe(beszelMetrics) : promOn ? safe(prometheusMetrics) : Promise.resolve(null),
+    metricsSource === "beszel" ? perf("live:beszelMetrics", safe(beszelMetrics)) : promOn ? perf("live:prometheusMetrics", safe(prometheusMetrics)) : Promise.resolve(null),
     // Tier 1/2 enrichments (cached upstream-side; safe to fetch every poll)
     sonarrOn ? safe(() => arrDiskSpace("sonarr")) : Promise.resolve(null),
     radarrOn ? safe(() => arrDiskSpace("radarr")) : Promise.resolve(null),
@@ -205,6 +218,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     nzbhydraOn ? safe(nzbhydra2Stats) : Promise.resolve(null),
     ttOn ? safe(tautulliUsers) : Promise.resolve(null),
   ]);
+  if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
   // services: DB config merged with live Gatus health. Without a Gatus
   // reading we have no real health data → an honest "unknown" status
@@ -276,6 +290,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   const overseerrEmails = new Set((osUsers ?? []).map((u) => u.email?.trim().toLowerCase()).filter(Boolean) as string[]);
 
   // ── members: DB-mirrored, quota fetched live from Overseerr (cached 3 min per user) ──
+  const tQuota = Date.now();
   const users: User[] = await Promise.all(
     members.map(async (m) => {
       const oUserId = matchOverseerrUserId(osUsers ?? [], m.email);
@@ -295,6 +310,7 @@ export async function getSnapshot(): Promise<Snapshot> {
       };
     }),
   );
+  if (PERF) console.log(`[perf] quota-wave (${members.length} members): ${Date.now() - tQuota}ms | getSnapshot TOTAL: ${Date.now() - tStart}ms`);
 
   // ── library: Tautulli (Plex) sections win; fall back to Jellyfin so a Jellyfin-only
   // deployment still gets library counts. 24h-plays row is Tautulli-only. ──

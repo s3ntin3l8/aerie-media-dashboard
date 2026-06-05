@@ -109,6 +109,8 @@ export async function submitRequest(pick: DiscoverItem, seasons: number[], quali
     });
     // Overseerr request status 2 = approved (auto-approve); 1 = pending admin approval.
     const autoApproved = created.status === 2;
+    bustCache("overseerr:requests");
+    bustCache("overseerr:requestCounts");
     return {
       ok: true,
       autoApproved,
@@ -132,6 +134,8 @@ export async function reviewRequest(id: string, action: "approve" | "decline", n
       // Post note as an Overseerr media comment — non-fatal if it fails.
       await overseerrComment(mediaOverseerrId, note.trim()).catch(() => undefined);
     }
+    bustCache("overseerr:requests");
+    bustCache("overseerr:requestCounts");
     return { ok: true, message: action === "approve" ? "Request approved" : "Request declined" };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Action failed" };
@@ -151,6 +155,7 @@ export async function deleteRequest(id: string): Promise<SubmitResult> {
       return { ok: false, message: "Cannot cancel this request" };
     }
     await overseerrDeleteRequest(numeric);
+    bustCache("overseerr:requests");
     bustCache("overseerr:requestCounts");
     return { ok: true, message: "Request cancelled" };
   } catch (e) {
@@ -170,6 +175,7 @@ export async function editRequest(id: string, seasons: number[], quality?: strin
     if (allowed.status !== "pending") return { ok: false, message: "Only pending requests can be edited" };
     const profileId = quality && quality !== "default" ? (Number(quality) || undefined) : undefined;
     await overseerrEditRequest(numeric, { seasons, profileId });
+    bustCache("overseerr:requests");
     bustCache("overseerr:requestCounts");
     return { ok: true, message: "Request updated" };
   } catch (e) {

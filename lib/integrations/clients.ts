@@ -22,12 +22,30 @@ async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: stri
 // Only successful results are cached (fn throws before we store), so a transient
 // failure (turned into null by the facade's safe()) retries on the next poll.
 const ttlCache = new Map<string, { at: number; value: unknown }>();
+const ttlInflight = new Map<string, Promise<unknown>>();
 async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = ttlCache.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
-  const value = await fn();
-  ttlCache.set(key, { at: Date.now(), value });
-  return value;
+  // Coalesce concurrent refreshes so overlapping polls don't stack duplicate upstream calls.
+  let refresh = ttlInflight.get(key) as Promise<T> | undefined;
+  if (!refresh) {
+    refresh = fn()
+      .then((value) => {
+        ttlCache.set(key, { at: Date.now(), value });
+        return value;
+      })
+      .finally(() => ttlInflight.delete(key));
+    ttlInflight.set(key, refresh);
+  }
+  // Stale-while-revalidate: serve a stale value instantly and refresh in the background,
+  // so an upstream that's slow only when cold (e.g. Overseerr after idle) never blocks the
+  // snapshot. Only a true cold miss (no prior value) awaits the fetch. On error the stale
+  // value is kept and retried next poll (a cold miss rejects → caller's safe() → null).
+  if (hit) {
+    void refresh.catch(() => {});
+    return hit.value as T;
+  }
+  return refresh;
 }
 export function bustCache(key: string): void {
   ttlCache.delete(key);
@@ -811,33 +829,53 @@ const ENRICH_TTL = 60 * 60 * 1000;
 // On failed fetch, retry after 30s to avoid hammering a slow upstream.
 const ENRICH_RETRY = 30 * 1000;
 
-async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv", tmdbId: number): Promise<EnrichedDetails> {
-  const cacheKey = `${type}:${tmdbId}`;
-  const cached = enrichCache.get(cacheKey);
+// Coalesce concurrent enrichment fetches for the same title. The cold-cache window
+// gets polled every 3s; without this, each poll re-issues the same TMDB roundtrips.
+const enrichInflight = new Map<string, Promise<EnrichedDetails>>();
+
+// Synchronous, read-only cache peek: returns a still-valid enrichment or undefined.
+// Lets overseerrRequests serve the list immediately and background-fill misses.
+function enrichPeek(type: "movie" | "tv", tmdbId: number): EnrichedDetails | undefined {
+  const cached = enrichCache.get(`${type}:${tmdbId}`);
   if (cached) {
     const ttl = cached.title ? ENRICH_TTL : ENRICH_RETRY;
     if (Date.now() - cached.cachedAt < ttl) return cached;
   }
-  try {
-    const details = await fetchJson<OverseerrMediaDetails>(
-      `${baseUrl}/api/v1/${type}/${tmdbId}`,
-      { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 15000 },
-    );
-    const dateStr = details.releaseDate || details.firstAirDate || "";
-    const result: EnrichedDetails = {
-      title: details.title || details.name || "",
-      posterPath: details.posterPath ?? undefined,
-      year: dateStr ? Number(dateStr.slice(0, 4)) : undefined,
-      overview: details.overview || undefined,
-      cachedAt: Date.now(),
-    };
-    enrichCache.set(cacheKey, result);
-    return result;
-  } catch {
-    const fallback: EnrichedDetails = { title: "", cachedAt: Date.now() };
-    enrichCache.set(cacheKey, fallback);
-    return fallback;
-  }
+  return undefined;
+}
+
+async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv", tmdbId: number): Promise<EnrichedDetails> {
+  const cacheKey = `${type}:${tmdbId}`;
+  const peek = enrichPeek(type, tmdbId);
+  if (peek) return peek;
+  const existing = enrichInflight.get(cacheKey);
+  if (existing) return existing;
+  const p = (async () => {
+    try {
+      const details = await fetchJson<OverseerrMediaDetails>(
+        `${baseUrl}/api/v1/${type}/${tmdbId}`,
+        { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 15000 },
+      );
+      const dateStr = details.releaseDate || details.firstAirDate || "";
+      const result: EnrichedDetails = {
+        title: details.title || details.name || "",
+        posterPath: details.posterPath ?? undefined,
+        year: dateStr ? Number(dateStr.slice(0, 4)) : undefined,
+        overview: details.overview || undefined,
+        cachedAt: Date.now(),
+      };
+      enrichCache.set(cacheKey, result);
+      return result;
+    } catch {
+      const fallback: EnrichedDetails = { title: "", cachedAt: Date.now() };
+      enrichCache.set(cacheKey, fallback);
+      return fallback;
+    } finally {
+      enrichInflight.delete(cacheKey);
+    }
+  })();
+  enrichInflight.set(cacheKey, p);
+  return p;
 }
 
 const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending", 2: "approved", 3: "declined", 4: "failed" };
@@ -993,7 +1031,14 @@ export async function overseerrTvProfiles(): Promise<QualityProfile[]> {
   return profiles;
 }
 
+// Overseerr's /api/v1/request endpoint is slow only when cold (~10s after idle, ~300ms warm).
+// Stale-while-revalidate keeps the snapshot instant: serve the last-known list, refresh in the
+// background. Mutations bustCache("overseerr:requests") so approvals/cancels reflect at once.
 export async function overseerrRequests(): Promise<MediaRequest[]> {
+  return cached("overseerr:requests", 10_000, fetchOverseerrRequests);
+}
+
+async function fetchOverseerrRequests(): Promise<MediaRequest[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const [data, profileMaps, movieIndexes] = await Promise.all([
     fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=250&sort=added`, {
@@ -1007,14 +1052,17 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
   const { fileIndex, profileIndex } = movieIndexes;
   const results = data.results ?? [];
 
-  // Enrich in parallel; cache means only new/uncached requests touch the upstream.
-  const enriched = await Promise.all(
-    results.map((r) =>
-      r.media?.tmdbId
-        ? enrichMedia(baseUrl, apiKey!, r.type, r.media.tmdbId)
-        : Promise.resolve<EnrichedDetails>({ title: "", cachedAt: 0 }),
-    ),
-  );
+  // Cosmetic media details (title/poster/year/overview) are immutable and cached 1h.
+  // Serve whatever is already cached and background-fill misses (coalesced) so the
+  // snapshot never blocks on a cold per-item TMDB fan-out — the list itself (status,
+  // requester, date) is always fresh from the fetch above. Misses fill in next poll.
+  const enriched: EnrichedDetails[] = results.map((r) => {
+    if (!r.media?.tmdbId) return { title: "", cachedAt: 0 };
+    const hit = enrichPeek(r.type, r.media.tmdbId);
+    if (hit) return hit;
+    void enrichMedia(baseUrl, apiKey!, r.type, r.media.tmdbId);
+    return { title: "", cachedAt: 0 };
+  });
 
   return results.map((r, i) => {
     const { title, posterPath, year, overview } = enriched[i];
