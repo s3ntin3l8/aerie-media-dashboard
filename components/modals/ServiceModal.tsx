@@ -20,6 +20,7 @@ export interface ServiceForm {
   host: string;
   internalScheme: "https" | "http";
   internalUrl: string;
+  insecureTls: boolean;
   version: string;
   embeddable: boolean;
   central: boolean;
@@ -135,8 +136,8 @@ export function ServiceModal({
   onClose: () => void;
   onSave: (form: ServiceForm, vis: Record<string, boolean>) => void;
   onDelete: (service: Service) => void;
-  onDetectVersion?: (baseUrl: string, apiKey: string, name: string) => Promise<string | null>;
-  onTestConnection?: (baseUrl: string, apiKey: string, name: string) => Promise<string | null>;
+  onDetectVersion?: (baseUrl: string, apiKey: string, name: string, insecureTls: boolean) => Promise<string | null>;
+  onTestConnection?: (baseUrl: string, apiKey: string, name: string, insecureTls: boolean) => Promise<string | null>;
   /** Add-mode: persist the service (config + secret + visibility) without closing, returns its id (null on failure). */
   onSaveAndTest?: (form: ServiceForm, vis: Record<string, boolean>) => Promise<string | null>;
   /** Test the stored connection for a saved service by id. */
@@ -154,6 +155,7 @@ export function ServiceModal({
     host: "",
     internalScheme: "http",
     internalUrl: "",
+    insecureTls: false,
     version: "",
     embeddable: true,
     central: false,
@@ -181,6 +183,7 @@ export function ServiceModal({
         host: service.host,
         internalScheme: internal.scheme,
         internalUrl: internal.rest, // seed from stored value so edits don't clobber the LAN URL
+        insecureTls: service.insecureTls ?? false,
         version: service.version || "",
         embeddable: service.embeddable,
         central: Boolean(service.central),
@@ -221,7 +224,7 @@ export function ServiceModal({
     if (!onDetectVersion || detecting) return;
     setDetecting(true);
     try {
-      const v = await onDetectVersion(apiUrl(), f.apiKey, f.name);
+      const v = await onDetectVersion(apiUrl(), f.apiKey, f.name, f.insecureTls);
       if (v) set("version", v);
     } finally {
       setDetecting(false);
@@ -232,22 +235,29 @@ export function ServiceModal({
   const handleTest = async () => {
     setConnStatus({ state: "testing" });
     let result: string | null;
-    if (!editing && onSaveAndTest && onTestSaved) {
-      // Add mode: persist first (config + secret), then test the *stored* connection —
-      // testing the typed-but-unsaved key is unreliable, so we save-then-test in one click.
+    if (onSaveAndTest && onTestSaved) {
+      // Persist first (config + secret), then test the *stored* connection, so the test
+      // reflects exactly what the server will hit — including edited URLs. Testing a
+      // typed-but-unsaved key is unreliable, and in edit mode the previous "test stored
+      // creds" path silently ignored unsaved URL edits (e.g. clearing the internal URL).
+      // A blank key field keeps the existing secret (persistService only writes a secret
+      // when one was typed), so save-then-test never clobbers it.
       const id = await onSaveAndTest(f, vis);
       if (!id) { setConnStatus({ state: "err" }); return; }
       result = await onTestSaved(id);
     } else if (onTestConnection) {
-      result = await onTestConnection(apiUrl(), f.apiKey, f.name);
+      result = await onTestConnection(apiUrl(), f.apiKey, f.name, f.insecureTls);
     } else {
       return;
     }
     setConnStatus(result !== null ? { state: "ok", version: result } : { state: "err" });
   };
+  // Save-then-test needs a saveable form (name + host); a typed key is only required when
+  // adding — in edit mode a blank key field reuses the stored secret. Falls back to the
+  // bare onTestConnection probe only when the save-and-test handlers aren't provided.
   const canTest =
-    (editing && Boolean(onTestConnection)) ||
-    (!editing && Boolean(onSaveAndTest) && f.name.trim() !== "" && f.host.trim() !== "" && f.apiKey.trim() !== "");
+    (Boolean(onSaveAndTest) && Boolean(onTestSaved) && f.name.trim() !== "" && f.host.trim() !== "" && (editing || f.apiKey.trim() !== "")) ||
+    (!(onSaveAndTest && onTestSaved) && Boolean(onTestConnection));
 
   const set = <K extends keyof ServiceForm>(k: K, v: ServiceForm[K]) => setF((prev) => ({ ...prev, [k]: v }));
   const c = catColor(f.cat as Service["cat"]);
@@ -352,6 +362,14 @@ export function ServiceModal({
                 />
               </div>
             </Field>
+            <ToggleRow
+              on={f.insecureTls}
+              onChange={(v) => set("insecureTls", v)}
+              color="var(--warning, #d08770)"
+              icon={f.insecureTls ? "gpp_maybe" : "verified_user"}
+              title="Allow self-signed TLS"
+              desc={f.insecureTls ? "Insecure — skips cert verification. Use only for trusted LAN hosts (e.g. Unraid)." : "Cert verification stays on. Enable only if this host serves a self-signed certificate."}
+            />
             <Field label="Internal note" hint="shown to admins only">
               <input className="input" style={fieldInput} value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="What is this service for?" />
             </Field>
@@ -396,13 +414,13 @@ export function ServiceModal({
                 <button type="button" onClick={() => setRevealKey((r) => !r)} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title={revealKey ? "Hide" : "Reveal"}>
                   <Icon name={revealKey ? "visibility_off" : "visibility"} size={16} />
                 </button>
-                <button type="button" onClick={handleTest} disabled={!canTest || connStatus.state === "testing"} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title={editing ? "Test connection" : "Save and test connection"}>
+                <button type="button" onClick={handleTest} disabled={!canTest || connStatus.state === "testing"} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title="Save and test connection">
                   {connStatus.state === "testing" ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>…</span> : <Icon name="wifi_find" size={16} />}
                 </button>
               </div>
               {connStatus.state !== "idle" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: 11, fontFamily: "var(--font-mono)" }}>
-                  {connStatus.state === "testing" && <span style={{ color: "var(--on-surface-variant)" }}>{editing ? "Testing…" : "Saving & testing…"}</span>}
+                  {connStatus.state === "testing" && <span style={{ color: "var(--on-surface-variant)" }}>Saving & testing…</span>}
                   {connStatus.state === "ok" && (
                     <>
                       <StatusDot status="up" size={7} />

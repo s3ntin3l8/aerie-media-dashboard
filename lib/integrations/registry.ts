@@ -28,6 +28,8 @@ export interface ServiceConfig {
   note: string | null;
   sortOrder: number;
   monitoringKey: string | null;
+  /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts) */
+  insecureTls: boolean;
 }
 
 export async function getServiceConfigs(): Promise<ServiceConfig[]> {
@@ -50,6 +52,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       note: r.note,
       sortOrder: r.sortOrder,
       monitoringKey: r.monitoringKey ?? null,
+      insecureTls: r.insecureTls,
     }));
   } catch {
     return [];
@@ -76,6 +79,8 @@ export async function getServiceSecret(serviceId: string, kind = "apiKey"): Prom
 export interface ServiceCredentials {
   baseUrl: string;
   apiKey: string | null;
+  /** skip TLS cert verification for this service (self-signed LAN hosts) */
+  insecureTls: boolean;
 }
 
 export async function getServiceCredentials(serviceId: string): Promise<ServiceCredentials | null> {
@@ -85,7 +90,7 @@ export async function getServiceCredentials(serviceId: string): Promise<ServiceC
   const apiKey = await getServiceSecret(serviceId);
   // Server-side API calls prefer the internal/LAN URL when set; the public baseUrl
   // (used for the iframe embed) is the fallback.
-  return { baseUrl: cfg.internalUrl || cfg.baseUrl, apiKey };
+  return { baseUrl: cfg.internalUrl || cfg.baseUrl, apiKey, insecureTls: cfg.insecureTls };
 }
 
 /** A service can be queried for live data only once a secret is stored. */

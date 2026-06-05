@@ -5,7 +5,7 @@
 // to mock so a dead or unconfigured upstream only degrades its panel.
 // ============================================================
 import "server-only";
-import { fetchJson, IntegrationError } from "./http";
+import { fetchJson, fetchJson as fetchJsonRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
 import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
@@ -878,6 +878,33 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
   return p;
 }
 
+// Bounded background enrichment: a cold request list can have hundreds of uncached
+// items. Rather than fire them all at once (a burst that can overwhelm Overseerr,
+// especially right after a DNS/upstream hiccup), drain the misses through a small
+// worker pool. Deduped against in-flight + already-queued keys so repeated polls
+// during the cold window don't stack duplicate work.
+const ENRICH_CONCURRENCY = 6;
+const enrichQueue: Array<() => Promise<unknown>> = [];
+const enrichQueued = new Set<string>();
+let enrichActive = 0;
+function pumpEnrichQueue(): void {
+  while (enrichActive < ENRICH_CONCURRENCY && enrichQueue.length > 0) {
+    const job = enrichQueue.shift()!;
+    enrichActive++;
+    void job().finally(() => {
+      enrichActive--;
+      pumpEnrichQueue();
+    });
+  }
+}
+function queueEnrich(baseUrl: string, apiKey: string, type: "movie" | "tv", tmdbId: number): void {
+  const key = `${type}:${tmdbId}`;
+  if (enrichQueued.has(key) || enrichInflight.has(key)) return; // already pending
+  enrichQueued.add(key);
+  enrichQueue.push(() => enrichMedia(baseUrl, apiKey, type, tmdbId).finally(() => enrichQueued.delete(key)));
+  pumpEnrichQueue();
+}
+
 const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending", 2: "approved", 3: "declined", 4: "failed" };
 
 // Cache resolved quality profile names (profileId → name) for 1 hour.
@@ -1060,7 +1087,7 @@ async function fetchOverseerrRequests(): Promise<MediaRequest[]> {
     if (!r.media?.tmdbId) return { title: "", cachedAt: 0 };
     const hit = enrichPeek(r.type, r.media.tmdbId);
     if (hit) return hit;
-    void enrichMedia(baseUrl, apiKey!, r.type, r.media.tmdbId);
+    queueEnrich(baseUrl, apiKey!, r.type, r.media.tmdbId); // bounded background fill
     return { title: "", cachedAt: 0 };
   });
 
@@ -1807,6 +1834,7 @@ type ServiceKind =
   | "prometheus"
   | "gatus" // /api/v1/endpoints/statuses (optional Bearer; no version field)
   | "beszel" // PocketBase auth → /api/health (no version field)
+  | "unraid" // GraphQL /graphql (x-api-key) → info.versions.core.unraid
   | "plex"; // /identity (no auth needed) → MediaContainer.version
 
 function serviceKind(id: string): ServiceKind | null {
@@ -1826,6 +1854,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("prometheus")) return "prometheus";
   if (l.includes("gatus")) return "gatus";
   if (l.includes("beszel")) return "beszel";
+  if (l.includes("unraid")) return "unraid";
   if (l.includes("plex")) return "plex";
   return null;
 }
@@ -1839,8 +1868,12 @@ function normalizeVersion(v: string | undefined | null): string | null {
   return (dev ? dev[1] : s) || null;
 }
 
-async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKind): Promise<string | null> {
+async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKind, insecureTls = false): Promise<string | null> {
   const b = base.replace(/\/$/, "");
+  // Inject the service's TLS preference into every probe below without touching each call site:
+  // this local binding shadows the imported fetchJson for the rest of this function only, so a
+  // self-signed LAN host (e.g. Unraid) is reachable when its "allow self-signed TLS" toggle is on.
+  const fetchJson = <T,>(url: string, opts: HttpOpts): Promise<T> => fetchJsonRaw<T>(url, { ...opts, insecureTls });
   if (kind === "jellyfin") {
     const d = await fetchJson<{ Version?: string }>(`${b}/System/Info`, {
       service: "version-detect",
@@ -1924,6 +1957,24 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     await beszelGet<unknown>(b, apiKey, "/api/health");
     return "";
   }
+  if (kind === "unraid") {
+    // Unraid 7.x GraphQL API: POST /graphql with an `x-api-key` header. The version lives at
+    // info.versions.core.unraid (7.2+ integrated API); the older Connect plugin exposed it
+    // flat at info.versions.unraid, so we fall back to that when the nested query yields nothing.
+    // GraphQL surfaces field/auth errors as HTTP 400 (→ fetchJson throws → caught → null) or as
+    // 200 with null data, so a bad key / wrong schema degrades to null rather than a wrong value.
+    const ask = (query: string) =>
+      fetchJson<{ data?: { info?: { versions?: { core?: { unraid?: string }; unraid?: string } } } }>(`${b}/graphql`, {
+        service: "version-detect",
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(apiKey ? { "x-api-key": apiKey } : {}) },
+        body: { query },
+      }).catch(() => null);
+    const nested = await ask("{ info { versions { core { unraid } } } }");
+    const v = nested?.data?.info?.versions?.core?.unraid
+      ?? (await ask("{ info { versions { unraid } } }"))?.data?.info?.versions?.unraid;
+    return normalizeVersion(v);
+  }
   if (kind === "plex") {
     // /identity is unauthenticated and returns the server version as JSON (Accept: application/json
     // is already set by fetchJson). Pass the token if available for future-proofing.
@@ -1948,18 +1999,18 @@ export async function detectVersion(serviceId: string): Promise<string | null> {
     if (!kind) return null;
     const c = await getServiceCredentials(serviceId);
     if (!c) return null;
-    return await fetchServiceVersion(c.baseUrl, c.apiKey ?? "", kind);
+    return await fetchServiceVersion(c.baseUrl, c.apiKey ?? "", kind, c.insecureTls);
   } catch {
     return null;
   }
 }
 
 /** Probe a version endpoint with explicit (transient) credentials — no DB access. */
-export async function probeVersion(baseUrl: string, apiKey: string, idHint: string): Promise<string | null> {
+export async function probeVersion(baseUrl: string, apiKey: string, idHint: string, insecureTls = false): Promise<string | null> {
   try {
     const kind = serviceKind(idHint);
     if (!kind) return null;
-    return await fetchServiceVersion(baseUrl, apiKey, kind);
+    return await fetchServiceVersion(baseUrl, apiKey, kind, insecureTls);
   } catch {
     return null;
   }

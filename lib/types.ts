@@ -27,6 +27,8 @@ export interface Service {
   scheme: "http" | "https";
   /** optional internal/LAN URL the server uses for API calls (admin-only; never used for the iframe) */
   internalUrl?: string;
+  /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts) */
+  insecureTls?: boolean;
   version: string;
   status: ServiceStatus;
   uptime: number;

@@ -76,6 +76,7 @@ export interface ServiceInput {
   version?: string | null;
   note?: string | null;
   monitoringKey?: string | null;
+  insecureTls?: boolean;
 }
 
 /** Create or update a service registry entry. */
@@ -97,6 +98,7 @@ export async function upsertService(input: ServiceInput) {
     version: input.version ?? null,
     note: input.note ?? null,
     monitoringKey: input.monitoringKey ?? null,
+    insecureTls: input.insecureTls ?? false,
   };
   await db
     .insert(schema.services)
@@ -139,9 +141,9 @@ export async function detectServiceVersion(serviceId: string): Promise<string | 
  * Transient version probe using explicit credentials — no DB reads or writes.
  * Used by the add-service modal before the service is saved.
  */
-export async function probeServiceVersion(baseUrl: string, apiKey: string, idHint: string): Promise<string | null> {
+export async function probeServiceVersion(baseUrl: string, apiKey: string, idHint: string, insecureTls = false): Promise<string | null> {
   await requireAdmin();
-  return probeVersion(baseUrl, apiKey, idHint);
+  return probeVersion(baseUrl, apiKey, idHint, insecureTls);
 }
 
 /**

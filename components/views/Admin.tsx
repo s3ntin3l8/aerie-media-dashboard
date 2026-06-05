@@ -553,6 +553,7 @@ export function Admin() {
       version: form.version || null,
       note: form.note || null,
       monitoringKey: form.monitoringKey || null,
+      insecureTls: form.insecureTls,
     });
     // Only write the secret when the admin actually entered one (blank = keep).
     if (form.apiKey && form.apiKey.trim()) await setServiceSecret(id, form.apiKey.trim());
@@ -561,8 +562,8 @@ export function Admin() {
 
     // Optimistically update the local snapshot so the service appears immediately.
     const optimisticService: Service = editing
-      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
-      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
+      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
     // Dedupe by id: in add mode the service may already be in the snapshot from a prior
     // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).
     patchData((s) => ({
@@ -669,19 +670,19 @@ export function Admin() {
           onClose={() => { lastAutoSavedId.current = null; setSvcModal(null); }}
           onSave={onSave}
           onDelete={onDelete}
-          onDetectVersion={async (baseUrl, apiKey, name) => {
+          onDetectVersion={async (baseUrl, apiKey, name, insecureTls) => {
             if (svcModal.mode === "edit" && svcModal.service && !apiKey) {
               const v = await detectServiceVersion(svcModal.service.id);
               if (v) refresh();
               return v;
             }
-            return probeServiceVersion(baseUrl, apiKey, slug(name));
+            return probeServiceVersion(baseUrl, apiKey, slug(name), insecureTls);
           }}
-          onTestConnection={async (baseUrl, apiKey, name) => {
+          onTestConnection={async (baseUrl, apiKey, name, insecureTls) => {
             if (svcModal.mode === "edit" && svcModal.service && !apiKey) {
               return testStoredConnection(svcModal.service.id);
             }
-            return probeServiceVersion(baseUrl, apiKey, slug(name));
+            return probeServiceVersion(baseUrl, apiKey, slug(name), insecureTls);
           }}
           onSaveAndTest={onSaveAndTest}
           onTestSaved={(id) => testStoredConnection(id)}

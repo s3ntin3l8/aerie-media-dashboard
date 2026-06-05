@@ -24,6 +24,8 @@ export const services = sqliteTable("services", {
   note: text("note"),
   sortOrder: integer("sort_order").notNull().default(0),
   monitoringKey: text("monitoring_key"),
+  /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts, e.g. Unraid) */
+  insecureTls: integer("insecure_tls", { mode: "boolean" }).notNull().default(false),
 });
 
 // Encrypted per-service secrets (API keys/tokens). AES-256-GCM at rest.

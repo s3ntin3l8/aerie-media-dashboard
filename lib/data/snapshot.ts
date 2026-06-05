@@ -128,6 +128,39 @@ function padBeats(beats: number[]): number[] {
   return [...Array(30 - beats.length).fill(1), ...beats];
 }
 
+// The most recent fully-assembled snapshot, kept in-process so the shell can render
+// instantly even when a fresh getSnapshot() would be slow (cold upstream after idle).
+let lastSnapshot: Snapshot | null = null;
+
+/**
+ * Snapshot for the blocking shell render: race a fresh getSnapshot() against a short
+ * deadline. If it wins (the common warm/stale case, ~75ms) the shell gets live data; if
+ * it's slow (a cold upstream like Overseerr after idle), fall back to the last good
+ * snapshot so the shell never blocks — the fresh one keeps running in the background and
+ * repopulates the caches + lastSnapshot for the next load. Only a true cold start (no
+ * prior snapshot yet) awaits the full fetch, rather than render an empty shell.
+ * `stale` tells the client to refetch promptly so the served-stale data catches up.
+ */
+export async function getSnapshotFast(deadlineMs = 600): Promise<{ snapshot: Snapshot; stale: boolean }> {
+  const t0 = Date.now();
+  const full = getSnapshot();
+  full.catch(() => {}); // the losing branch is un-awaited; don't let it reject unhandled
+  const fresh = await Promise.race([
+    full.then((s) => ({ snapshot: s, stale: false })),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), deadlineMs)),
+  ]);
+  if (fresh) {
+    if (process.env.AERIE_PERF_LOG) console.log(`[perf] getSnapshotFast: fresh in ${Date.now() - t0}ms`);
+    return fresh;
+  }
+  if (lastSnapshot) {
+    if (process.env.AERIE_PERF_LOG) console.log(`[perf] getSnapshotFast: served STALE after ${Date.now() - t0}ms deadline (fresh loading in background)`);
+    return { snapshot: lastSnapshot, stale: true };
+  }
+  if (process.env.AERIE_PERF_LOG) console.log(`[perf] getSnapshotFast: cold start, awaiting full snapshot`);
+  return { snapshot: await full, stale: false };
+}
+
 export async function getSnapshot(): Promise<Snapshot> {
   const tStart = Date.now();
   const [configs, groups, visibility] = await Promise.all([getServiceConfigs(), getGroups(), getVisibility()]);
@@ -246,6 +279,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     host: c.host,
     scheme: c.baseUrl?.startsWith("http:") ? "http" : "https",
     internalUrl: c.internalUrl ?? undefined,
+    insecureTls: c.insecureTls,
     version: (c.id === "overseerr" && osVersion) ? osVersion : (c.version ?? ""),
     note: c.note ?? "",
     monitoringKey: c.monitoringKey ?? undefined,
@@ -361,7 +395,7 @@ export async function getSnapshot(): Promise<Snapshot> {
       }
     : null;
 
-  return {
+  const snapshot: Snapshot = {
     services, nowPlaying, requests, users, library, recent, queue, plays24h, bandwidth,
     storage, issues, arrHealth: arrHealthIssues, upcoming, downloads, topStats,
     groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
@@ -371,4 +405,6 @@ export async function getSnapshot(): Promise<Snapshot> {
     agregarr: agregarrData ?? null, bazarrWanted: bazarrData ?? null,
     nzbhydra: nzbhydraData ?? null,
   };
+  lastSnapshot = snapshot;
+  return snapshot;
 }
