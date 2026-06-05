@@ -931,15 +931,17 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
 }
 
 const MOVIE_FILE_INDEX_TTL = 30 * 60 * 1000;
-let movieFileIndexCache: { at: number; index: Map<number, FileInfo> } | null = null;
+interface MovieIndexes { fileIndex: Map<number, FileInfo>; profileIndex: Map<number, number> }
+let movieIndexCache: { at: number } & MovieIndexes | null = null;
 
-async function arrMovieFileIndex(): Promise<Map<number, FileInfo>> {
-  if (movieFileIndexCache && Date.now() - movieFileIndexCache.at < MOVIE_FILE_INDEX_TTL) {
-    return movieFileIndexCache.index;
+async function arrMovieIndexes(): Promise<MovieIndexes> {
+  if (movieIndexCache && Date.now() - movieIndexCache.at < MOVIE_FILE_INDEX_TTL) {
+    return { fileIndex: movieIndexCache.fileIndex, profileIndex: movieIndexCache.profileIndex };
   }
   const { baseUrl, apiKey } = await creds("radarr");
   type RMovie = {
     tmdbId: number;
+    qualityProfileId?: number;
     movieFile?: {
       size?: number;
       quality?: { quality?: { resolution?: number; source?: string } };
@@ -952,18 +954,25 @@ async function arrMovieFileIndex(): Promise<Map<number, FileInfo>> {
     timeoutMs: 10000,
   });
   const SOURCE: Record<string, string> = { bluray: "Blu-ray", webrip: "WEBRip", webdl: "WEB-DL", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
-  const index = new Map<number, FileInfo>();
+  const fileIndex = new Map<number, FileInfo>();
+  const profileIndex = new Map<number, number>();
   for (const m of movies) {
-    if (!m.movieFile || !m.tmdbId) continue;
+    if (!m.tmdbId) continue;
+    if (m.qualityProfileId != null) profileIndex.set(m.tmdbId, m.qualityProfileId);
+    if (!m.movieFile) continue;
     const q = m.movieFile.quality?.quality;
     const res = q?.resolution ? `${q.resolution}p` : undefined;
     const src = q?.source ? (SOURCE[q.source] ?? q.source) : undefined;
     const codec = m.movieFile.mediaInfo?.videoCodec?.toUpperCase() ?? undefined;
     const parts = [res, src, codec ? `· ${codec}` : undefined].filter(Boolean);
-    index.set(m.tmdbId, { label: parts.join(" ") || "Unknown", sizeBytes: m.movieFile.size });
+    fileIndex.set(m.tmdbId, { label: parts.join(" ") || "Unknown", sizeBytes: m.movieFile.size });
   }
-  movieFileIndexCache = { at: Date.now(), index };
-  return index;
+  movieIndexCache = { at: Date.now(), fileIndex, profileIndex };
+  return { fileIndex, profileIndex };
+}
+
+async function arrMovieFileIndex(): Promise<Map<number, FileInfo>> {
+  return (await arrMovieIndexes()).fileIndex;
 }
 
 /** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
@@ -986,15 +995,16 @@ export async function overseerrTvProfiles(): Promise<QualityProfile[]> {
 
 export async function overseerrRequests(): Promise<MediaRequest[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  const [data, profileMaps, fileIndex] = await Promise.all([
+  const [data, profileMaps, movieIndexes] = await Promise.all([
     fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=250&sort=added`, {
       service: "overseerr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 10000,
     }),
     overseerrQualityProfiles(baseUrl, apiKey!).catch(() => ({ movie: {}, tv: {} } as { movie: Record<number, string>; tv: Record<number, string> })),
-    arrMovieFileIndex().catch(() => new Map<number, FileInfo>()),
+    arrMovieIndexes().catch(() => ({ fileIndex: new Map<number, FileInfo>(), profileIndex: new Map<number, number>() })),
   ]);
+  const { fileIndex, profileIndex } = movieIndexes;
   const results = data.results ?? [];
 
   // Enrich in parallel; cache means only new/uncached requests touch the upstream.
@@ -1025,7 +1035,13 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
       requesterEmail: r.requestedBy?.email,
       seasons: seasons && seasons.length > 0 ? seasons : undefined,
       overview: overview || undefined,
-      qualityProfile: r.profileId != null ? (profileMaps[r.type === "tv" ? "tv" : "movie"][r.profileId] ?? `Profile ${r.profileId}`) : undefined,
+      qualityProfile: (() => {
+        const map = profileMaps[r.type === "tv" ? "tv" : "movie"];
+        // Prefer Overseerr's stored profileId; fall back to Radarr's assigned profile
+        // (covers requests created via AERIE where no explicit profileId was submitted).
+        const pid = r.profileId ?? (r.type === "movie" && r.media?.tmdbId ? profileIndex.get(r.media.tmdbId) : undefined);
+        return pid != null ? (map[pid] ?? `Profile ${pid}`) : undefined;
+      })(),
       mediaOverseerrId: r.media?.id,
       modified: r.updatedAt ?? r.createdAt,
       fileInfo: r.type === "movie" && r.media?.tmdbId ? fileIndex.get(r.media.tmdbId) : undefined,
