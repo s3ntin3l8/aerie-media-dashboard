@@ -15,6 +15,15 @@ const DIMS: Record<Kind, { w: number; h: number }> = {
   avatar: { w: 80, h: 80 },
 };
 
+// Browser cache lifetime per kind. Posters/backdrops for a given ref are immutable
+// (a movie's artwork doesn't change), so cache them for a month and skip revalidation.
+// Avatars can change (a user swaps their photo) so keep them shorter.
+const CACHE_CONTROL: Record<Kind, string> = {
+  poster: "private, max-age=2592000, immutable",
+  backdrop: "private, max-age=2592000, immutable",
+  avatar: "private, max-age=86400",
+};
+
 function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: string, kind: Kind): string | null {
   const base = baseUrl.replace(/\/$/, "");
   const { w, h } = DIMS[kind];
@@ -66,8 +75,7 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": res.headers.get("content-type") || "image/jpeg",
-        // posters are immutable enough to cache briefly in the browser
-        "Cache-Control": "private, max-age=3600",
+        "Cache-Control": CACHE_CONTROL[kind],
       },
     });
   } catch {
