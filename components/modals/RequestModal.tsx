@@ -140,11 +140,8 @@ function InfoStep({ pick }: { pick: DiscoverItem }) {
       <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
         <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-            <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
-            {pick.state && <StateBadge state={pick.state} />}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>
+          <h3 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
             <Icon name={pick.kind === "series" ? "live_tv" : "movie"} size={13} />
             {pick.kind === "series" ? "Series" : "Movie"} · {pick.year}
             {pick.rating > 0 && (
@@ -153,6 +150,7 @@ function InfoStep({ pick }: { pick: DiscoverItem }) {
                 {pick.rating}
               </span>
             )}
+            {pick.state && <StateBadge state={pick.state} />}
           </div>
           {pick.overview && (
             <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 9, lineHeight: 1.5 }}>{pick.overview}</p>
