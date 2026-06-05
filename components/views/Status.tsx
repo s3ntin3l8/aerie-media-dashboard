@@ -2,7 +2,7 @@
 // ============================================================
 // AERIE — Status / uptime dashboard (Gatus + Prometheus)
 // ============================================================
-import React, { useEffect, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { isVisible } from "@/lib/visibility";
@@ -12,6 +12,8 @@ import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile } from "@/components/views/shared";
 import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
+
+const HEALTH_STATUS_ORDER: Record<string, number> = { up: 0, degraded: 1, down: 2, unknown: 3 };
 
 /** Shared style for the metrics-section pickers (node instance / Beszel system). */
 const PICKER_SELECT_STYLE: React.CSSProperties = {
@@ -191,6 +193,16 @@ export function Status() {
         ? "Prometheus unreachable — check the service baseUrl in Admin → Services."
         : "Prometheus not configured — add the service and set a baseUrl in Admin → Services.");
   const list = useVisibleServices("status");
+  const [healthSort, setHealthSort] = useState<"name" | "status" | "uptime" | "ms">("name");
+  const sortedList = useMemo(() => [...list].sort((a, b) => {
+    switch (healthSort) {
+      case "name":   return a.name.localeCompare(b.name);
+      case "status": return HEALTH_STATUS_ORDER[a.status] - HEALTH_STATUS_ORDER[b.status];
+      case "uptime": return b.uptime - a.uptime;
+      case "ms":     return (a.ms ?? Infinity) - (b.ms ?? Infinity);
+      default:       return 0;
+    }
+  }), [list, healthSort]);
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
@@ -231,7 +243,32 @@ export function Status() {
 
           <PanelShell title="Service Health" icon="favorite" accent="var(--originator-own)" count={`${list.length}`}>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {list.map((s, i) => (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", marginRight: 4 }}>Sort</span>
+                {(["name", "status", "uptime", "ms"] as const).map((opt) => {
+                  const labels: Record<string, string> = { name: "Name", status: "Status", uptime: "Uptime", ms: "Response" };
+                  const active = healthSort === opt;
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => setHealthSort(opt)}
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10.5,
+                        padding: "4px 10px",
+                        borderRadius: 9999,
+                        cursor: "pointer",
+                        border: "1px solid " + (active ? "color-mix(in srgb, var(--originator-own) 40%, transparent)" : "var(--outline-variant)"),
+                        background: active ? "color-mix(in srgb, var(--originator-own) 13%, transparent)" : "transparent",
+                        color: active ? "var(--originator-own)" : "var(--on-surface-variant)",
+                      }}
+                    >
+                      {labels[opt]}
+                    </button>
+                  );
+                })}
+              </div>
+              {sortedList.map((s, i) => (
                 <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
                   <ServiceLogo service={s} size={30} radius={8} />
                   <div style={{ flex: "0 0 150px", minWidth: 0 }}>

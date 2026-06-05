@@ -2,7 +2,7 @@
 // ============================================================
 // AERIE — Admin area (services · members · visibility)
 // ============================================================
-import React, { useEffect, useRef, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
@@ -15,15 +15,49 @@ import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal
 import { Toast } from "@/components/modals/Toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
+type AdminSortCol = "name" | "host" | "embed";
+type AdminSortDir = "asc" | "desc";
+
 function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void }) {
   const { services } = useData();
   const { favorites, toggleFavorite } = usePortal();
   const cols = "1.6fr 1fr 0.7fr 1.2fr 0.5fr";
+  const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
+  const sorted = useMemo(() => [...services].sort((a, b) => {
+    const d = sort.dir === "asc" ? 1 : -1;
+    switch (sort.col) {
+      case "name":  return a.name.localeCompare(b.name) * d;
+      case "host":  return (a.host ?? "").localeCompare(b.host ?? "") * d;
+      case "embed": return (Number(b.embeddable) - Number(a.embeddable)) * d;
+      default:      return 0;
+    }
+  }), [services, sort]);
+
+  function handleSortClick(col: AdminSortCol) {
+    setSort((prev) => prev.col === col
+      ? { col, dir: prev.dir === "asc" ? "desc" : "asc" }
+      : { col, dir: "asc" });
+  }
 
   if (isMobile) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {services.map((s) => {
+        <select
+          value={`${sort.col}:${sort.dir}`}
+          onChange={(e) => {
+            const [col, dir] = e.target.value.split(":") as [AdminSortCol, AdminSortDir];
+            setSort({ col, dir });
+          }}
+          style={{ fontFamily: "var(--font-mono)", fontSize: 11, padding: "5px 8px", borderRadius: 8, border: "1px solid var(--outline-variant)", background: "var(--surface-container)", color: "var(--on-surface)", cursor: "pointer", alignSelf: "flex-start" }}
+        >
+          <option value="name:asc">Name A→Z</option>
+          <option value="name:desc">Name Z→A</option>
+          <option value="host:asc">Host A→Z</option>
+          <option value="host:desc">Host Z→A</option>
+          <option value="embed:desc">Embeddable first</option>
+          <option value="embed:asc">Non-embeddable first</option>
+        </select>
+        {sorted.map((s) => {
           const pinned = favorites.includes(s.id);
           return (
             <div key={s.id} className="card" style={{ padding: 15, borderRadius: 18, background: "var(--surface-container-lowest)" }}>
@@ -93,11 +127,29 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
     <div className="aerie-x-scroll">
       <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
-          {["Service", "Host", "Embed", "API key", ""].map((h, i) => (
-            <Eyebrow key={i}>{h}</Eyebrow>
-          ))}
+          {(["name", "host", "embed"] as AdminSortCol[]).map((col, i) => {
+            const labels: Record<AdminSortCol, string> = { name: "Service", host: "Host", embed: "Embed" };
+            const active = sort.col === col;
+            return (
+              <button
+                key={col}
+                onClick={() => handleSortClick(col)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+              >
+                <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined }}>{labels[col]}</Eyebrow>
+                <Icon
+                  name={active ? (sort.dir === "asc" ? "expand_less" : "expand_more") : "unfold_more"}
+                  size={13}
+                  color={active ? "var(--on-surface)" : "var(--on-surface-variant)"}
+                  style={{ opacity: active ? 1 : 0.4 }}
+                />
+              </button>
+            );
+          })}
+          <Eyebrow>API key</Eyebrow>
+          <span />
         </div>
-        {services.map((s, i) => {
+        {sorted.map((s, i) => {
           const pinned = favorites.includes(s.id);
           return (
             <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>

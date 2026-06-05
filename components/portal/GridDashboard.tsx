@@ -6,7 +6,7 @@
 // Grid feel is locked to "lift" (the design-time switcher was dropped,
 // matching the committed-defaults policy in CLAUDE.md).
 // ============================================================
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/primitives";
 import { GRID, gridSort, packAround, type Tile } from "@/components/portal/gridLayout";
 import { widgetMeta, hasSettings } from "@/components/portal/widgetCatalog";
@@ -93,7 +93,7 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
     setAct(v);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const measure = () => setW(el.clientWidth);

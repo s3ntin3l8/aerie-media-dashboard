@@ -2,7 +2,7 @@
 // ============================================================
 // AERIE — Requests view (per-user Overseerr)
 // ============================================================
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { DiscoverItem, MediaRequest, RequestStatus } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -104,10 +104,12 @@ export function Requests() {
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
   const [sort, setSort] = useState<SortOrder>("added");
+  const [requesterFilter, setRequesterFilter] = useState<string | null>(null);
   const [reqModal, setReqModal] = useState<{ mode: "request" | "review" | "edit"; request?: MediaRequest } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const { acted, onAct, applyActed } = useRequestReview();
   const refresh = useRefresh();
+  useEffect(() => { if (!adminMode) setRequesterFilter(null); }, [adminMode]);
   const flash = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
@@ -118,10 +120,24 @@ export function Requests() {
   };
 
   const base = adminMode ? requests : requests.filter((r) => r.portalUser === user.id);
+  const requesters = useMemo(() => {
+    const map = new Map<string, { name: string; count: number }>();
+    for (const r of base) {
+      const key = r.portalUser ?? r.requesterEmail ?? r.id;
+      if (!map.has(key)) map.set(key, { name: r.requesterName ?? r.user, count: 0 });
+      map.get(key)!.count++;
+    }
+    return [...map.entries()]
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => b.count - a.count);
+  }, [base]);
   const sorted = sort === "modified"
     ? [...base].sort((a, b) => (b.modified ?? b.requested).localeCompare(a.modified ?? a.requested))
     : base;
-  const filtered = applyActed(sorted).filter((r) => (filter === "all" ? true : r.status === filter));
+  const statusFiltered = applyActed(sorted).filter((r) => (filter === "all" ? true : r.status === filter));
+  const filtered = requesterFilter
+    ? statusFiltered.filter((r) => (r.portalUser ?? r.requesterEmail ?? r.id) === requesterFilter)
+    : statusFiltered;
 
   const localCounts = {
     all: base.length,
@@ -223,6 +239,32 @@ export function Requests() {
               {sort === "added" ? "By date" : "By modified"}
             </button>
           </div>
+
+          {adminMode && requesters.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {[{ key: null as string | null, name: "All", count: base.length }, ...requesters].map(({ key, name, count }) => (
+                <button
+                  key={key ?? "__all__"}
+                  onClick={() => setRequesterFilter(key)}
+                  style={{
+                    fontFamily: "var(--font-body)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    padding: "6px 13px",
+                    borderRadius: 9999,
+                    cursor: "pointer",
+                    border: "1px solid " + (requesterFilter === key ? "color-mix(in srgb, var(--originator-court) 40%, transparent)" : "var(--outline-variant)"),
+                    background: requesterFilter === key ? "color-mix(in srgb, var(--originator-court) 13%, transparent)" : "transparent",
+                    color: requesterFilter === key ? "var(--originator-court)" : "var(--on-surface-variant)",
+                  }}
+                >
+                  {name} <span style={{ fontFamily: "var(--font-mono)", opacity: 0.7 }}>{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {filtered.length === 0 ? (
             <Empty icon="bookmark_border" line="No requests here" sub="Search above to request a movie or show." />

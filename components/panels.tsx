@@ -4,7 +4,7 @@
 // stripe tiles, heartbeat status). Variant switchers from the
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus } from "@/lib/types";
 import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -1082,7 +1082,7 @@ function FlowGrid<T>({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
