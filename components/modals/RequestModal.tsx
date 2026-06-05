@@ -331,6 +331,9 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
             <span style={{ opacity: 0.6 }}>·</span>
             {req.id}
           </div>
+          {req.overview && (
+            <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", lineHeight: 1.5, marginTop: 9, marginBottom: 0 }}>{req.overview}</p>
+          )}
         </div>
       </div>
       {(u || req.requesterName) && (
@@ -383,9 +386,6 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
           </span>
         ), true)}
       </div>
-      {req.overview && (
-        <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", lineHeight: 1.5, margin: 0 }}>{req.overview}</p>
-      )}
       <Field label="Note to requester" hint="posted as an Overseerr comment">
         <textarea className="input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a comment visible in Overseerr…" style={{ ...fieldInput, resize: "vertical", fontFamily: "var(--font-body)", lineHeight: 1.5 }} />
       </Field>
