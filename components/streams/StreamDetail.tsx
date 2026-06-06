@@ -25,11 +25,11 @@ export function DChip({ tone = "neutral", strong, children }: { tone?: Tone; str
     <span
       style={{
         fontFamily: "var(--font-mono)",
-        fontSize: 9.5,
+        fontSize: 10.5,
         lineHeight: 1.5,
         padding: "1px 6px",
         borderRadius: 4,
-        fontWeight: strong ? 700 : 500,
+        fontWeight: strong ? 700 : 600,
         whiteSpace: "nowrap",
         background: `color-mix(in srgb, ${c} 14%, transparent)`,
         color: c,
@@ -61,20 +61,26 @@ function chLabel(ch?: number): string | undefined {
 }
 const isXcode = (d?: string) => d === "transcode" || d === "burn";
 
-// ── meta: season·episode · air date · rating · genres ────────
+// ── meta: season·episode/chapter · air date · rating · genres ────────
 export function StreamMeta({ s }: { s: NowPlaying }) {
   const se = s.season != null && s.episode != null ? `S${s.season} · E${s.episode}` : s.episode != null ? `E${s.episode}` : null;
   const year = s.airDate ? s.airDate.slice(0, 4) : s.year != null ? String(s.year) : null;
   const genres = s.genres?.slice(0, 3) ?? [];
-  if (!se && !year && !s.contentRating && !genres.length) return null;
+  if (!se && !year && !s.contentRating && !genres.length && !s.chapter) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
       {se && <DChip tone="neutral" strong>{se}</DChip>}
-      {year && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{year}</span>}
+      {s.chapter && <DChip tone="neutral" strong>{`CH ${s.chapter.index}/${s.chapter.count}`}</DChip>}
+      {s.chapter?.title && (
+        <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>
+          {s.chapter.title}
+        </span>
+      )}
+      {year && <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>{year}</span>}
       {s.contentRating && (
         <span
           style={{
-            fontSize: 9.5,
+            fontSize: 10.5,
             fontWeight: 700,
             letterSpacing: "0.04em",
             padding: "1px 6px",
@@ -87,7 +93,7 @@ export function StreamMeta({ s }: { s: NowPlaying }) {
         </span>
       )}
       {genres.map((g) => (
-        <span key={g} style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+        <span key={g} style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>
           {g}
         </span>
       ))}
@@ -147,8 +153,10 @@ export function StreamTech({ s }: { s: NowPlaying }) {
     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 14, rowGap: 4, alignItems: "baseline" }}>
       {rows.map((r) => (
         <React.Fragment key={r.label}>
-          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>{r.label}</span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: TONE[r.tone] }}>{r.value}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>{r.label}</span>
+          {/* neutral values brighten to on-surface for legibility on the blurred backdrop;
+              toned (good/warn/bad) values keep their signal color */}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: r.tone === "neutral" ? "var(--on-surface)" : TONE[r.tone] }}>{r.value}</span>
         </React.Fragment>
       ))}
     </div>
@@ -160,12 +168,13 @@ export function StreamTech({ s }: { s: NowPlaying }) {
 export function StreamQuality({ s }: { s: NowPlaying }) {
   const specs = [s.res !== "—" ? s.res : null, s.dynamicRange, s.framerate].filter(Boolean);
   const src = mbps(s.sourceKbps);
-  const rate = `${src && src !== s.bitrate ? `${src} → ` : ""}${s.bitrate} Mbps`;
-  if (!specs.length && !s.bitrate) return null;
+  // A "0" bitrate means the source doesn't report one (e.g. Audiobookshelf) — treat as absent.
+  const rate = s.bitrate && s.bitrate !== "0" ? `${src && src !== s.bitrate ? `${src} → ` : ""}${s.bitrate} Mbps` : null;
+  if (!specs.length && !rate) return null;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
       {specs.length > 0 && <span style={{ color: "var(--on-surface)" }}>{specs.join(" · ")}</span>}
-      <span>{rate}</span>
+      {rate && <span style={{ color: "var(--on-surface)" }}>{rate}</span>}
     </span>
   );
 }
@@ -181,9 +190,9 @@ export function StreamClient({ s }: { s: NowPlaying }) {
   ].filter((p) => p && p.length);
   if (!parts.length && !s.qualityProfile) return null;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 0 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "var(--on-surface-variant)", minWidth: 0 }}>
       <Icon name="devices" size={12} color="var(--on-surface-variant)" />
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--on-surface)", fontWeight: 500 }}>
         {parts.join(" · ")}
         {s.qualityProfile ? `${parts.length ? " · " : ""}${s.qualityProfile}` : ""}
       </span>
@@ -201,19 +210,19 @@ export function StreamNetwork({ s }: { s: NowPlaying }) {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
       {loc && <DChip tone={s.relayed ? "warn" : "neutral"} strong>{loc}</DChip>}
       {geo && (
-        <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+        <span style={{ fontSize: 11.5, color: "var(--on-surface)" }}>
           {flagEmoji(s.geo?.code)} {geo}
         </span>
       )}
       {s.ipPublic && !s.local && (
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)" }}>{s.ipPublic}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{s.ipPublic}</span>
       )}
       {/* Only flag the positive (encrypted) case. A reverse proxy / CF tunnel
           makes Plex report secure=0 for normal WAN traffic, so a red "insecure"
           chip would fire near-permanently and read as a false alarm. */}
       {s.secure === true && <Icon name="lock" size={12} color="var(--originator-own)" />}
       {bw != null && (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>
           <Icon name="speed" size={11} color="var(--on-surface-variant)" />
           {bw} Mbps
         </span>

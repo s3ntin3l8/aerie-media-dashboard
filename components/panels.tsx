@@ -256,10 +256,14 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
   const c = catColor("stream");
   const u = users.find((x) => x.id === s.user);
   const accent = s.src === "plex" ? "var(--originator-third-party)" : "var(--primary)";
+  // "0" bitrate / "—" codec mean the source doesn't report them (e.g. Audiobookshelf):
+  // show only what's real, falling back to the audio codec for audio-only sessions.
+  const rateCodec = [s.bitrate !== "0" ? `${s.bitrate} Mbps` : null, s.codec !== "—" ? s.codec : s.audioCodec].filter(Boolean).join(" · ");
   return (
     <div style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none" }}>
       <span style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 9999, background: accent }} />
-      <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} art={s.art} />
+      {/* audio covers (ABS books, albums) are square; video posters 2:3 */}
+      <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} ratio={s.kind === "track" ? 1 : 1.5} art={s.art} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
           <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: big ? 15 : 13.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -286,7 +290,9 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
             </span>
           )}
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)", color: "var(--on-surface-variant)" }}>{s.res}</span>
+          {s.res !== "—" && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)", color: "var(--on-surface-variant)" }}>{s.res}</span>
+          )}
           <span
             style={{
               fontFamily: "var(--font-mono)",
@@ -300,9 +306,11 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
           >
             {s.play === "transcode" ? `TRANSCODE${s.hwTranscode != null ? (s.hwTranscode ? " · HW" : " · SW") : ""}` : "DIRECT"}
           </span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
-            {s.bitrate} Mbps · {s.codec}
-          </span>
+          {rateCodec && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
+              {rateCodec}
+            </span>
+          )}
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--on-surface-variant)" }}>
             {s.location && (
               <span title={s.relayed ? "Relayed" : s.location.toUpperCase()} style={{ display: "inline-flex" }}>
@@ -359,12 +367,13 @@ export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: 
 // Hairline section divider used to group the card's rows.
 const DIVIDER = "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)";
 
-// Backdrop image layer: the scrim is the base, art painted on top, failing to
-// nothing. The vertical scrim keeps the lower text legible while letting the
-// art show through up top, and only turns fully solid near the bottom so the
-// card's footer rows still sit on surface.
+// Backdrop image layer: the art is blurred Tautulli-style into a soft color
+// wash (the scale-up hides the blur's edge vignette inside the overflow:hidden
+// wrapper) under a strong vertical scrim, so every text band stays legible on
+// any fanart in both themes. The scrim still turns fully solid near the bottom
+// so the card's footer rows sit on plain surface.
 const SCRIM =
-  "linear-gradient(180deg, color-mix(in srgb, var(--surface-container) 18%, transparent) 0%, color-mix(in srgb, var(--surface-container) 46%, transparent) 34%, color-mix(in srgb, var(--surface-container) 82%, transparent) 64%, var(--surface-container) 86%)";
+  "linear-gradient(180deg, color-mix(in srgb, var(--surface-container) 52%, transparent) 0%, color-mix(in srgb, var(--surface-container) 68%, transparent) 34%, color-mix(in srgb, var(--surface-container) 88%, transparent) 64%, var(--surface-container) 86%)";
 function Backdrop({ src }: { src?: string }) {
   const [imgOk, setImgOk] = useState(true);
   return (
@@ -376,7 +385,7 @@ function Backdrop({ src }: { src?: string }) {
           aria-hidden
           loading="lazy"
           onError={() => setImgOk(false)}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) saturate(1.2)", transform: "scale(1.15)" }}
         />
       )}
       <div style={{ position: "absolute", inset: 0, background: SCRIM }} />
@@ -423,29 +432,34 @@ export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/t
   const u = users.find((x) => x.id === s.user);
   const accent = s.src === "plex" ? "var(--originator-third-party)" : "var(--primary)";
   const hasBg = Boolean(s.backdrop);
-  const posterW = s.kind === "track" ? 168 : 196;
+  // Audio sessions (audiobooks, podcasts, music) carry far fewer facts than video
+  // streams, so they get a compact variant: square cover, one condensed footer row.
+  const isAudio = s.kind === "track";
 
   // Title block: name, season·episode/year/rating/genres meta, device, user.
   const titleBlock = (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-        <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 17, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {s.title}
         </span>
         {s.paused ? <Icon name="pause_circle" size={16} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={12} /> : null}
       </div>
       {s.ep && (
-        <div style={{ fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.ep}</div>
+        <div style={{ fontSize: 13, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.ep}</div>
+      )}
+      {s.narrator && (
+        <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Read by {s.narrator}</div>
       )}
       <StreamMeta s={s} />
-      <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <div style={{ fontSize: 12, color: "var(--on-surface)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         <Icon name="devices" size={12} color="var(--on-surface-variant)" />
         {s.device}
       </div>
       {role === "admin" && (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 1 }}>
           <StreamAvatar s={s} size={18} color={accent} />
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)" }}>{u ? u.name : s.user}</span>
         </span>
       )}
     </div>
@@ -461,31 +475,35 @@ export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/t
   // Card sections, composed differently per layout.
   const progressRow = (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: accent, minWidth: 40 }}>{fmtTime(cur)}</span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: accent, minWidth: 40 }}>{fmtTime(cur)}</span>
       <div style={{ flex: 1 }}>
         <ProgressBar pct={pct} color={accent} />
       </div>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", minWidth: 40, textAlign: "right" }}>{fmtTime(s.dur * 60)}</span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface)", minWidth: 40, textAlign: "right" }}>{fmtTime(s.dur * 60)}</span>
     </div>
+  );
+
+  const playChip = (
+    <span
+      style={{
+        fontFamily: "var(--font-mono)",
+        fontSize: 9.5,
+        padding: "1px 6px",
+        borderRadius: 4,
+        fontWeight: 700,
+        background: `color-mix(in srgb, ${s.play === "transcode" ? "var(--amber)" : "var(--originator-own)"} 14%, transparent)`,
+        color: s.play === "transcode" ? "var(--amber)" : "var(--originator-own)",
+      }}
+    >
+      {s.play === "transcode" ? "TRANSCODE" : "DIRECT"}
+    </span>
   );
 
   // stream: play-mode + quality headline, then the transcode spec grid
   const streamSection = (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 11, borderTop: DIVIDER }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 9.5,
-            padding: "1px 6px",
-            borderRadius: 4,
-            fontWeight: 700,
-            background: `color-mix(in srgb, ${s.play === "transcode" ? "var(--amber)" : "var(--originator-own)"} 14%, transparent)`,
-            color: s.play === "transcode" ? "var(--amber)" : "var(--originator-own)",
-          }}
-        >
-          {s.play === "transcode" ? "TRANSCODE" : "DIRECT"}
-        </span>
+        {playChip}
         <StreamQuality s={s} />
       </div>
       <StreamTech s={s} />
@@ -499,6 +517,19 @@ export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/t
       <StreamNetwork s={s} />
     </div>
   ) : null;
+
+  // Audio variant: everything below the progress bar condenses into one wrap row
+  // (play mode · quality · codec grid · client · network) — audio sessions have
+  // no video spec grid to justify the stacked sections.
+  const audioFooter = (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 11, borderTop: DIVIDER }}>
+      {playChip}
+      <StreamQuality s={s} />
+      <StreamTech s={s} />
+      <StreamClient s={s} />
+      <StreamNetwork s={s} />
+    </div>
+  );
 
   // Big cover on the left that stretches down to the connection footer, with the
   // content reflowed into the right column. The backdrop fills the card behind a
@@ -517,25 +548,30 @@ export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/t
       {hasBg && <Backdrop src={s.backdrop} />}
       {/* service tag pinned to the art on a subtle scrim pill for legibility */}
       {hasBg && (
-        <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, padding: "3px 8px", borderRadius: 999, background: "color-mix(in srgb, var(--surface-container) 68%, transparent)", backdropFilter: "blur(2px)" }}>
+        <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, padding: "3px 8px", borderRadius: 999, background: "color-mix(in srgb, var(--surface-container) 80%, transparent)", backdropFilter: "blur(8px)" }}>
           {serviceTag}
         </div>
       )}
       <div style={{ position: "relative", padding: 16, display: "flex", flexDirection: "column", gap: 13 }}>
         <span style={{ position: "absolute", left: 0, top: 2, bottom: 2, width: 3, borderRadius: 9999, background: accent }} />
-        {/* main: big cover left, content column right (poster stretches to match) */}
-        <div style={{ display: "flex", gap: 16, alignItems: "stretch" }}>
-          <PosterFill s={s} w={posterW} />
+        {/* main: cover left, content column right. Video gets the big stretching
+            poster; audio a fixed square cover (ABS/album art is square). */}
+        <div style={{ display: "flex", gap: 16, alignItems: isAudio ? "flex-start" : "stretch" }}>
+          {isAudio ? (
+            <PosterTile title={s.title} kind={s.kind} cat="stream" w={132} ratio={1} rounded={12} art={s.art} />
+          ) : (
+            <PosterFill s={s} w={196} />
+          )}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 13 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
               {titleBlock}
               {!hasBg && serviceTag}
             </div>
             {progressRow}
-            {streamSection}
+            {isAudio ? audioFooter : streamSection}
           </div>
         </div>
-        {connectionSection}
+        {!isAudio && connectionSection}
       </div>
     </div>
   );

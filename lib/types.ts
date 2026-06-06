@@ -82,6 +82,11 @@ export interface NowPlaying {
   genres?: string[];
   /** proxied user profile photo URL (/api/artwork?…&kind=avatar), if available */
   userAvatar?: string;
+  // — audiobook detail (Audiobookshelf) —
+  /** narrator(s), e.g. "Roy Dotrice" */
+  narrator?: string;
+  /** current chapter at snapshot time (index is 1-based) */
+  chapter?: { title?: string; index: number; count: number };
   // — client / app —
   /** client app platform, e.g. "Chrome", "Android", "Roku" */
   platform?: string;

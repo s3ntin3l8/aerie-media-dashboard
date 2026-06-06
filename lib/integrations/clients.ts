@@ -752,6 +752,12 @@ interface AbsSession {
   mediaPlayer?: string;
   deviceInfo?: { deviceName?: string; clientName?: string; clientVersion?: string; osName?: string };
   audioTracks?: { codec?: string }[];
+  chapters?: { id: number; start: number; end: number; title?: string }[]; // seconds
+  mediaMetadata?: {
+    narrators?: string[];
+    genres?: string[];
+    publishedYear?: string | number | null;
+  };
 }
 interface AbsOnlineUser {
   id: string;
@@ -762,26 +768,41 @@ interface AbsOnlineUser {
 function mapAbsSession(u: AbsOnlineUser): NowPlaying {
   const s = u.session!;
   const dur = s.duration ?? 0;
+  const t = s.currentTime ?? 0;
+  const meta = s.mediaMetadata;
+  // Current chapter at snapshot time (chapter bounds are in seconds, like currentTime).
+  const chIdx = s.chapters?.findIndex((c) => t >= c.start && t < c.end) ?? -1;
+  const chapter = s.chapters?.length && chIdx >= 0
+    ? { title: s.chapters[chIdx].title || undefined, index: chIdx + 1, count: s.chapters.length }
+    : undefined;
   return {
     id: `abs-${s.id}`,
     title: s.displayTitle || "—",
     kind: "track",
+    year: Number(meta?.publishedYear) || undefined,
     ep: s.displayAuthor || undefined,
     user: u.username || "—",
     src: "audiobookshelf",
     device: s.deviceInfo?.deviceName || s.deviceInfo?.clientName || "—",
     res: "—",
     play: s.playMethod === 2 ? "transcode" : "direct",
-    bitrate: "0",
-    codec: (s.audioTracks?.[0]?.codec || "—").toUpperCase(),
-    pos: dur ? (s.currentTime ?? 0) / dur : 0,
+    bitrate: "0", // ABS exposes no stream bitrate; "0" renders as absent
+    codec: "—", // no video — the audio codec lives in audioCodec (StreamTech's Audio row)
+    pos: dur ? t / dur : 0,
     dur: Math.round(dur / 60),
     paused: false,
     art: s.libraryItemId ? `/api/artwork?svc=audiobookshelf&ref=${encodeURIComponent(s.libraryItemId)}` : undefined,
+    // — title detail —
+    genres: meta?.genres?.length ? meta.genres : undefined,
+    narrator: meta?.narrators?.length ? meta.narrators.join(", ") : undefined,
+    chapter,
     // — client / app —
     product: s.mediaPlayer || undefined,
     platform: s.deviceInfo?.osName || undefined,
     productVersion: s.deviceInfo?.clientVersion || undefined,
+    // — stream specs —
+    audioCodec: (s.audioTracks?.[0]?.codec || "").toUpperCase() || undefined,
+    audioDecision: s.playMethod === 2 ? "transcode" : "direct play",
   } satisfies NowPlaying;
 }
 
