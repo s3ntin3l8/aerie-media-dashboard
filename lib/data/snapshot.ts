@@ -44,6 +44,7 @@ import {
   agregarrStatus,
   bazarrWanted,
   nzbhydra2Stats,
+  lazylibrarianLibrary,
   type ServiceHealth,
   type NodeMetrics,
   type WizarrStats,
@@ -174,7 +175,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
-  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn] = await Promise.all([
+  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
     has("audiobookshelf"),
@@ -187,6 +188,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     has("agregarr"),
     has("bazarr"),
     has("nzbhydra"),
+    has("lazylibrarian"),
   ]);
 
   // Active metrics source: honour the stored preference when its source is live,
@@ -210,7 +212,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     jfLibs, jfRecent, osVersion,
     osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
-    ttUsers, absNow,
+    ttUsers, absNow, llLib,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -253,6 +255,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     nzbhydraOn ? safe(nzbhydra2Stats) : Promise.resolve(null),
     ttOn ? safe(tautulliUsers) : Promise.resolve(null),
     absOn ? perf("live:absNowPlaying", safe(audiobookshelfNowPlaying)) : Promise.resolve(null),
+    llOn ? safe(lazylibrarianLibrary) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -352,12 +355,14 @@ export async function getSnapshot(): Promise<Snapshot> {
   // ── library: Tautulli (Plex) sections win; fall back to Jellyfin so a Jellyfin-only
   // deployment still gets library counts. 24h-plays row is Tautulli-only. ──
   const baseLibs = ttLibs && ttLibs.length > 0 ? ttLibs : (jfLibs ?? []);
-  const library: LibraryStat[] =
+  const mediaLibs: LibraryStat[] =
     baseLibs.length > 0
       ? ttLibs && ttLibs.length > 0
         ? [...baseLibs, { id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }]
         : baseLibs
       : [];
+  // Append LazyLibrarian book/audiobook stats so a books deployment still gets library counts.
+  const library: LibraryStat[] = [...mediaLibs, ...(llLib ?? [])];
 
   // recent: prefer Tautulli (Plex); fall back to Jellyfin when Plex has none.
   const recent: RecentItem[] = ttRecent && ttRecent.length > 0 ? ttRecent : (jfRecent ?? []);

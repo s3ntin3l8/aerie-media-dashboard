@@ -1898,6 +1898,54 @@ export async function nzbhydra2Stats(serviceId = "nzbhydra"): Promise<Nzbhydra2S
   });
 }
 
+// ── LazyLibrarian ──────────────────────────────────────────
+// LazyLibrarian's API is query-param auth (?apikey=) and ALWAYS answers HTTP 200 —
+// auth/other failures are signalled only in the JSON body, and the body shape varies by
+// command (getAllBooks returns a bare array; a failure returns an object). So we validate
+// the shape ourselves and throw on anything unexpected, letting the facade's safe() degrade
+// the panel rather than surfacing a bad key as an empty-but-healthy library.
+
+interface LazyLibrarianBook {
+  BookID?: string;
+  AuthorID?: string;
+  Status?: string; // ebook status: "Open" = on disk, "Wanted", "Snatched", "Skipped", "Ignored"
+  AudioStatus?: string; // audiobook status, same vocabulary
+}
+
+const LL_ON_DISK = new Set(["open", "have"]);
+
+/**
+ * LazyLibrarian library stats, derived from getAllBooks (one fast call, cached 10 min).
+ * Emits a headline "Books" total plus Audiobooks / eBooks / Wanted rows when non-trivial.
+ */
+export async function lazylibrarianLibrary(): Promise<LibraryStat[]> {
+  return cached("lazylibrarian:library", 10 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("lazylibrarian");
+    const data = await fetchJson<unknown>(`${baseUrl}/api?cmd=getAllBooks&apikey=${encodeURIComponent(apiKey)}`, {
+      service: "lazylibrarian",
+    });
+    // Success is a bare array; failure is an object ({Success:false,...}). Guard explicitly.
+    if (!Array.isArray(data)) throw new IntegrationError("lazylibrarian", "getAllBooks did not return a list (bad key?)");
+    const books = data as LazyLibrarianBook[];
+
+    const isOnDisk = (s?: string) => LL_ON_DISK.has((s ?? "").toLowerCase());
+    const isWanted = (s?: string) => (s ?? "").toLowerCase() === "wanted";
+
+    const authors = new Set(books.map((b) => b.AuthorID).filter(Boolean)).size;
+    const audioHave = books.filter((b) => isOnDisk(b.AudioStatus)).length;
+    const ebookHave = books.filter((b) => isOnDisk(b.Status)).length;
+    const wanted = books.filter((b) => isWanted(b.Status) || isWanted(b.AudioStatus)).length;
+
+    const out: LibraryStat[] = [
+      { id: "ll-books", label: "Books", count: fmt(books.length), icon: "menu_book", delta: `${fmt(authors)} authors` },
+    ];
+    if (audioHave > 0) out.push({ id: "ll-audiobooks", label: "Audiobooks", count: fmt(audioHave), icon: "headphones", delta: "on disk" });
+    if (ebookHave > 0) out.push({ id: "ll-ebooks", label: "eBooks", count: fmt(ebookHave), icon: "book_2", delta: "on disk" });
+    if (wanted > 0) out.push({ id: "ll-wanted", label: "Wanted", count: fmt(wanted), icon: "bookmark", delta: "books & audio" });
+    return out;
+  });
+}
+
 // ── Version detection ──────────────────────────────────────
 
 type ServiceKind =
