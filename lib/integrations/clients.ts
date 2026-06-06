@@ -1915,6 +1915,7 @@ type ServiceKind =
   | "gatus" // /api/v1/endpoints/statuses (optional Bearer; no version field)
   | "beszel" // PocketBase auth → /api/health (no version field)
   | "unraid" // GraphQL /graphql (x-api-key) → info.versions.core.unraid
+  | "lazylibrarian" // /api?cmd=getVersion&apikey= → current_version (short SHA); always HTTP 200
   | "plex"; // /identity (no auth needed) → MediaContainer.version
 
 function serviceKind(id: string): ServiceKind | null {
@@ -1935,6 +1936,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("gatus")) return "gatus";
   if (l.includes("beszel")) return "beszel";
   if (l.includes("unraid")) return "unraid";
+  if (l.includes("lazylib")) return "lazylibrarian";
   if (l.includes("plex")) return "plex";
   return null;
 }
@@ -2058,6 +2060,17 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     const v = nested?.data?.info?.versions?.core?.unraid
       ?? (await ask("{ info { versions { unraid } } }"))?.data?.info?.versions?.unraid;
     return normalizeVersion(v);
+  }
+  if (kind === "lazylibrarian") {
+    // LazyLibrarian always answers HTTP 200; auth failure is signalled only in the body
+    // ({Success:false, Error:{Code:401}}), so check Success explicitly or a bad key would
+    // falsely pass the connection test. Version fields are flat at top level, not under Data.
+    const d = await fetchJson<{ Success?: boolean; current_version?: string }>(
+      `${b}/api?cmd=getVersion&apikey=${encodeURIComponent(apiKey)}`,
+      { service: "version-detect" },
+    );
+    if (!d.Success) throw new IntegrationError("version-detect", "LazyLibrarian auth failed");
+    return normalizeVersion(d.current_version) ?? "";
   }
   if (kind === "plex") {
     // /identity is unauthenticated and returns the server version as JSON (Accept: application/json
