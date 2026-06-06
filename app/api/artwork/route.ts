@@ -41,6 +41,11 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
       const imageType = kind === "backdrop" ? "Backdrop" : "Primary";
       return `${base}/Items/${encodeURIComponent(ref)}/Images/${imageType}?fillHeight=${h}&fillWidth=${w}&quality=${kind === "backdrop" ? 85 : 90}${apiKey ? `&api_key=${apiKey}` : ""}`;
     }
+    case "audiobookshelf":
+      if (!apiKey) return null;
+      // ref is a library-item id (li_…); the cover endpoint accepts ?token= for GET requests.
+      // ABS now-playing only requests "poster" kind (tracks have no backdrop).
+      return `${base}/api/items/${encodeURIComponent(ref)}/cover?token=${encodeURIComponent(apiKey)}`;
     case "overseerr":
       // ref is a TMDB poster_path (e.g. "/b8VtW6I.jpg"); proxy through to avoid
       // exposing the TMDB CDN directly and to apply our cache headers.

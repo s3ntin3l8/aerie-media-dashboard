@@ -13,6 +13,7 @@ import {
   tautulliActivity,
   tautulliUsers,
   jellyfinNowPlaying,
+  audiobookshelfNowPlaying,
   jellyfinLibraries,
   jellyfinRecentlyAdded,
   overseerrRequests,
@@ -173,9 +174,10 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
-  const [ttOn, jfOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn] = await Promise.all([
+  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
+    has("audiobookshelf"),
     has("overseerr"),
     has("sonarr"),
     has("radarr"),
@@ -208,7 +210,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     jfLibs, jfRecent, osVersion,
     osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
-    ttUsers,
+    ttUsers, absNow,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -250,6 +252,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     bazarrOn ? safe(bazarrWanted) : Promise.resolve(null),
     nzbhydraOn ? safe(nzbhydra2Stats) : Promise.resolve(null),
     ttOn ? safe(tautulliUsers) : Promise.resolve(null),
+    absOn ? perf("live:absNowPlaying", safe(audiobookshelfNowPlaying)) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -286,7 +289,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     ...healthFor(c.id, c.name, c.monitoringKey),
   }));
 
-  const nowPlaying: NowPlaying[] = [...(ttAct?.sessions ?? []), ...(jfNow ?? [])];
+  const nowPlaying: NowPlaying[] = [...(ttAct?.sessions ?? []), ...(jfNow ?? []), ...(absNow ?? [])];
   const queue: QueueItem[] = [...(sonarrQ ?? []), ...(radarrQ ?? [])];
   const bandwidth = ttAct ? { totalMbps: ttAct.totalKbps / 1000, wanMbps: ttAct.wanKbps / 1000 } : null;
 

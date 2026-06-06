@@ -736,6 +736,64 @@ export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
     });
 }
 
+// ── Audiobookshelf — now playing ───────────────────────────
+// ABS exposes active listening via GET /api/users/online (admin-only): each online user carries
+// their open `session` (User.toJSONForPublic → PlaybackSession.toJSONForClient) or null when idle.
+// duration/currentTime are in SECONDS (not Jellyfin ticks). Books and podcasts both map to "track".
+interface AbsSession {
+  id: string;
+  mediaType?: "book" | "podcast";
+  displayTitle?: string;
+  displayAuthor?: string;
+  libraryItemId?: string;
+  duration?: number; // seconds
+  currentTime?: number; // seconds
+  playMethod?: number; // 0 directPlay, 1 directStream, 2 transcode, 3 local
+  mediaPlayer?: string;
+  deviceInfo?: { deviceName?: string; clientName?: string; clientVersion?: string; osName?: string };
+  audioTracks?: { codec?: string }[];
+}
+interface AbsOnlineUser {
+  id: string;
+  username?: string;
+  session?: AbsSession | null;
+}
+
+function mapAbsSession(u: AbsOnlineUser): NowPlaying {
+  const s = u.session!;
+  const dur = s.duration ?? 0;
+  return {
+    id: `abs-${s.id}`,
+    title: s.displayTitle || "—",
+    kind: "track",
+    ep: s.displayAuthor || undefined,
+    user: u.username || "—",
+    src: "audiobookshelf",
+    device: s.deviceInfo?.deviceName || s.deviceInfo?.clientName || "—",
+    res: "—",
+    play: s.playMethod === 2 ? "transcode" : "direct",
+    bitrate: "0",
+    codec: (s.audioTracks?.[0]?.codec || "—").toUpperCase(),
+    pos: dur ? (s.currentTime ?? 0) / dur : 0,
+    dur: Math.round(dur / 60),
+    paused: false,
+    art: s.libraryItemId ? `/api/artwork?svc=audiobookshelf&ref=${encodeURIComponent(s.libraryItemId)}` : undefined,
+    // — client / app —
+    product: s.mediaPlayer || undefined,
+    platform: s.deviceInfo?.osName || undefined,
+    productVersion: s.deviceInfo?.clientVersion || undefined,
+  } satisfies NowPlaying;
+}
+
+export async function audiobookshelfNowPlaying(): Promise<NowPlaying[]> {
+  const { baseUrl, apiKey } = await creds("audiobookshelf");
+  const data = await fetchJson<{ usersOnline?: AbsOnlineUser[] }>(`${baseUrl}/api/users/online`, {
+    service: "audiobookshelf",
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  return (data.usersOnline ?? []).filter((u) => u.session).map((u) => mapAbsSession(u));
+}
+
 // ── Jellyfin — library counts (cached) ─────────────────────
 export async function jellyfinLibraries(): Promise<LibraryStat[]> {
   return cached("jellyfin:libraries", 10 * 60 * 1000, async () => {
