@@ -1922,12 +1922,16 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     return normalizeVersion(d.info?.version) ?? "";
   }
   if (kind === "audiobookshelf") {
-    // Hit an authenticated endpoint so a bad token fails; no plain version endpoint.
+    // Validate the token against an authenticated endpoint so a bad key fails the
+    // connection test, then read the public /status endpoint for the server version.
     await fetchJson<unknown>(`${b}/api/libraries`, {
       service: "version-detect",
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     });
-    return "";
+    const d = await fetchJson<{ serverVersion?: string }>(`${b}/status`, {
+      service: "version-detect",
+    });
+    return normalizeVersion(d.serverVersion) ?? "";
   }
   if (kind === "nzbhydra") {
     // Spring Boot actuator /info is empty in the default LSIO package; use the internal
