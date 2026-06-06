@@ -373,7 +373,7 @@ const DIVIDER = "1px solid color-mix(in srgb, var(--outline-variant) 50%, transp
 // every text band stays legible on any fanart in both themes. The scrim still
 // turns fully solid near the bottom so the card's footer rows sit on plain surface.
 const SCRIM =
-  "linear-gradient(180deg, color-mix(in srgb, var(--surface-container) 52%, transparent) 0%, color-mix(in srgb, var(--surface-container) 68%, transparent) 34%, color-mix(in srgb, var(--surface-container) 88%, transparent) 64%, var(--surface-container) 86%)";
+  "linear-gradient(180deg, color-mix(in srgb, var(--surface-container) 32%, transparent) 0%, color-mix(in srgb, var(--surface-container) 54%, transparent) 34%, color-mix(in srgb, var(--surface-container) 82%, transparent) 64%, var(--surface-container) 86%)";
 function Backdrop({ src }: { src?: string }) {
   const [imgOk, setImgOk] = useState(true);
   return (
