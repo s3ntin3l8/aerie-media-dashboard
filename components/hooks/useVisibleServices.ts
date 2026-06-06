@@ -35,7 +35,7 @@ export function useVisibleServices(mode: VisibilityMode): Service[] {
   const { role } = usePortal();
 
   if (mode === "bare") {
-    return services.filter((s) => isVisible(s.id, role, visibility));
+    return services.filter((s) => isVisible(s, role, visibility));
   }
 
   if (role === "admin") return services;
@@ -44,13 +44,13 @@ export function useVisibleServices(mode: VisibilityMode): Service[] {
     // Exclude infra category, exclude the metrics-only sources (prometheus,
     // beszel) by id, then apply the visibility matrix (opt-out per group).
     return services.filter(
-      (s) => s.cat !== "infra" && s.id !== "prometheus" && s.id !== "beszel" && isVisible(s.id, role, visibility)
+      (s) => s.cat !== "infra" && s.id !== "prometheus" && s.id !== "beszel" && isVisible(s, role, visibility)
     );
   }
 
   // mode === "status": exclude infra category; prometheus stays visible
   // (it's a monitored service in the health list even if not launchable).
   return services.filter(
-    (s) => s.cat !== "infra" && isVisible(s.id, role, visibility)
+    (s) => s.cat !== "infra" && isVisible(s, role, visibility)
   );
 }

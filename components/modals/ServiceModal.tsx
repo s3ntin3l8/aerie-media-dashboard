@@ -4,8 +4,9 @@
 // Wired to real server actions by the Admin view. Key field is
 // blank-means-keep in edit mode to avoid overwriting the secret.
 // ============================================================
-import React, { useEffect, useState } from "react";
-import type { Service } from "@/lib/types";
+import React, { useEffect, useRef, useState } from "react";
+import type { Category, Service } from "@/lib/types";
+import { defaultVisibleToMembers } from "@/lib/visibility";
 import { Icon, Divider, Heartbeat, StatusDot, catColor } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, ToggleRow, Toggle, CatPicker, fieldInput } from "@/components/modals/ModalShell";
 import { IconPicker } from "@/components/modals/IconPicker";
@@ -201,17 +202,31 @@ export function ServiceModal({
   const [revealKey, setRevealKey] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnStatus>({ state: "idle" });
+  // Tracks whether the admin manually changed a visibility toggle in this session,
+  // so the category-driven default (below) stops overriding their explicit choice.
+  const visTouched = useRef(false);
 
   useEffect(() => {
     if (open) {
       setF(init());
       setVis(initialVisibility);
+      visTouched.current = false;
       setRevealKey(false);
       setDetecting(false);
       setConnStatus({ state: "idle" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, service?.id, mode]);
+
+  // Category-driven default for the member ("friends") group when ADDING a service:
+  // streaming/requests default visible, infra/monitoring/automation default admin-only.
+  // Re-seeds when the admin changes the category (or a name preset flips it), unless
+  // they've already toggled visibility by hand. Edits keep the stored visibility.
+  useEffect(() => {
+    if (!open || editing || visTouched.current) return;
+    setVis((p) => ({ ...p, friends: defaultVisibleToMembers(f.cat as Category) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.cat, open]);
 
   // The server calls the internal/LAN URL when set; mirror that here so the test/detect
   // probes the same endpoint the snapshot will actually hit.
@@ -501,7 +516,7 @@ export function ServiceModal({
                       always
                     </span>
                   ) : (
-                    <Toggle on={vis[g.name] ?? false} onChange={(v) => setVis((p) => ({ ...p, [g.name]: v }))} size="sm" color="var(--originator-court)" />
+                    <Toggle on={vis[g.name] ?? false} onChange={(v) => { visTouched.current = true; setVis((p) => ({ ...p, [g.name]: v })); }} size="sm" color="var(--originator-court)" />
                   )}
                 </div>
               );

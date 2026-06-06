@@ -196,13 +196,13 @@ export function Rail() {
   // Resolve pinned ids to live services, dropping any deleted / not-visible ones.
   const favoriteServices = favorites
     .map((id) => services.find((s) => s.id === id))
-    .filter((s): s is Service => s != null && isVisible(s.id, role, visibility));
+    .filter((s): s is Service => s != null && isVisible(s, role, visibility));
 
   // The last-opened service gets a transient jump-back slot — unless it's already
   // pinned (no duplicate) or no longer a visible service.
   const recentService =
     lastOpened && !favorites.includes(lastOpened)
-      ? (services.find((s) => s.id === lastOpened && isVisible(s.id, role, visibility)) ?? null)
+      ? (services.find((s) => s.id === lastOpened && isVisible(s, role, visibility)) ?? null)
       : null;
 
   return (

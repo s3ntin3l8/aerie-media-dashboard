@@ -862,7 +862,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
 export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void; fill?: boolean }) {
   const { services, visibility } = useData();
   const { role } = usePortal();
-  const list = services.filter((s) => s.central && isVisible(s.id, role, visibility));
+  const list = services.filter((s) => s.central && isVisible(s, role, visibility));
   // In the modular grid (fill) a tile is absolutely positioned, so returning null
   // would leave an empty hole — render a graceful empty card instead.
   if (list.length === 0)
