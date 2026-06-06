@@ -416,10 +416,17 @@ export function RequestModal({
   onSubmit: (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => void | Promise<SubmitResult | void>;
   onAct: (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => void;
 }) {
-  const { users } = useData();
+  const { users, services } = useData();
   const { user } = usePortal();
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const review = mode === "review";
+
+  const overseerrSvc = services.find((s) => s.id === "overseerr");
+  const overseerrBase = overseerrSvc ? `${overseerrSvc.scheme}://${overseerrSvc.host}` : null;
+  const overseerrLink =
+    review && request?.tmdbId && overseerrBase
+      ? `${overseerrBase}/${request.kind === "series" ? "tv" : "movie"}/${request.tmdbId}`
+      : null;
 
   const [q, setQ] = useState("");
   const [pick, setPick] = useState<DiscoverItem | null>(null);
@@ -554,7 +561,13 @@ export function RequestModal({
     : "Search the catalog and send it to the request queue.";
 
   return (
-    <ModalShell open={open} onClose={onClose} accent={REQ_C} icon="playlist_add" title={title} sub={sub} footer={footer} width={review ? 560 : 600}>
+    <ModalShell open={open} onClose={onClose} accent={REQ_C} icon="playlist_add" title={title} sub={sub} footer={footer} width={review ? 560 : 600}
+      headerActions={overseerrLink ? (
+        <a href={overseerrLink} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ padding: 7, marginTop: -2 }} title="Open in Overseerr">
+          <Icon name="open_in_new" size={18} />
+        </a>
+      ) : undefined}
+    >
       {open && review && request && (
         decision ? (
           <ResultPanel

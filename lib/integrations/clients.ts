@@ -1118,6 +1118,7 @@ async function fetchOverseerrRequests(): Promise<MediaRequest[]> {
         return pid != null ? (map[pid] ?? `Profile ${pid}`) : undefined;
       })(),
       mediaOverseerrId: r.media?.id,
+      tmdbId: r.media?.tmdbId,
       modified: r.updatedAt ?? r.createdAt,
       fileInfo: r.type === "movie" && r.media?.tmdbId ? fileIndex.get(r.media.tmdbId) : undefined,
     };

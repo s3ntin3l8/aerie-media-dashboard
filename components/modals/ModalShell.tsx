@@ -23,6 +23,7 @@ export function ModalShell({
   children,
   footer,
   width = 600,
+  headerActions,
 }: {
   open: boolean;
   onClose: () => void;
@@ -34,6 +35,7 @@ export function ModalShell({
   children?: React.ReactNode;
   footer?: React.ReactNode;
   width?: number;
+  headerActions?: React.ReactNode;
 }) {
   const { setModalOpen } = usePortal();
   // Let the portal know a modal owns the keyboard while open.
@@ -99,6 +101,7 @@ export function ModalShell({
             <h2 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em", color: "var(--on-surface)", lineHeight: 1.15 }}>{title}</h2>
             {sub && <div style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 3, lineHeight: 1.45 }}>{sub}</div>}
           </div>
+          {headerActions}
           <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: 7, marginTop: -2, marginRight: -4 }} title="Close (esc)">
             <Icon name="close" size={18} />
           </button>

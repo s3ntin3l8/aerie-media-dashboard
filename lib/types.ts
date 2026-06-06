@@ -209,6 +209,8 @@ export interface MediaRequest {
   qualityProfile?: string;
   /** Overseerr's internal media record id (used for posting comments). */
   mediaOverseerrId?: number;
+  /** TMDB ID for the media item — used to construct Overseerr deep-links. */
+  tmdbId?: number;
   /** ISO timestamp of last modification (status change etc.) — used for sort-by-modified. */
   modified?: string;
   /** Actual downloaded file quality from Radarr (movies only). */
