@@ -367,11 +367,11 @@ export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: 
 // Hairline section divider used to group the card's rows.
 const DIVIDER = "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)";
 
-// Backdrop image layer: the art is blurred Tautulli-style into a soft color
-// wash (the scale-up hides the blur's edge vignette inside the overflow:hidden
-// wrapper) under a strong vertical scrim, so every text band stays legible on
-// any fanart in both themes. The scrim still turns fully solid near the bottom
-// so the card's footer rows sit on plain surface.
+// Backdrop image layer: the art is softly blurred (enough to kill local contrast
+// while keeping the fanart recognizable; the scale-up hides the blur's edge
+// vignette inside the overflow:hidden wrapper) under a strong vertical scrim, so
+// every text band stays legible on any fanart in both themes. The scrim still
+// turns fully solid near the bottom so the card's footer rows sit on plain surface.
 const SCRIM =
   "linear-gradient(180deg, color-mix(in srgb, var(--surface-container) 52%, transparent) 0%, color-mix(in srgb, var(--surface-container) 68%, transparent) 34%, color-mix(in srgb, var(--surface-container) 88%, transparent) 64%, var(--surface-container) 86%)";
 function Backdrop({ src }: { src?: string }) {
@@ -385,7 +385,7 @@ function Backdrop({ src }: { src?: string }) {
           aria-hidden
           loading="lazy"
           onError={() => setImgOk(false)}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(20px) saturate(1.2)", transform: "scale(1.15)" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(12px) saturate(1.2)", transform: "scale(1.08)" }}
         />
       )}
       <div style={{ position: "absolute", inset: 0, background: SCRIM }} />
