@@ -423,10 +423,6 @@ export function RequestModal({
 
   const overseerrSvc = services.find((s) => s.id === "overseerr");
   const overseerrBase = overseerrSvc ? `${overseerrSvc.scheme}://${overseerrSvc.host}` : null;
-  const overseerrLink =
-    review && request?.tmdbId && overseerrBase
-      ? `${overseerrBase}/${request.kind === "series" ? "tv" : "movie"}/${request.tmdbId}`
-      : null;
 
   const [q, setQ] = useState("");
   const [pick, setPick] = useState<DiscoverItem | null>(null);
@@ -440,6 +436,15 @@ export function RequestModal({
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<"approved" | "declined" | null>(null);
+
+  const overseerrLink = (() => {
+    if (!overseerrBase) return null;
+    if (review && request?.tmdbId)
+      return `${overseerrBase}/${request.kind === "series" ? "tv" : "movie"}/${request.tmdbId}`;
+    if (!review && pick)
+      return `${overseerrBase}/${pick.kind === "series" ? "tv" : "movie"}/${pick.id}`;
+    return null;
+  })();
 
   const choosePick = (d: DiscoverItem, selectedSeasons?: number[]) => {
     setPick(d);
