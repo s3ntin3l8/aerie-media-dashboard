@@ -21,6 +21,8 @@ export interface Service {
   icon: string;
   logoSlug?: string;
   embeddable: boolean;
+  /** false → fully disabled: hidden from every end-user surface and never polled (config kept) */
+  active: boolean;
   central?: boolean;
   centralLabel?: string;
   host: string;

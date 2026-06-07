@@ -30,6 +30,8 @@ export interface ServiceConfig {
   monitoringKey: string | null;
   /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts) */
   insecureTls: boolean;
+  /** false → fully disabled: hidden from every end-user surface and never polled (config kept) */
+  active: boolean;
 }
 
 export async function getServiceConfigs(): Promise<ServiceConfig[]> {
@@ -53,6 +55,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       sortOrder: r.sortOrder,
       monitoringKey: r.monitoringKey ?? null,
       insecureTls: r.insecureTls,
+      active: r.active,
     }));
   } catch {
     return [];

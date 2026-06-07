@@ -77,6 +77,7 @@ export interface ServiceInput {
   note?: string | null;
   monitoringKey?: string | null;
   insecureTls?: boolean;
+  active?: boolean;
 }
 
 /** Create or update a service registry entry. */
@@ -99,11 +100,20 @@ export async function upsertService(input: ServiceInput) {
     note: input.note ?? null,
     monitoringKey: input.monitoringKey ?? null,
     insecureTls: input.insecureTls ?? false,
+    active: input.active ?? true,
   };
   await db
     .insert(schema.services)
     .values(values)
     .onConflictDoUpdate({ target: schema.services.id, set: values });
+  revalidatePath("/admin");
+}
+
+/** Flip a service active/inactive without opening the edit modal (inline Admin toggle). */
+export async function setServiceActive(id: string, active: boolean) {
+  await requireAdmin();
+  await ensureDb();
+  await db.update(schema.services).set({ active }).where(eq(schema.services.id, id));
   revalidatePath("/admin");
 }
 

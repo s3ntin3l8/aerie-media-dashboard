@@ -189,12 +189,18 @@ export async function getSnapshot(): Promise<Snapshot> {
   const tStart = Date.now();
   const [configs, groups, visibility] = await Promise.all([getServiceConfigs(), getGroups(), getVisibility()]);
 
-  // Which services have a stored secret → eligible for a live call.
+  // Which services are eligible for a live call. A service marked inactive is fully
+  // disabled — never polled — so isActive() gates every live call below (folded into
+  // has()/gatusOn/promOn, from which all the per-service *On flags derive).
+  // Footgun by design: marking the *gatus* row inactive stops ALL heartbeats portal-wide,
+  // and disabling *prometheus*/*beszel* stops the System Status metrics cards — that's the
+  // intended "fully disable" behaviour for those infra rows.
+  const isActive = (id: string) => configs.some((c) => c.id === id && c.active);
   // Gatus and Prometheus only need a baseUrl (API key is optional), so gate them on config
   // existence rather than has() — using has() would silently skip no-auth deployments.
-  const has = async (id: string) => (await getServiceSecret(id)) != null;
-  const gatusOn = configs.some((c) => c.id === "gatus");
-  const promOn = configs.some((c) => c.id === "prometheus");
+  const has = async (id: string) => isActive(id) && (await getServiceSecret(id)) != null;
+  const gatusOn = configs.some((c) => c.id === "gatus" && c.active);
+  const promOn = configs.some((c) => c.id === "prometheus" && c.active);
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
   const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn] = await Promise.all([
@@ -323,6 +329,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     icon: c.icon,
     logoSlug: c.logoSlug ?? undefined,
     embeddable: c.embeddable,
+    active: c.active,
     central: c.central,
     centralLabel: c.centralLabel ?? undefined,
     host: c.host,

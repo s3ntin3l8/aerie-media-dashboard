@@ -24,6 +24,7 @@ export interface ServiceForm {
   insecureTls: boolean;
   version: string;
   embeddable: boolean;
+  active: boolean;
   central: boolean;
   centralLabel: string;
   note: string;
@@ -160,6 +161,7 @@ export function ServiceModal({
     insecureTls: false,
     version: "",
     embeddable: true,
+    active: true,
     central: false,
     centralLabel: "",
     note: "",
@@ -188,6 +190,7 @@ export function ServiceModal({
         insecureTls: service.insecureTls ?? false,
         version: service.version || "",
         embeddable: service.embeddable,
+        active: service.active,
         central: Boolean(service.central),
         centralLabel: service.centralLabel || "",
         note: service.note || "",
@@ -315,6 +318,16 @@ export function ServiceModal({
         <section>
           <SectionLabel>Identity</SectionLabel>
           <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+            <ToggleRow
+              on={f.active}
+              onChange={(v) => set("active", v)}
+              color="var(--originator-own)"
+              icon={f.active ? "check_circle" : "do_not_disturb_on"}
+              title="Service is active"
+              desc={f.active
+                ? "Live on the portal — visible to its groups and polled for status."
+                : "Disabled — hidden from everyone and not polled. Config & key are kept."}
+            />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12 }}>
               <Field label="Service name">
                 <input

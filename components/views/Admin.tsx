@@ -7,9 +7,11 @@ import { useRouter } from "next/navigation";
 import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { setVisibility, upsertService, setServiceSecret, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota } from "@/app/(portal)/admin/actions";
+import { setVisibility, upsertService, setServiceSecret, setServiceActive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
+import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
+import { statusColor, statusWord, uptimeText } from "@/lib/display";
 import { PageHeader } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { Toast } from "@/components/modals/Toast";
@@ -18,11 +20,55 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 type AdminSortCol = "name" | "host" | "embed";
 type AdminSortDir = "asc" | "desc";
 
+// Small Gatus-health "light" overlaid on a service icon's top-right corner: green = up,
+// amber = degraded, red = down, dim grey = no monitoring data. Sits on a position:relative
+// wrapper (NOT inside ServiceLogo, whose overflow:hidden would clip it). Colours reuse the
+// canonical statusColor() so they match StatusDot / Heartbeat everywhere else.
+function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest)" }: {
+  service: Pick<Service, "status" | "uptime">;
+  dot?: number;
+  ring?: string;
+}) {
+  const title = service.status === "unknown" ? "No monitoring data" : `${statusWord(service.status)} · ${uptimeText(service)}`;
+  return (
+    <span
+      title={title}
+      style={{
+        position: "absolute",
+        top: -2,
+        right: -2,
+        width: dot,
+        height: dot,
+        borderRadius: 9999,
+        background: statusColor(service.status),
+        border: `2px solid ${ring}`,
+        boxSizing: "border-box",
+      }}
+    />
+  );
+}
+
 function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void }) {
-  const { services } = useData();
+  // Admin sees the FULL list (incl. inactive); every other surface gets active-only via useData().services.
+  const { allServices: services } = useData();
   const { favorites, toggleFavorite } = usePortal();
-  const cols = "1.6fr 1fr 0.7fr 1.2fr 0.5fr";
+  const patchData = usePatchData();
+  const [, startActiveTransition] = useTransition();
+  const cols = "1.6fr 1fr 0.6fr 0.6fr 1.1fr 0.5fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
+
+  // Optimistically flip active in the snapshot (so the row dims + the service drops from
+  // every user surface instantly), then persist; revert on failure.
+  const toggleActive = (s: Service) => {
+    const next = !s.active;
+    const flip = (a: boolean) =>
+      patchData((snap) => ({ ...snap, services: snap.services.map((sv) => (sv.id === s.id ? { ...sv, active: a } : sv)) }));
+    flip(next);
+    startActiveTransition(async () => {
+      try { await setServiceActive(s.id, next); }
+      catch { flip(!next); }
+    });
+  };
   const sorted = useMemo(() => [...services].sort((a, b) => {
     const d = sort.dir === "asc" ? 1 : -1;
     switch (sort.col) {
@@ -59,16 +105,27 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
         </select>
         {sorted.map((s) => {
           const pinned = favorites.includes(s.id);
+          const dim = s.active ? undefined : 0.5;
           return (
             <div key={s.id} className="card" style={{ padding: 15, borderRadius: 18, background: "var(--surface-container-lowest)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <ServiceLogo service={s} size={36} radius={9} />
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, opacity: dim }}>
+                <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+                  <ServiceLogo service={s} size={36} radius={9} />
+                  <StatusLight service={s} dot={12} />
+                </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "var(--on-surface)" }}>{s.name}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: "var(--on-surface)" }}>{s.name}</span>
+                    {!s.active && <Pill rawColor="var(--on-surface-variant)">inactive</Pill>}
+                  </div>
                   <div style={{ marginTop: 2 }}><CatBadge cat={s.cat} size="xs" /></div>
                 </div>
               </div>
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Eyebrow style={{ width: 52, flexShrink: 0 }}>Active</Eyebrow>
+                  <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
+                </div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>Host</Eyebrow>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.host}</span>
@@ -146,25 +203,34 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
               </button>
             );
           })}
+          <Eyebrow>Active</Eyebrow>
           <Eyebrow>API key</Eyebrow>
           <span />
         </div>
         {sorted.map((s, i) => {
           const pinned = favorites.includes(s.id);
+          const dim = s.active ? undefined : 0.5;
           return (
             <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <ServiceLogo service={s} size={28} radius={7} />
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, opacity: dim }}>
+                <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+                  <ServiceLogo service={s} size={28} radius={7} />
+                  <StatusLight service={s} dot={10} />
+                </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</span>
+                    {!s.active && <Pill rawColor="var(--on-surface-variant)">inactive</Pill>}
+                  </div>
                   <div style={{ fontSize: 10 }}>
                     <CatBadge cat={s.cat} size="xs" />
                   </div>
                 </div>
               </div>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.host}</span>
-              <span>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
-              <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
+              <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
+              <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
+              <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", opacity: dim }}>
                 <Icon name="lock" size={12} color="var(--originator-own)" />
                 ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
               </span>
@@ -359,7 +425,8 @@ function AdminMembers({ isMobile }: { isMobile: boolean }) {
 }
 
 function AdminVisibility({ isMobile }: { isMobile: boolean }) {
-  const { services, groups, visibility } = useData();
+  // Admin config surface: show the FULL list so visibility can be set on inactive rows too.
+  const { allServices: services, groups, visibility } = useData();
   const [, startTransition] = useTransition();
   // Optimistic local state keyed by `${serviceId}:${groupName}`.
   const [state, setState] = useState<Record<string, boolean>>(() => {
@@ -548,6 +615,7 @@ export function Admin() {
       baseUrl: `${form.scheme}://${form.host.trim()}`,
       internalUrl,
       embeddable: form.embeddable,
+      active: form.active,
       central: form.central,
       centralLabel: form.central ? form.centralLabel || null : null,
       version: form.version || null,
@@ -562,8 +630,8 @@ export function Admin() {
 
     // Optimistically update the local snapshot so the service appears immediately.
     const optimisticService: Service = editing
-      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
-      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
+      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
     // Dedupe by id: in add mode the service may already be in the snapshot from a prior
     // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).
     patchData((s) => ({

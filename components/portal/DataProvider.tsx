@@ -10,19 +10,28 @@
 // successful fetch so progress bars can interpolate from a known
 // server-confirmed position rather than from component mount time.
 // ============================================================
-import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Snapshot } from "@/lib/data/snapshot";
+import type { Service } from "@/lib/types";
 
 const POLL_ACTIVE_MS = 3_000;
 const POLL_IDLE_MS = 12_000;
 
-const DataCtx = createContext<Snapshot | null>(null);
+/**
+ * What `useData()` exposes: the snapshot with `services` narrowed to **active-only**
+ * (inactive services are fully disabled — hidden from every consumer) plus `allServices`,
+ * the full list including inactive rows, which only the Admin management surfaces read.
+ * Filtering here is the single chokepoint that enforces "fully disable" uniformly.
+ */
+export type ClientData = Snapshot & { allServices: Service[] };
+
+const DataCtx = createContext<ClientData | null>(null);
 const RefreshCtx = createContext<() => void>(() => {});
 const PatchCtx = createContext<(patch: (s: Snapshot) => Snapshot) => void>(() => {});
 /** Epoch-ms timestamp of the most-recent successful snapshot fetch. */
 const FetchedAtCtx = createContext<number>(Date.now());
 
-export function useData(): Snapshot {
+export function useData(): ClientData {
   const v = useContext(DataCtx);
   if (!v) throw new Error("useData must be used within <DataProvider>");
   return v;
@@ -115,11 +124,20 @@ export function DataProvider({ initial, initialStale = false, children }: { init
     };
   }, [fetchSnapshot, scheduleNext, initialStale]);
 
+  // Single chokepoint: `services` is narrowed to active-only for every consumer, while
+  // `allServices` keeps the full list (incl. inactive) for the Admin management surfaces.
+  // The internal `data` state stays full, so polling + patchData are unaffected.
+  const clientData = useMemo<ClientData>(() => ({
+    ...data,
+    allServices: data.services,
+    services: data.services.filter((s) => s.active),
+  }), [data]);
+
   return (
     <FetchedAtCtx.Provider value={fetchedAt}>
       <RefreshCtx.Provider value={fetchSnapshot}>
         <PatchCtx.Provider value={patchData}>
-          <DataCtx.Provider value={data}>{children}</DataCtx.Provider>
+          <DataCtx.Provider value={clientData}>{children}</DataCtx.Provider>
         </PatchCtx.Provider>
       </RefreshCtx.Provider>
     </FetchedAtCtx.Provider>
