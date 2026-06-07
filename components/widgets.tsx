@@ -325,6 +325,36 @@ export function Nzbhydra2Widget({ fill }: { fill?: boolean } = {}) {
   );
 }
 
+// ── LAZYLIBRARIAN — book / audiobook pipeline stats ────────
+// Each metric is independently toggleable via widget settings (see widgetCatalog).
+export function LazyLibrarianWidget({
+  fill,
+  showBooks = true,
+  showAuthors = true,
+  showWanted = true,
+  showSnatched = false,
+}: { fill?: boolean; showBooks?: boolean; showAuthors?: boolean; showWanted?: boolean; showSnatched?: boolean } = {}) {
+  const { lazylibrarian: ll } = useData();
+  const num = (n: number) => n.toLocaleString("en-US");
+  const anyOn = showBooks || showAuthors || showWanted || showSnatched;
+  return (
+    <PanelShell fill={fill} title="LazyLibrarian" icon="menu_book" accent="var(--originator-third-party)" live={!!ll}>
+      {!ll ? (
+        <Empty icon="menu_book" line="LazyLibrarian not connected" sub="Add LazyLibrarian and store its API key to see book stats." />
+      ) : !anyOn ? (
+        <Empty icon="tune" line="No stats enabled" sub="Turn stats on in this widget's settings." />
+      ) : (
+        <StatRow>
+          {showBooks && <Metric label="Books" value={num(ll.totalBooks)} icon="menu_book" color="var(--primary)" />}
+          {showAuthors && <Metric label="Authors" value={num(ll.authors)} icon="person" color="var(--on-surface-variant)" />}
+          {showWanted && <Metric label="Wanted" value={num(ll.wanted)} icon="bookmark" color={ll.wanted > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />}
+          {showSnatched && <Metric label="Snatched" value={num(ll.snatched)} icon="downloading" color={ll.snatched > 0 ? "var(--primary)" : "var(--on-surface-variant)"} />}
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
 // ── AGREGARR — Plex collections sync status ────────────────
 export function AgregarrWidget({ fill }: { fill?: boolean } = {}) {
   const { agregarr } = useData();

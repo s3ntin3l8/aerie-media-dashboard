@@ -44,7 +44,9 @@ import {
   agregarrStatus,
   bazarrWanted,
   nzbhydra2Stats,
-  lazylibrarianLibrary,
+  lazylibrarianStats,
+  lazylibrarianLibraryStats,
+  type LazyLibrarianStats,
   type ServiceHealth,
   type NodeMetrics,
   type WizarrStats,
@@ -105,6 +107,8 @@ export interface Snapshot {
   bazarrWanted: BazarrWanted | null;
   /** NZBHydra2 indexer health — null when unconfigured */
   nzbhydra: Nzbhydra2Stats | null;
+  /** LazyLibrarian book/audiobook stats — null when unconfigured */
+  lazylibrarian: LazyLibrarianStats | null;
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -212,7 +216,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     jfLibs, jfRecent, osVersion,
     osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
-    ttUsers, absNow, llLib,
+    ttUsers, absNow, llStats,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -255,7 +259,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     nzbhydraOn ? safe(nzbhydra2Stats) : Promise.resolve(null),
     ttOn ? safe(tautulliUsers) : Promise.resolve(null),
     absOn ? perf("live:absNowPlaying", safe(audiobookshelfNowPlaying)) : Promise.resolve(null),
-    llOn ? safe(lazylibrarianLibrary) : Promise.resolve(null),
+    llOn ? safe(lazylibrarianStats) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -361,8 +365,9 @@ export async function getSnapshot(): Promise<Snapshot> {
         ? [...baseLibs, { id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }]
         : baseLibs
       : [];
-  // Append LazyLibrarian book/audiobook stats so a books deployment still gets library counts.
-  const library: LibraryStat[] = [...mediaLibs, ...(llLib ?? [])];
+  // Append LazyLibrarian on-disk counts (audiobooks/ebooks) so a books deployment still gets
+  // library cards; the headline total / wanted / authors live in the LazyLibrarian widget.
+  const library: LibraryStat[] = [...mediaLibs, ...(llStats ? lazylibrarianLibraryStats(llStats) : [])];
 
   // recent: prefer Tautulli (Plex); fall back to Jellyfin when Plex has none.
   const recent: RecentItem[] = ttRecent && ttRecent.length > 0 ? ttRecent : (jfRecent ?? []);
@@ -412,6 +417,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarr: wizarrData ?? null, prowlarr: prowlarrData ?? null,
     agregarr: agregarrData ?? null, bazarrWanted: bazarrData ?? null,
     nzbhydra: nzbhydraData ?? null,
+    lazylibrarian: llStats ?? null,
   };
   lastSnapshot = snapshot;
   return snapshot;

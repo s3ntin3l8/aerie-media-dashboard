@@ -1914,12 +1914,23 @@ interface LazyLibrarianBook {
 
 const LL_ON_DISK = new Set(["open", "have"]);
 
+/** Aggregate LazyLibrarian stats, all derived from a single getAllBooks scan. */
+export interface LazyLibrarianStats {
+  totalBooks: number;
+  authors: number;
+  ebooks: number; // ebook files on disk (Status "Open"/"Have")
+  audiobooks: number; // audiobook files on disk (AudioStatus "Open"/"Have")
+  wanted: number; // books or audio queued to grab
+  snatched: number; // books or audio currently downloading
+}
+
 /**
- * LazyLibrarian library stats, derived from getAllBooks (one fast call, cached 10 min).
- * Emits a headline "Books" total plus Audiobooks / eBooks / Wanted rows when non-trivial.
+ * LazyLibrarian stats from getAllBooks (one fast call, cached 10 min). getWanted only counts
+ * ebooks, so deriving everything from getAllBooks (which carries both Status and AudioStatus)
+ * is the single, accurate source for both the Library Stats cards and the LazyLibrarian widget.
  */
-export async function lazylibrarianLibrary(): Promise<LibraryStat[]> {
-  return cached("lazylibrarian:library", 10 * 60 * 1000, async () => {
+export async function lazylibrarianStats(): Promise<LazyLibrarianStats> {
+  return cached("lazylibrarian:stats", 10 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("lazylibrarian");
     const data = await fetchJson<unknown>(`${baseUrl}/api?cmd=getAllBooks&apikey=${encodeURIComponent(apiKey)}`, {
       service: "lazylibrarian",
@@ -1929,21 +1940,30 @@ export async function lazylibrarianLibrary(): Promise<LibraryStat[]> {
     const books = data as LazyLibrarianBook[];
 
     const isOnDisk = (s?: string) => LL_ON_DISK.has((s ?? "").toLowerCase());
-    const isWanted = (s?: string) => (s ?? "").toLowerCase() === "wanted";
+    const isStatus = (b: LazyLibrarianBook, v: string) =>
+      (b.Status ?? "").toLowerCase() === v || (b.AudioStatus ?? "").toLowerCase() === v;
 
-    const authors = new Set(books.map((b) => b.AuthorID).filter(Boolean)).size;
-    const audioHave = books.filter((b) => isOnDisk(b.AudioStatus)).length;
-    const ebookHave = books.filter((b) => isOnDisk(b.Status)).length;
-    const wanted = books.filter((b) => isWanted(b.Status) || isWanted(b.AudioStatus)).length;
-
-    const out: LibraryStat[] = [
-      { id: "ll-books", label: "Books", count: fmt(books.length), icon: "menu_book", delta: `${fmt(authors)} authors` },
-    ];
-    if (audioHave > 0) out.push({ id: "ll-audiobooks", label: "Audiobooks", count: fmt(audioHave), icon: "headphones", delta: "on disk" });
-    if (ebookHave > 0) out.push({ id: "ll-ebooks", label: "eBooks", count: fmt(ebookHave), icon: "book_2", delta: "on disk" });
-    if (wanted > 0) out.push({ id: "ll-wanted", label: "Wanted", count: fmt(wanted), icon: "bookmark", delta: "books & audio" });
-    return out;
+    return {
+      totalBooks: books.length,
+      authors: new Set(books.map((b) => b.AuthorID).filter(Boolean)).size,
+      ebooks: books.filter((b) => isOnDisk(b.Status)).length,
+      audiobooks: books.filter((b) => isOnDisk(b.AudioStatus)).length,
+      wanted: books.filter((b) => isStatus(b, "wanted")).length,
+      snatched: books.filter((b) => isStatus(b, "snatched")).length,
+    } satisfies LazyLibrarianStats;
   });
+}
+
+/**
+ * Library Stats cards (audiobooks + ebooks on disk) derived from {@link lazylibrarianStats}.
+ * The "what's on disk" counts only — the headline total / wanted / authors live in the
+ * dedicated LazyLibrarian widget instead (no overlap).
+ */
+export function lazylibrarianLibraryStats(s: LazyLibrarianStats): LibraryStat[] {
+  const out: LibraryStat[] = [];
+  if (s.audiobooks > 0) out.push({ id: "ll-audiobooks", label: "Audiobooks", count: fmt(s.audiobooks), icon: "headphones", delta: "on disk" });
+  if (s.ebooks > 0) out.push({ id: "ll-ebooks", label: "eBooks", count: fmt(s.ebooks), icon: "book_2", delta: "on disk" });
+  return out;
 }
 
 // ── Version detection ──────────────────────────────────────

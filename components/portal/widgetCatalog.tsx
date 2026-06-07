@@ -26,7 +26,7 @@ import {
   DownloadsPanel,
   DiscoverFeedPanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget, LazyLibrarianWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -247,6 +247,18 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "NZBHydra2 usenet indexer health — enabled, disabled and errored indexers.",
     defaultW: 3, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
     render: (_c, _s) => <Nzbhydra2Widget fill />,
+  },
+  lazylibrarian: {
+    type: "lazylibrarian", name: "LazyLibrarian", icon: "menu_book", accent: "var(--originator-third-party)", group: "Automation",
+    desc: "Book & audiobook pipeline — total books, authors, wanted and snatched counts.",
+    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    settings: [
+      { key: "showBooks", label: "Books total", type: "toggle", default: true },
+      { key: "showAuthors", label: "Authors", type: "toggle", default: true },
+      { key: "showWanted", label: "Wanted", type: "toggle", default: true },
+      { key: "showSnatched", label: "Snatched", type: "toggle", default: false },
+    ],
+    render: (_c, s) => <LazyLibrarianWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showWanted={s.showWanted as boolean} showSnatched={s.showSnatched as boolean} />,
   },
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",
