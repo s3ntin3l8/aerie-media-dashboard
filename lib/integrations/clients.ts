@@ -2016,6 +2016,172 @@ export function lazylibrarianLibraryStats(s: LazyLibrarianStats): LibraryStat[] 
   return out;
 }
 
+// ── Listenarr — audiobook *arr (own /api/v1, X-Api-Key) ────
+// Listenarr does NOT speak the shared *arr API: queue/history/health live under its own
+// /api/v1 with their own shapes. Its history is flooded by per-file "File Added" scan
+// events, so the downloads feed reads the server-side typed endpoints
+// (/history/type/{eventType}) instead of /history/recent.
+
+interface ListenarrQueueRecord {
+  id?: string;
+  title?: string;
+  author?: string;
+  progress?: number; // 0–100
+  size?: number; // bytes
+  downloaded?: number; // bytes
+  downloadSpeed?: number; // bytes/sec
+  eta?: number; // seconds
+}
+
+function fmtEtaSeconds(sec: number): string {
+  if (sec <= 0) return "—";
+  if (sec < 60) return `${Math.round(sec)}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+  return `${Math.floor(sec / 86400)}d`;
+}
+
+export async function listenarrQueue(): Promise<QueueItem[]> {
+  const { baseUrl, apiKey } = await creds("listenarr");
+  const data = await fetchJson<{ items?: ListenarrQueueRecord[] }>(`${baseUrl}/api/v1/download/queue`, {
+    service: "listenarr",
+    headers: { "X-Api-Key": apiKey },
+  });
+  return (data.items ?? []).map((r, i) => {
+    // Prefer the byte counts (unambiguous units) over the reported progress when both exist.
+    const pct = r.size && r.downloaded != null
+      ? Math.min(100, Math.max(0, Math.round((r.downloaded / r.size) * 100)))
+      : Math.min(100, Math.max(0, Math.round(r.progress ?? 0)));
+    return {
+      id: `listenarr-${r.id ?? i}`,
+      title: r.author ? `${r.title || "(unnamed)"} · ${r.author}` : r.title || "(unnamed)",
+      svc: "listenarr",
+      pct,
+      eta: r.eta != null && r.eta > 0 ? fmtEtaSeconds(r.eta) : "—",
+      speed: r.downloadSpeed && r.downloadSpeed > 0 ? `${(r.downloadSpeed / 1_048_576).toFixed(1)} MB/s` : "",
+    };
+  });
+}
+
+interface ListenarrHistoryRecord {
+  id?: number;
+  audiobookTitle?: string;
+  message?: string;
+  timestamp?: string;
+}
+
+/** Listenarr serializes UTC timestamps without a zone suffix — pin them to UTC for Date.parse. */
+function listenarrTs(ts?: string): string {
+  if (!ts) return "";
+  return /(z|[+-]\d\d:?\d\d)$/i.test(ts) ? ts : `${ts}Z`;
+}
+
+export async function listenarrHistory(): Promise<DownloadEvent[]> {
+  return cached("history:listenarr", 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("listenarr");
+    // "Grabbed" = download started; "Downloaded"/"Imported" = landed in the library.
+    const types = [
+      { type: "Grabbed", event: "grabbed" },
+      { type: "Downloaded", event: "imported" },
+      { type: "Imported", event: "imported" },
+    ] as const;
+    const lists = await Promise.all(
+      types.map(({ type }) =>
+        fetchJson<ListenarrHistoryRecord[]>(`${baseUrl}/api/v1/history/type/${type}`, {
+          service: "listenarr",
+          headers: { "X-Api-Key": apiKey },
+        }),
+      ),
+    );
+    return lists
+      .flatMap((list, t) =>
+        (list ?? []).map((r, i) => ({
+          id: `listenarr-h${r.id ?? `${t}-${i}`}`,
+          title: r.audiobookTitle || r.message || "Unknown",
+          svc: "listenarr",
+          when: listenarrTs(r.timestamp),
+          event: types[t].event,
+        })),
+      )
+      .sort((a, b) => Date.parse(b.when) - Date.parse(a.when))
+      .slice(0, 30);
+  });
+}
+
+interface ListenarrHealthResponse {
+  status?: string;
+  downloadClients?: { clients?: { name?: string; status?: string; type?: string }[] };
+  externalApis?: { apis?: { name?: string; status?: string; enabled?: boolean }[] };
+}
+
+export async function listenarrHealth(): Promise<HealthIssue[]> {
+  return cached("health:listenarr", 3 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("listenarr");
+    const d = await fetchJson<ListenarrHealthResponse>(`${baseUrl}/api/v1/system/health`, {
+      service: "listenarr",
+      headers: { "X-Api-Key": apiKey },
+    });
+    const out: HealthIssue[] = [];
+    for (const c of d.downloadClients?.clients ?? []) {
+      if ((c.status ?? "").toLowerCase() !== "connected")
+        out.push({ svc: "listenarr", type: "error", message: `Download client ${c.name || c.type || "unknown"} is ${c.status || "unavailable"}` });
+    }
+    for (const a of d.externalApis?.apis ?? []) {
+      if (a.enabled !== false && (a.status ?? "").toLowerCase() !== "connected")
+        out.push({ svc: "listenarr", type: "warning", message: `${a.name || "External API"} is ${a.status || "unavailable"}` });
+    }
+    // Catch-all: surface a degraded overall status even when no component above explains it.
+    if (out.length === 0 && d.status && d.status.toLowerCase() !== "healthy")
+      out.push({ svc: "listenarr", type: "warning", message: `Listenarr reports status "${d.status}"` });
+    return out;
+  });
+}
+
+interface ListenarrLibraryRecord {
+  authors?: string[]; // display names — include "X - translator" entries
+  authorAsins?: string[]; // stable author ids (authors only, no translators)
+  monitored?: boolean;
+  wanted?: boolean;
+}
+
+/** Aggregate Listenarr library stats, all derived from a single /library scan. */
+export interface ListenarrStats {
+  audiobooks: number;
+  authors: number; // distinct author names
+  monitored: number;
+  wanted: number;
+}
+
+export async function listenarrStats(): Promise<ListenarrStats> {
+  return cached("listenarr:stats", 10 * 60 * 1000, async () => {
+    const { baseUrl, apiKey } = await creds("listenarr");
+    const data = await fetchJson<unknown>(`${baseUrl}/api/v1/library`, {
+      service: "listenarr",
+      headers: { "X-Api-Key": apiKey },
+    });
+    if (!Array.isArray(data)) throw new IntegrationError("listenarr", "library did not return a list");
+    const books = data as ListenarrLibraryRecord[];
+    return {
+      audiobooks: books.length,
+      // Count distinct authors by ASIN where available (names would inflate the count
+      // with per-book "X - translator" entries); fall back to names per record.
+      authors: new Set(books.flatMap((b) => (b.authorAsins?.length ? b.authorAsins : (b.authors ?? [])))).size,
+      monitored: books.filter((b) => b.monitored).length,
+      wanted: books.filter((b) => b.wanted).length,
+    } satisfies ListenarrStats;
+  });
+}
+
+/**
+ * Library Stats card derived from {@link listenarrStats}. The "in Listenarr" delta
+ * distinguishes it from LazyLibrarian's "on disk" Audiobooks card when both run.
+ */
+export function listenarrLibraryStats(s: ListenarrStats): LibraryStat[] {
+  return s.audiobooks > 0
+    ? [{ id: "listenarr-audiobooks", label: "Audiobooks", count: fmt(s.audiobooks), icon: "headphones", delta: "in Listenarr" }]
+    : [];
+}
+
 // ── Version detection ──────────────────────────────────────
 
 type ServiceKind =
@@ -2035,6 +2201,7 @@ type ServiceKind =
   | "beszel" // PocketBase auth → /api/health (no version field)
   | "unraid" // GraphQL /graphql (x-api-key) → info.versions.core.unraid
   | "lazylibrarian" // /api?cmd=getVersion&apikey= → current_version (short SHA); always HTTP 200
+  | "listenarr" // own /api/v1 (NOT the shared *arr API) — X-Api-Key; /system/info → version
   | "plex"; // /identity (no auth needed) → MediaContainer.version
 
 function serviceKind(id: string): ServiceKind | null {
@@ -2049,6 +2216,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("audiobookshelf")) return "audiobookshelf";
   if (l.includes("nzbget")) return "nzbget";
   if (l.includes("nzbhydra") || l.includes("hydra")) return "nzbhydra";
+  if (l.includes("listenarr")) return "listenarr";
   if (l.includes("prowlarr") || l.includes("lidarr") || l.includes("readarr")) return "arr-v1";
   if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
   if (l.includes("tautulli")) return "tautulli";
@@ -2201,6 +2369,15 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     );
     if (!d.Success) throw new IntegrationError("version-detect", "LazyLibrarian auth failed");
     return normalizeVersion(d.current_version) ?? "";
+  }
+  if (kind === "listenarr") {
+    // Listenarr's own /api/v1 (not the shared *arr API): /system/info carries the app
+    // version and rejects bad/missing keys with 401, so it doubles as the connection test.
+    const d = await fetchJson<{ version?: string }>(`${b}/api/v1/system/info`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-Api-Key": apiKey } : {},
+    });
+    return normalizeVersion(d.version);
   }
   if (kind === "plex") {
     // /identity is unauthenticated and returns the server version as JSON (Accept: application/json

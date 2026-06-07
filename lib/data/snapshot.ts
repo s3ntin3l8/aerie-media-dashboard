@@ -49,6 +49,12 @@ import {
   lazylibrarianStats,
   lazylibrarianLibraryStats,
   type LazyLibrarianStats,
+  listenarrQueue,
+  listenarrHistory,
+  listenarrHealth,
+  listenarrStats,
+  listenarrLibraryStats,
+  type ListenarrStats,
   type ServiceHealth,
   type NodeMetrics,
   type WizarrStats,
@@ -119,6 +125,8 @@ export interface Snapshot {
   nzbhydra: Nzbhydra2Stats | null;
   /** LazyLibrarian book/audiobook stats — null when unconfigured */
   lazylibrarian: LazyLibrarianStats | null;
+  /** Listenarr audiobook library stats — null when unconfigured */
+  listenarr: ListenarrStats | null;
 }
 
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -189,7 +197,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
-  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn] = await Promise.all([
+  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
     has("audiobookshelf"),
@@ -204,6 +212,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     has("nzbhydra"),
     has("lazylibrarian"),
     has("nzbget"),
+    has("listenarr"),
   ]);
 
   // Active metrics source: honour the stored preference when its source is live,
@@ -221,9 +230,9 @@ export async function getSnapshot(): Promise<Snapshot> {
   const beszelSystemId = beszelSystemSetting && beszelSystemSetting.trim() ? beszelSystemSetting.trim() : null;
 
   // Active queue source: the *arr clients and NZBGet report the same downloads (the
-  // *arrs delegate to NZBGet), so only one feeds the Download Queue panel at a time.
-  // Same resolution shape as metricsSource above.
-  const arrQueueOn = sonarrOn || radarrOn;
+  // *arrs — Listenarr included — delegate to NZBGet), so only one feeds the Download
+  // Queue panel at a time. Same resolution shape as metricsSource above.
+  const arrQueueOn = sonarrOn || radarrOn || listenarrOn;
   const queueSource: "arr" | "nzbget" =
     queueSourceSetting === "nzbget" && nzbgetOn ? "nzbget"
     : arrQueueOn ? "arr"
@@ -239,6 +248,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers, absNow, llStats,
+    listenarrQ, listenarrHist, listenarrHealthIssues, listenarrData,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -285,6 +295,10 @@ export async function getSnapshot(): Promise<Snapshot> {
     ttOn ? safe(tautulliUsers) : Promise.resolve(null),
     absOn ? perf("live:absNowPlaying", safe(audiobookshelfNowPlaying)) : Promise.resolve(null),
     llOn ? safe(lazylibrarianStats) : Promise.resolve(null),
+    queueSource === "arr" && listenarrOn ? perf("live:listenarrQueue", safe(listenarrQueue)) : Promise.resolve(null),
+    listenarrOn ? safe(listenarrHistory) : Promise.resolve(null),
+    listenarrOn ? safe(listenarrHealth) : Promise.resolve(null),
+    listenarrOn ? safe(listenarrStats) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -323,7 +337,7 @@ export async function getSnapshot(): Promise<Snapshot> {
 
   const nowPlaying: NowPlaying[] = [...(ttAct?.sessions ?? []), ...(jfNow ?? []), ...(absNow ?? [])];
   // Only the active queue source fetched (the others resolved null), so this stays single-source.
-  const queue: QueueItem[] = [...(sonarrQ ?? []), ...(radarrQ ?? []), ...(nzbgetQ ?? [])];
+  const queue: QueueItem[] = [...(sonarrQ ?? []), ...(radarrQ ?? []), ...(listenarrQ ?? []), ...(nzbgetQ ?? [])];
   const bandwidth = ttAct ? { totalMbps: ttAct.totalKbps / 1000, wanMbps: ttAct.wanKbps / 1000 } : null;
 
   // ── Overseerr identity join: attribute each request to the portal account that
@@ -391,9 +405,14 @@ export async function getSnapshot(): Promise<Snapshot> {
         ? [...baseLibs, { id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }]
         : baseLibs
       : [];
-  // Append LazyLibrarian on-disk counts (audiobooks/ebooks) so a books deployment still gets
-  // library cards; the headline total / wanted / authors live in the LazyLibrarian widget.
-  const library: LibraryStat[] = [...mediaLibs, ...(llStats ? lazylibrarianLibraryStats(llStats) : [])];
+  // Append LazyLibrarian on-disk counts (audiobooks/ebooks) and Listenarr's library count so
+  // a books deployment still gets library cards; the headline totals / wanted / authors live
+  // in the dedicated LazyLibrarian / Listenarr widgets.
+  const library: LibraryStat[] = [
+    ...mediaLibs,
+    ...(llStats ? lazylibrarianLibraryStats(llStats) : []),
+    ...(listenarrData ? listenarrLibraryStats(listenarrData) : []),
+  ];
 
   // recent: prefer Tautulli (Plex); fall back to Jellyfin when Plex has none.
   const recent: RecentItem[] = ttRecent && ttRecent.length > 0 ? ttRecent : (jfRecent ?? []);
@@ -409,13 +428,13 @@ export async function getSnapshot(): Promise<Snapshot> {
   }
   const storage: StorageMount[] = [...storageByPath.values()].sort((a, b) => b.totalBytes - a.totalBytes);
 
-  const arrHealthIssues: HealthIssue[] = [...(sonarrHealth ?? []), ...(radarrHealth ?? [])];
+  const arrHealthIssues: HealthIssue[] = [...(sonarrHealth ?? []), ...(radarrHealth ?? []), ...(listenarrHealthIssues ?? [])];
   const issues = osIssues ?? null;
 
   const upcoming: UpcomingItem[] = [...(sonarrCal ?? []), ...(radarrCal ?? [])].sort(
     (a, b) => Date.parse(a.when) - Date.parse(b.when),
   );
-  const downloads: DownloadEvent[] = [...(sonarrHist ?? []), ...(radarrHist ?? [])]
+  const downloads: DownloadEvent[] = [...(sonarrHist ?? []), ...(radarrHist ?? []), ...(listenarrHist ?? [])]
     .sort((a, b) => Date.parse(b.when) - Date.parse(a.when))
     .slice(0, 30);
   // Attach Plex avatars to the "top viewers" leaderboard (names are Plex
@@ -445,6 +464,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     agregarr: agregarrData ?? null, bazarrWanted: bazarrData ?? null,
     nzbhydra: nzbhydraData ?? null,
     lazylibrarian: llStats ?? null,
+    listenarr: listenarrData ?? null,
   };
   lastSnapshot = snapshot;
   return snapshot;

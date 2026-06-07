@@ -88,6 +88,7 @@ const SERVICE_PRESETS: Record<string, { cat: string; icon: string; logoSlug: str
   radarr:        { cat: "automation", icon: "movie",         logoSlug: "radarr" },
   lidarr:        { cat: "automation", icon: "library_music", logoSlug: "lidarr" },
   readarr:       { cat: "automation", icon: "menu_book",     logoSlug: "readarr" },
+  listenarr:     { cat: "automation", icon: "headphones",    logoSlug: "listenarr" },
   prowlarr:      { cat: "automation", icon: "search",        logoSlug: "prowlarr" },
   nzbget:        { cat: "automation", icon: "download",      logoSlug: "nzbget" },
   nzbhydra:      { cat: "automation", icon: "manage_search", logoSlug: "nzbhydra2" },

@@ -26,7 +26,7 @@ import {
   DownloadsPanel,
   DiscoverFeedPanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget, LazyLibrarianWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget, LazyLibrarianWidget, ListenarrWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -259,6 +259,18 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "showSnatched", label: "Snatched", type: "toggle", default: false },
     ],
     render: (_c, s) => <LazyLibrarianWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showWanted={s.showWanted as boolean} showSnatched={s.showSnatched as boolean} />,
+  },
+  listenarr: {
+    type: "listenarr", name: "Listenarr", icon: "headphones", accent: "var(--originator-third-party)", group: "Automation",
+    desc: "Audiobook library pipeline — audiobooks, authors, monitored and wanted counts.",
+    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    settings: [
+      { key: "showBooks", label: "Audiobooks total", type: "toggle", default: true },
+      { key: "showAuthors", label: "Authors", type: "toggle", default: true },
+      { key: "showMonitored", label: "Monitored", type: "toggle", default: true },
+      { key: "showWanted", label: "Wanted", type: "toggle", default: true },
+    ],
+    render: (_c, s) => <ListenarrWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showMonitored={s.showMonitored as boolean} showWanted={s.showWanted as boolean} />,
   },
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",

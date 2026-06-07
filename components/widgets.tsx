@@ -355,6 +355,36 @@ export function LazyLibrarianWidget({
   );
 }
 
+// ── LISTENARR — audiobook library stats ────────────────────
+// Each metric is independently toggleable via widget settings (see widgetCatalog).
+export function ListenarrWidget({
+  fill,
+  showBooks = true,
+  showAuthors = true,
+  showMonitored = true,
+  showWanted = true,
+}: { fill?: boolean; showBooks?: boolean; showAuthors?: boolean; showMonitored?: boolean; showWanted?: boolean } = {}) {
+  const { listenarr: la } = useData();
+  const num = (n: number) => n.toLocaleString("en-US");
+  const anyOn = showBooks || showAuthors || showMonitored || showWanted;
+  return (
+    <PanelShell fill={fill} title="Listenarr" icon="headphones" accent="var(--originator-third-party)" live={!!la}>
+      {!la ? (
+        <Empty icon="headphones" line="Listenarr not connected" sub="Add Listenarr and store its API key to see audiobook stats." />
+      ) : !anyOn ? (
+        <Empty icon="tune" line="No stats enabled" sub="Turn stats on in this widget's settings." />
+      ) : (
+        <StatRow>
+          {showBooks && <Metric label="Audiobooks" value={num(la.audiobooks)} icon="headphones" color="var(--primary)" />}
+          {showAuthors && <Metric label="Authors" value={num(la.authors)} icon="person" color="var(--on-surface-variant)" />}
+          {showMonitored && <Metric label="Monitored" value={num(la.monitored)} icon="bookmark" color="var(--on-surface-variant)" />}
+          {showWanted && <Metric label="Wanted" value={num(la.wanted)} icon="bookmark_add" color={la.wanted > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />}
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
 // ── AGREGARR — Plex collections sync status ────────────────
 export function AgregarrWidget({ fill }: { fill?: boolean } = {}) {
   const { agregarr } = useData();

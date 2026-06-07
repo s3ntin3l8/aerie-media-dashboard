@@ -1300,7 +1300,7 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
         {slice.map((q, i) => (
           <div key={q.id} style={{ padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-              <Icon name={q.svc === "radarr" ? "movie" : q.svc === "nzbget" ? "download" : "live_tv"} size={14} color="var(--originator-third-party)" />
+              <Icon name={q.svc === "radarr" ? "movie" : q.svc === "nzbget" ? "download" : q.svc === "listenarr" ? "headphones" : "live_tv"} size={14} color="var(--originator-third-party)" />
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{q.title}</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{q.speed}</span>
             </div>
@@ -1472,7 +1472,7 @@ export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; 
       <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((d, i) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
-            <Icon name={d.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
+            <Icon name={d.svc === "radarr" ? "movie" : d.svc === "listenarr" ? "headphones" : "live_tv"} size={14} color="var(--originator-third-party)" />
             <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</span>
             <Pill tone={d.event === "imported" ? "originator-own" : "on-surface-variant"}>{d.event}</Pill>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", minWidth: 52, textAlign: "right" }}>{timeAgo(d.when)}</span>
