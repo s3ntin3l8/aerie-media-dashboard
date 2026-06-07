@@ -3,9 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/primitives";
 import { fieldInput } from "@/components/modals/ModalShell";
+import { DashboardIconImg } from "@/components/DashboardIconImg";
 import type { IconResult } from "@/app/api/icons/route";
-
-const CDN_SVG = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg";
 
 interface IconPickerProps {
   value: string;
@@ -59,10 +58,8 @@ export function IconPicker({ value, onChange, catColor }: IconPickerProps) {
             background: "var(--surface-container-lowest)",
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`${CDN_SVG}/${value}.svg`}
-            alt={value}
+          <DashboardIconImg
+            slug={value}
             style={{ width: 28, height: 28, objectFit: "contain" }}
           />
           <span
@@ -154,9 +151,8 @@ export function IconPicker({ value, onChange, catColor }: IconPickerProps) {
                   transition: "border-color .12s, background .12s",
                 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={r.cdnUrl}
+                <DashboardIconImg
+                  slug={r.slug}
                   alt={r.name}
                   loading="lazy"
                   style={{ width: 28, height: 28, objectFit: "contain" }}

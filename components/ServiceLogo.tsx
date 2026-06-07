@@ -3,8 +3,7 @@
 import React, { useState } from "react";
 import type { Service } from "@/lib/types";
 import { Icon, catColor } from "@/components/primitives";
-
-const CDN_SVG = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg";
+import { DashboardIconImg } from "@/components/DashboardIconImg";
 
 interface ServiceLogoProps {
   service: Pick<Service, "icon" | "cat" | "logoSlug">;
@@ -39,12 +38,10 @@ export function ServiceLogo({ service, size, radius }: ServiceLogoProps) {
         <Icon name={service.icon} size={Math.round(size * 0.5)} color={c} />
       )}
       {service.logoSlug && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`${CDN_SVG}/${service.logoSlug}.svg`}
-          alt={service.logoSlug}
+        <DashboardIconImg
+          slug={service.logoSlug}
           loading="lazy"
-          onError={() => setImgOk(false)}
+          onAllFailed={() => setImgOk(false)}
           style={{
             position: "absolute",
             inset: "15%",

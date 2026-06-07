@@ -75,7 +75,6 @@ function MonitoringKeyPicker({ value, onChange }: { value: string; onChange: (v:
 }
 
 const isIcon = (s: string) => /^[a-z_]+$/.test(s);
-const CDN_SVG = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg";
 
 // Known service presets applied to blank fields when the name matches.
 const SERVICE_PRESETS: Record<string, { cat: string; icon: string; logoSlug: string }> = {
@@ -303,7 +302,7 @@ export function ServiceModal({
       onClose={onClose}
       accent={c}
       icon={f.logoSlug ? undefined : (isIcon(f.icon) ? f.icon : "dns")}
-      logoUrl={f.logoSlug ? `${CDN_SVG}/${f.logoSlug}.svg` : undefined}
+      logoSlug={f.logoSlug || undefined}
       title={editing ? `Edit ${service ? service.name : "service"}` : "Add a service"}
       sub={editing ? "Update connection details, secrets and who can see it." : "Register a self-hosted app so it appears on the portal."}
       footer={footer}

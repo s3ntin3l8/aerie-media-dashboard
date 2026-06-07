@@ -12,7 +12,6 @@ interface IconMeta {
 export interface IconResult {
   slug: string;
   name: string;
-  cdnUrl: string;
   categories: string[];
 }
 
@@ -63,7 +62,6 @@ export async function GET(req: NextRequest) {
         results.push({
           slug,
           name: slugToName(slug),
-          cdnUrl: `${CDN_BASE}/svg/${slug}.svg`,
           categories: meta.categories,
           _score: s,
         });
