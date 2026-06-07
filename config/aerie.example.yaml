@@ -90,6 +90,19 @@ services:
     note: "Download client"
     apiKey: ${QBITTORRENT_API_KEY}
 
+  - id: nzbget
+    name: NZBGet
+    cat: automation
+    icon: download
+    host: nzbget.aerie.tv
+    embeddable: true
+    note: "Usenet downloader"
+    # NZBGet has no API key — it authenticates with HTTP Basic auth, so pack
+    # ControlUsername + ControlPassword as "username:password" (split on the
+    # first ":", same convention as Beszel). Feeds the Download Queue panel;
+    # when Sonarr/Radarr are also configured a source toggle appears there.
+    apiKey: ${NZBGET_CREDENTIALS}   # e.g. nzbget:tegbzn6789
+
   # ── Monitoring ─────────────────────────────────────────────
   - id: tautulli
     name: Tautulli

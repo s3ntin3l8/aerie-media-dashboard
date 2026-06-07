@@ -280,6 +280,18 @@ export interface QueueItem {
   speed: string;
 }
 
+/** NZBGet global download status (the rate is server-wide, not per-item). */
+export interface NzbgetStatus {
+  /** bytes/sec */
+  downloadRate: number;
+  /** total MB left across the queue */
+  remainingMB: number;
+  /** download paused by the user */
+  paused: boolean;
+  /** idle — nothing downloading */
+  standby: boolean;
+}
+
 /** A discoverable title in the request modal's catalog. */
 export interface DiscoverItem {
   id: string;

@@ -177,6 +177,14 @@ export async function setMetricsSource(source: "prometheus" | "beszel"): Promise
   revalidatePath("/status");
 }
 
+/** Select which source fills the Download Queue panel (the *arrs and NZBGet report the same downloads). */
+export async function setQueueSource(source: "arr" | "nzbget"): Promise<void> {
+  await requireAdmin();
+  if (source !== "arr" && source !== "nzbget") throw new Error(`Unknown queue source: ${source}`);
+  await setDeploymentSetting("queueSource", source);
+  revalidatePath("/");
+}
+
 /**
  * Persist which Beszel system the metric cards display (stores the system id).
  * null → write the sentinel ("") so the picker falls back to the first system.

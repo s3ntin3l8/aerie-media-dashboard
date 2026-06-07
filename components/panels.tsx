@@ -4,9 +4,10 @@
 // stripe tiles, heartbeat status). Variant switchers from the
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus } from "@/lib/types";
-import { useData, useSnapshotTime } from "@/components/portal/DataProvider";
+import { useData, useRefresh, useSnapshotTime } from "@/components/portal/DataProvider";
+import { setQueueSource } from "@/app/(portal)/admin/actions";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { isVisible } from "@/lib/visibility";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
@@ -1224,28 +1225,82 @@ export function RecentlyAdded({ fill, limit, mediaKind, title }: { fill?: boolea
 }
 
 // ── DOWNLOAD QUEUE (admin) ─────────────────────────────────
+/** Segmented *arr ⇄ NZBGet queue-source toggle, shown only when both sources are configured. */
+function QueueSourceToggle({ current }: { current: "arr" | "nzbget" }) {
+  const refresh = useRefresh();
+  const [pending, startTransition] = useTransition();
+  const pick = (src: "arr" | "nzbget") => {
+    if (src === current || pending) return;
+    startTransition(async () => {
+      await setQueueSource(src);
+      refresh();
+    });
+  };
+  const opts: { id: "arr" | "nzbget"; label: string }[] = [
+    { id: "arr", label: "Arr" },
+    { id: "nzbget", label: "NZBGet" },
+  ];
+  return (
+    <div style={{ display: "inline-flex", borderRadius: 6, border: "1px solid var(--outline-variant)", overflow: "hidden", opacity: pending ? 0.5 : 1 }}>
+      {opts.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          onClick={() => pick(o.id)}
+          disabled={pending}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            padding: "3px 9px",
+            border: "none",
+            cursor: o.id === current ? "default" : "pointer",
+            background: o.id === current ? "var(--primary)" : "var(--surface-container)",
+            color: o.id === current ? "var(--on-primary)" : "var(--on-surface-variant)",
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
-  const { queue } = useData();
+  const { queue, queueSource, arrQueueConfigured, nzbgetConfigured, nzbgetStatus } = useData();
   // In a grid tile, show as many rows as fit the height (no scrolling); the rest
   // is reachable via the ‹ › pager.
   const [fitRef, fitRows] = useFitRows(dense ? 53 : 61);
   const pageSize = limit ?? (fill ? fitRows : 10);
   const { page, totalPages, slice, setPage } = usePagination(queue, pageSize);
   const rowPadding = dense ? "7px 16px" : "11px 16px";
+  const showToggle = arrQueueConfigured && nzbgetConfigured;
+  // NZBGet's rate is server-wide, so it lives in the header rather than on a row.
+  const count = queueSource === "nzbget" && nzbgetStatus
+    ? nzbgetStatus.paused
+      ? `${queue.length} active · paused`
+      : nzbgetStatus.standby
+        ? `${queue.length} active · idle`
+        : `${queue.length} active · ${fmtBytes(nzbgetStatus.downloadRate)}/s · ${fmtBytes(nzbgetStatus.remainingMB * 1_048_576)} left`
+    : `${queue.length} active`;
   return (
     <PanelShell
       fill={fill}
       title={title && title.length > 0 ? title : "Download Queue"}
       icon="downloading"
       accent="var(--originator-third-party)"
-      count={`${queue.length} active`}
-      action={totalPages > 1 ? <PageControls page={page} totalPages={totalPages} setPage={setPage} /> : undefined}
+      count={count}
+      action={showToggle || totalPages > 1 ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {showToggle && <QueueSourceToggle current={queueSource} />}
+          {totalPages > 1 && <PageControls page={page} totalPages={totalPages} setPage={setPage} />}
+        </div>
+      ) : undefined}
     >
       <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((q, i) => (
           <div key={q.id} style={{ padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-              <Icon name={q.svc === "radarr" ? "movie" : "live_tv"} size={14} color="var(--originator-third-party)" />
+              <Icon name={q.svc === "radarr" ? "movie" : q.svc === "nzbget" ? "download" : "live_tv"} size={14} color="var(--originator-third-party)" />
               <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{q.title}</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{q.speed}</span>
             </div>

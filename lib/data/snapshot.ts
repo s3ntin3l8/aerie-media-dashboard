@@ -6,7 +6,7 @@
 // panel. Live calls only fire for services that have a stored secret.
 // ============================================================
 import "server-only";
-import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
+import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
@@ -28,6 +28,8 @@ import {
   overseerrRequestCounts,
   matchOverseerrUserId,
   arrQueue,
+  nzbgetQueue,
+  nzbgetStatus,
   arrDiskSpace,
   arrHealth,
   arrCalendar,
@@ -78,6 +80,14 @@ export interface Snapshot {
   upcoming: UpcomingItem[];
   /** recently grabbed/imported downloads from *arr history */
   downloads: DownloadEvent[];
+  /** which source fills `queue` (the *arr clients and NZBGet report the same downloads) */
+  queueSource: "arr" | "nzbget";
+  /** Sonarr or Radarr has a stored secret (drives the queue source toggle's visibility) */
+  arrQueueConfigured: boolean;
+  /** NZBGet has a stored secret */
+  nzbgetConfigured: boolean;
+  /** NZBGet global rate/remaining/paused — null unless NZBGet is the active queue source */
+  nzbgetStatus: NzbgetStatus | null;
   /** weekly Tautulli leaderboard, or null when unconfigured */
   topStats: TopStats | null;
   groups: GroupRow[];
@@ -179,7 +189,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
-  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn] = await Promise.all([
+  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
     has("audiobookshelf"),
@@ -193,13 +203,15 @@ export async function getSnapshot(): Promise<Snapshot> {
     has("bazarr"),
     has("nzbhydra"),
     has("lazylibrarian"),
+    has("nzbget"),
   ]);
 
   // Active metrics source: honour the stored preference when its source is live,
   // otherwise fall back to whichever of Prometheus / Beszel is configured.
-  const [metricsSourceSetting, beszelSystemSetting] = await Promise.all([
+  const [metricsSourceSetting, beszelSystemSetting, queueSourceSetting] = await Promise.all([
     getDeploymentSetting("metricsSource"),
     getDeploymentSetting("beszelSystem"),
+    getDeploymentSetting("queueSource"),
   ]);
   const metricsSource: "prometheus" | "beszel" =
     metricsSourceSetting === "beszel" && beszelOn ? "beszel"
@@ -208,10 +220,20 @@ export async function getSnapshot(): Promise<Snapshot> {
     : "prometheus";
   const beszelSystemId = beszelSystemSetting && beszelSystemSetting.trim() ? beszelSystemSetting.trim() : null;
 
+  // Active queue source: the *arr clients and NZBGet report the same downloads (the
+  // *arrs delegate to NZBGet), so only one feeds the Download Queue panel at a time.
+  // Same resolution shape as metricsSource above.
+  const arrQueueOn = sonarrOn || radarrOn;
+  const queueSource: "arr" | "nzbget" =
+    queueSourceSetting === "nzbget" && nzbgetOn ? "nzbget"
+    : arrQueueOn ? "arr"
+    : nzbgetOn ? "nzbget"
+    : "arr";
+
   if (PERF) console.log(`[perf] pre-wave (DB config/secret/settings): ${Date.now() - tStart}ms`);
   const tWave = Date.now();
   const [
-    health, ttAct, jfNow, osReq, osUsers, sonarrQ, radarrQ, ttLibs, ttRecent, ttPlays, members, metricsResult,
+    health, ttAct, jfNow, osReq, osUsers, sonarrQ, radarrQ, nzbgetQ, nzbgetStat, ttLibs, ttRecent, ttPlays, members, metricsResult,
     sonarrDisk, radarrDisk, sonarrHealth, radarrHealth, osIssues, sonarrCal, radarrCal, sonarrHist, radarrHist, ttTop,
     jfLibs, jfRecent, osVersion,
     osTrending, osPopularMovies, osPopularTv, osUpcomingMovies, osWatchlist, osRequestCounts,
@@ -223,8 +245,11 @@ export async function getSnapshot(): Promise<Snapshot> {
     jfOn ? perf("live:jellyfinNowPlaying", safe(jellyfinNowPlaying)) : Promise.resolve(null),
     osOn ? perf("live:overseerrRequests", safe(overseerrRequests)) : Promise.resolve(null),
     osOn ? safe(overseerrUsers) : Promise.resolve(null),
-    sonarrOn ? perf("live:arrQueue(sonarr)", safe(() => arrQueue("sonarr"))) : Promise.resolve(null),
-    radarrOn ? perf("live:arrQueue(radarr)", safe(() => arrQueue("radarr"))) : Promise.resolve(null),
+    // Only the active queue source makes live queue calls (see resolution above).
+    queueSource === "arr" && sonarrOn ? perf("live:arrQueue(sonarr)", safe(() => arrQueue("sonarr"))) : Promise.resolve(null),
+    queueSource === "arr" && radarrOn ? perf("live:arrQueue(radarr)", safe(() => arrQueue("radarr"))) : Promise.resolve(null),
+    queueSource === "nzbget" ? perf("live:nzbgetQueue", safe(nzbgetQueue)) : Promise.resolve(null),
+    queueSource === "nzbget" ? perf("live:nzbgetStatus", safe(nzbgetStatus)) : Promise.resolve(null),
     ttOn ? safe(tautulliLibraries) : Promise.resolve(null),
     ttOn ? safe(tautulliRecentlyAdded) : Promise.resolve(null),
     ttOn ? safe(tautulliPlays24h) : Promise.resolve(null),
@@ -297,7 +322,8 @@ export async function getSnapshot(): Promise<Snapshot> {
   }));
 
   const nowPlaying: NowPlaying[] = [...(ttAct?.sessions ?? []), ...(jfNow ?? []), ...(absNow ?? [])];
-  const queue: QueueItem[] = [...(sonarrQ ?? []), ...(radarrQ ?? [])];
+  // Only the active queue source fetched (the others resolved null), so this stays single-source.
+  const queue: QueueItem[] = [...(sonarrQ ?? []), ...(radarrQ ?? []), ...(nzbgetQ ?? [])];
   const bandwidth = ttAct ? { totalMbps: ttAct.totalKbps / 1000, wanMbps: ttAct.wanKbps / 1000 } : null;
 
   // ── Overseerr identity join: attribute each request to the portal account that
@@ -413,6 +439,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     storage, issues, arrHealth: arrHealthIssues, upcoming, downloads, topStats,
     groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
     metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
+    queueSource, arrQueueConfigured: arrQueueOn, nzbgetConfigured: nzbgetOn, nzbgetStatus: nzbgetStat ?? null,
     discover, requestCounts: osRequestCounts ?? null,
     wizarr: wizarrData ?? null, prowlarr: prowlarrData ?? null,
     agregarr: agregarrData ?? null, bazarrWanted: bazarrData ?? null,

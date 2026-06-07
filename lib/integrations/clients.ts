@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -1541,6 +1541,56 @@ export async function arrQueue(serviceId: "sonarr" | "radarr"): Promise<QueueIte
   });
 }
 
+// ── NZBGet — JSON-RPC download client ──────────────────────
+// NZBGet has no API key: it authenticates with HTTP Basic auth
+// (ControlUsername/ControlPassword), so the stored secret holds
+// "username:password" (same convention as Beszel's email:password).
+async function nzbgetRpc<T>(method: string): Promise<T> {
+  const { baseUrl, apiKey } = await creds("nzbget");
+  const auth = Buffer.from(apiKey).toString("base64");
+  const res = await fetchJson<{ result: T }>(`${baseUrl}/jsonrpc`, {
+    service: "nzbget",
+    method: "POST",
+    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    body: { method, params: [] },
+  });
+  return res.result;
+}
+
+interface NzbgetGroup {
+  NZBName?: string;
+  FileSizeMB?: number;
+  RemainingSizeMB?: number;
+  Status?: string;
+}
+
+export async function nzbgetQueue(): Promise<QueueItem[]> {
+  const groups = await nzbgetRpc<NzbgetGroup[]>("listgroups");
+  return (groups ?? []).map((g, i) => {
+    // Per-item rate/ETA aren't exposed (DownloadRate is global — see nzbgetStatus),
+    // so rows carry progress only; the panel header shows the server-wide rate.
+    const pct = g.FileSizeMB && g.RemainingSizeMB != null ? Math.round(((g.FileSizeMB - g.RemainingSizeMB) / g.FileSizeMB) * 100) : 0;
+    return { id: `nzbget-${i}`, title: g.NZBName || "(unnamed)", svc: "nzbget", pct, eta: "—", speed: "" };
+  });
+}
+
+interface NzbgetStatusResponse {
+  DownloadRate?: number; // bytes/sec
+  RemainingSizeMB?: number;
+  DownloadPaused?: boolean;
+  ServerStandBy?: boolean;
+}
+
+export async function nzbgetStatus(): Promise<NzbgetStatus> {
+  const s = await nzbgetRpc<NzbgetStatusResponse>("status");
+  return {
+    downloadRate: s.DownloadRate ?? 0,
+    remainingMB: s.RemainingSizeMB ?? 0,
+    paused: s.DownloadPaused ?? false,
+    standby: s.ServerStandBy ?? true,
+  };
+}
+
 // ── *arr — disk space (cached; mounts change slowly) ───────
 interface ArrDiskSpace {
   path: string;
@@ -1978,6 +2028,7 @@ type ServiceKind =
   | "wizarr" // /api/swagger.json info.version (X-API-Key)
   | "audiobookshelf" // /api/libraries (Bearer; no version field)
   | "nzbhydra" // /internalapi/updates/infos?apikey= → currentVersion
+  | "nzbget" // JSON-RPC /jsonrpc "version" (Basic auth from "username:password" secret)
   | "tautulli"
   | "prometheus"
   | "gatus" // /api/v1/endpoints/statuses (optional Bearer; no version field)
@@ -1996,6 +2047,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("agregarr")) return "agregarr";
   if (l.includes("wizarr")) return "wizarr";
   if (l.includes("audiobookshelf")) return "audiobookshelf";
+  if (l.includes("nzbget")) return "nzbget";
   if (l.includes("nzbhydra") || l.includes("hydra")) return "nzbhydra";
   if (l.includes("prowlarr") || l.includes("lidarr") || l.includes("readarr")) return "arr-v1";
   if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
@@ -2081,6 +2133,16 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
       service: "version-detect",
     });
     return normalizeVersion(d.serverVersion) ?? "";
+  }
+  if (kind === "nzbget") {
+    // JSON-RPC "version"; the "apiKey" is the "username:password" Basic-auth pair.
+    const d = await fetchJson<{ result?: string }>(`${b}/jsonrpc`, {
+      service: "version-detect",
+      method: "POST",
+      headers: { Authorization: `Basic ${Buffer.from(apiKey).toString("base64")}`, "Content-Type": "application/json" },
+      body: { method: "version", params: [] },
+    });
+    return normalizeVersion(d.result);
   }
   if (kind === "nzbhydra") {
     // Spring Boot actuator /info is empty in the default LSIO package; use the internal
