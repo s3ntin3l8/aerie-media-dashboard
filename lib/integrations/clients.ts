@@ -2184,9 +2184,9 @@ export function listenarrLibraryStats(s: ListenarrStats): LibraryStat[] {
 
 // ── qBittorrent — WebUI v2 cookie-session download client ──
 // qBittorrent has no API key: it authenticates via a form-POST login that returns
-// a SID session cookie. The stored secret holds "username:password" (same colon-pair
-// convention as NZBGet/Beszel). All subsequent API calls send Cookie: SID=…
-// plus Referer/Origin to satisfy qBittorrent's CSRF guard.
+// a session cookie (SID in <5.x, QBT_SID_<port> in ≥5.x). The stored secret holds
+// "username:password" (same colon-pair convention as NZBGet/Beszel). All subsequent
+// API calls send that cookie plus Referer/Origin to satisfy qBittorrent's CSRF guard.
 
 function splitQbitCreds(apiKey: string): { username: string; password: string } {
   const i = apiKey.indexOf(":");
@@ -2194,20 +2194,22 @@ function splitQbitCreds(apiKey: string): { username: string; password: string } 
   return { username: apiKey.slice(0, i), password: apiKey.slice(i + 1) };
 }
 
-interface QbitSidEntry { sid: string; at: number; }
+// qBittorrent ≥5.x renamed the session cookie from "SID" to "QBT_SID_<port>" to support
+// multiple instances. We cache the full "name=value" string so callers send it verbatim.
+interface QbitSidEntry { cookie: string; at: number; }
 const qbitSidCache = new Map<string, QbitSidEntry>();
 const qbitAuthInflight = new Map<string, Promise<string>>();
 /** TTL = 30 min; re-auth on 403/401 covers server-side expiry before that. */
 const QBIT_SID_TTL = 30 * 60_000;
 
 /**
- * Obtain a valid qBittorrent SID cookie, caching it until 30 s before expiry.
- * Returns the SID string (without the "SID=" prefix).
+ * Obtain a valid qBittorrent session cookie string (e.g. "QBT_SID_8080=abc…"),
+ * caching it until 30 s before expiry. Returns the full "name=value" pair.
  */
 async function qbitAuth(base: string, apiKey: string, insecureTls: boolean, force = false): Promise<string> {
   if (!force) {
     const hit = qbitSidCache.get(base);
-    if (hit && Date.now() - hit.at < QBIT_SID_TTL - 30_000) return hit.sid;
+    if (hit && Date.now() - hit.at < QBIT_SID_TTL - 30_000) return hit.cookie;
     const inflight = qbitAuthInflight.get(base);
     if (inflight) return inflight;
   }
@@ -2225,15 +2227,13 @@ async function qbitAuth(base: string, apiKey: string, insecureTls: boolean, forc
       insecureTls,
     });
     if (res.status === 403) throw new IntegrationError("qbittorrent", "IP temporarily banned by qBittorrent (too many failed logins)", 403);
-    const text = await res.text();
     const setCookie = res.headers.get("set-cookie") ?? "";
-    const sidMatch = setCookie.match(/\bSID=([^;]+)/);
-    if (!sidMatch || !text.trim().startsWith("Ok")) {
-      throw new IntegrationError("qbittorrent", "invalid credentials (bad username/password)");
-    }
-    const sid = sidMatch[1];
-    qbitSidCache.set(base, { sid, at: Date.now() });
-    return sid;
+    // <5.x: "SID=…"; ≥5.x: "QBT_SID_<port>=…" — capture the full name=value pair.
+    const cookieMatch = setCookie.match(/((?:QBT_SID_\w+|SID)=([^;]+))/);
+    if (!cookieMatch) throw new IntegrationError("qbittorrent", "Login failed — invalid credentials");
+    const cookie = cookieMatch[1];
+    qbitSidCache.set(base, { cookie, at: Date.now() });
+    return cookie;
   })();
   qbitAuthInflight.set(base, p);
   try {
@@ -2248,8 +2248,8 @@ async function qbitAuth(base: string, apiKey: string, insecureTls: boolean, forc
  * (expired SID). Sends Cookie + Referer + Origin on every request.
  */
 async function qbitGet<T>(base: string, apiKey: string, insecureTls: boolean, path: string): Promise<T> {
-  const sid = await qbitAuth(base, apiKey, insecureTls);
-  const hdrs = { Cookie: `SID=${sid}`, Referer: base, Origin: base };
+  const cookie = await qbitAuth(base, apiKey, insecureTls);
+  const hdrs = { Cookie: cookie, Referer: base, Origin: base };
   try {
     return await fetchJsonRaw<T>(`${base}${path}`, { service: "qbittorrent", headers: hdrs, insecureTls });
   } catch (e) {
@@ -2257,7 +2257,7 @@ async function qbitGet<T>(base: string, apiKey: string, insecureTls: boolean, pa
       const fresh = await qbitAuth(base, apiKey, insecureTls, true);
       return await fetchJsonRaw<T>(`${base}${path}`, {
         service: "qbittorrent",
-        headers: { Cookie: `SID=${fresh}`, Referer: base, Origin: base },
+        headers: { Cookie: fresh, Referer: base, Origin: base },
         insecureTls,
       });
     }
@@ -2475,16 +2475,14 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
       insecureTls,
     });
     if (loginRes.status === 403) throw new IntegrationError("version-detect", "IP temporarily banned by qBittorrent");
-    const loginBody = await loginRes.text();
     const setCookie = loginRes.headers.get("set-cookie") ?? "";
-    const sidMatch = setCookie.match(/\bSID=([^;]+)/);
-    if (!sidMatch || !loginBody.trim().startsWith("Ok")) {
-      throw new IntegrationError("version-detect", "invalid qBittorrent credentials");
-    }
-    const sid = sidMatch[1];
+    // <5.x: "SID=…"; ≥5.x: "QBT_SID_<port>=…" — capture the full name=value pair.
+    const cookieMatch = setCookie.match(/((?:QBT_SID_\w+|SID)=([^;]+))/);
+    if (!cookieMatch) throw new IntegrationError("version-detect", "invalid qBittorrent credentials");
+    const cookie = cookieMatch[1];
     const verRes = await fetchRaw(`${b}/api/v2/app/version`, {
       service: "version-detect",
-      headers: { Cookie: `SID=${sid}`, Referer: b, Origin: b },
+      headers: { Cookie: cookie, Referer: b, Origin: b },
       insecureTls,
     });
     if (!verRes.ok) throw new IntegrationError("version-detect", `HTTP ${verRes.status}`);
