@@ -26,7 +26,7 @@ import {
   DownloadsPanel,
   DiscoverFeedPanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget, LazyLibrarianWidget, ListenarrWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget, LazyLibrarianWidget, ListenarrWidget, QbittorrentWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -271,6 +271,19 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
       { key: "showWanted", label: "Wanted", type: "toggle", default: true },
     ],
     render: (_c, s) => <ListenarrWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showMonitored={s.showMonitored as boolean} showWanted={s.showWanted as boolean} />,
+  },
+  qbittorrent: {
+    type: "qbittorrent", name: "qBittorrent", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation",
+    desc: "qBittorrent download client — global download/upload speeds, active, seeding and total torrent counts.",
+    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
+    settings: [
+      { key: "showDown", label: "Download speed", type: "toggle", default: true },
+      { key: "showUp", label: "Upload speed", type: "toggle", default: true },
+      { key: "showActive", label: "Active torrents", type: "toggle", default: true },
+      { key: "showSeeding", label: "Seeding", type: "toggle", default: true },
+      { key: "showTotal", label: "Total torrents", type: "toggle", default: true },
+    ],
+    render: (_c, s) => <QbittorrentWidget fill showDown={s.showDown as boolean} showUp={s.showUp as boolean} showActive={s.showActive as boolean} showSeeding={s.showSeeding as boolean} showTotal={s.showTotal as boolean} />,
   },
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",

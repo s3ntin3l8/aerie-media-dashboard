@@ -92,6 +92,7 @@ const SERVICE_PRESETS: Record<string, { cat: string; icon: string; logoSlug: str
   listenarr:     { cat: "automation", icon: "headphones",    logoSlug: "listenarr" },
   prowlarr:      { cat: "automation", icon: "search",        logoSlug: "prowlarr" },
   nzbget:        { cat: "automation", icon: "download",      logoSlug: "nzbget" },
+  qbittorrent:   { cat: "automation", icon: "downloading",   logoSlug: "qbittorrent" },
   nzbhydra:      { cat: "automation", icon: "manage_search", logoSlug: "nzbhydra2" },
   nzbhydra2:     { cat: "automation", icon: "manage_search", logoSlug: "nzbhydra2" },
   bazarr:        { cat: "automation", icon: "subtitles",     logoSlug: "bazarr" },

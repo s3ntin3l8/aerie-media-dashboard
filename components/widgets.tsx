@@ -7,7 +7,7 @@
 // ============================================================
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useData } from "@/components/portal/DataProvider";
-import { PanelShell, Empty, useTick } from "@/components/panels";
+import { PanelShell, Empty, useTick, fmtBytes } from "@/components/panels";
 import { Icon, Eyebrow, StatusDot } from "@/components/primitives";
 import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 
@@ -379,6 +379,37 @@ export function ListenarrWidget({
           {showAuthors && <Metric label="Authors" value={num(la.authors)} icon="person" color="var(--on-surface-variant)" />}
           {showMonitored && <Metric label="Monitored" value={num(la.monitored)} icon="bookmark" color="var(--on-surface-variant)" />}
           {showWanted && <Metric label="Wanted" value={num(la.wanted)} icon="bookmark_add" color={la.wanted > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />}
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── QBITTORRENT — download client global stats ─────────────
+// Each metric is independently toggleable via widget settings (see widgetCatalog).
+export function QbittorrentWidget({
+  fill,
+  showDown = true,
+  showUp = true,
+  showActive = true,
+  showSeeding = true,
+  showTotal = true,
+}: { fill?: boolean; showDown?: boolean; showUp?: boolean; showActive?: boolean; showSeeding?: boolean; showTotal?: boolean } = {}) {
+  const { qbittorrent: qb } = useData();
+  const anyOn = showDown || showUp || showActive || showSeeding || showTotal;
+  return (
+    <PanelShell fill={fill} title="qBittorrent" icon="downloading" accent="var(--originator-third-party)" live={!!qb}>
+      {!qb ? (
+        <Empty icon="downloading" line="qBittorrent not connected" sub="Add qBittorrent and store its username:password to see transfer stats." />
+      ) : !anyOn ? (
+        <Empty icon="tune" line="No stats enabled" sub="Turn stats on in this widget's settings." />
+      ) : (
+        <StatRow>
+          {showDown && <Metric label="Download" value={fmtBytes(qb.dlSpeed)} unit="/s" icon="arrow_downward" color="var(--primary)" />}
+          {showUp && <Metric label="Upload" value={fmtBytes(qb.upSpeed)} unit="/s" icon="arrow_upward" color="var(--on-surface-variant)" />}
+          {showActive && <Metric label="Active" value={qb.downloading.toLocaleString("en-US")} icon="downloading" color="var(--primary)" />}
+          {showSeeding && <Metric label="Seeding" value={qb.seeding.toLocaleString("en-US")} icon="upload" color="var(--on-surface-variant)" />}
+          {showTotal && <Metric label="Total" value={qb.torrents.toLocaleString("en-US")} icon="folder" color="var(--on-surface-variant)" />}
         </StatRow>
       )}
     </PanelShell>

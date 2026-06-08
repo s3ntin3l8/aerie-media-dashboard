@@ -88,7 +88,9 @@ services:
     host: qbit.aerie.tv
     embeddable: true
     note: "Download client"
-    apiKey: ${QBITTORRENT_API_KEY}
+    # qBittorrent has no API key — it authenticates with a form-POST login (cookie session),
+    # so pack WebUI username + password as "username:password" (same convention as NZBGet/Beszel).
+    apiKey: ${QBITTORRENT_CREDENTIALS}   # e.g. admin:adminadmin
 
   - id: nzbget
     name: NZBGet

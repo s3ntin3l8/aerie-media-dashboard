@@ -6,7 +6,7 @@
 // panel. Live calls only fire for services that have a stored secret.
 // ============================================================
 import "server-only";
-import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
+import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
@@ -55,6 +55,8 @@ import {
   listenarrStats,
   listenarrLibraryStats,
   type ListenarrStats,
+  qbittorrentQueue,
+  qbittorrentStats,
   type ServiceHealth,
   type NodeMetrics,
   type WizarrStats,
@@ -86,14 +88,18 @@ export interface Snapshot {
   upcoming: UpcomingItem[];
   /** recently grabbed/imported downloads from *arr history */
   downloads: DownloadEvent[];
-  /** which source fills `queue` (the *arr clients and NZBGet report the same downloads) */
-  queueSource: "arr" | "nzbget";
+  /** which source fills `queue` */
+  queueSource: QueueSource;
   /** Sonarr or Radarr has a stored secret (drives the queue source toggle's visibility) */
   arrQueueConfigured: boolean;
   /** NZBGet has a stored secret */
   nzbgetConfigured: boolean;
   /** NZBGet global rate/remaining/paused — null unless NZBGet is the active queue source */
   nzbgetStatus: NzbgetStatus | null;
+  /** qBittorrent has a stored secret */
+  qbittorrentConfigured: boolean;
+  /** qBittorrent global transfer stats — null when unconfigured */
+  qbittorrent: QbittorrentStats | null;
   /** weekly Tautulli leaderboard, or null when unconfigured */
   topStats: TopStats | null;
   groups: GroupRow[];
@@ -203,7 +209,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus" && c.active);
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
-  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn] = await Promise.all([
+  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn, qbitOn] = await Promise.all([
     has("tautulli"),
     has("jellyfin"),
     has("audiobookshelf"),
@@ -219,6 +225,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     has("lazylibrarian"),
     has("nzbget"),
     has("listenarr"),
+    has("qbittorrent"),
   ]);
 
   // Active metrics source: honour the stored preference when its source is live,
@@ -235,14 +242,16 @@ export async function getSnapshot(): Promise<Snapshot> {
     : "prometheus";
   const beszelSystemId = beszelSystemSetting && beszelSystemSetting.trim() ? beszelSystemSetting.trim() : null;
 
-  // Active queue source: the *arr clients and NZBGet report the same downloads (the
-  // *arrs — Listenarr included — delegate to NZBGet), so only one feeds the Download
-  // Queue panel at a time. Same resolution shape as metricsSource above.
+  // Active queue source: the *arr clients, NZBGet, and qBittorrent all surface download
+  // progress, so only one feeds the Download Queue panel at a time.
+  // Same resolution shape as metricsSource above.
   const arrQueueOn = sonarrOn || radarrOn || listenarrOn;
-  const queueSource: "arr" | "nzbget" =
+  const queueSource: QueueSource =
     queueSourceSetting === "nzbget" && nzbgetOn ? "nzbget"
+    : queueSourceSetting === "qbittorrent" && qbitOn ? "qbittorrent"
     : arrQueueOn ? "arr"
     : nzbgetOn ? "nzbget"
+    : qbitOn ? "qbittorrent"
     : "arr";
 
   if (PERF) console.log(`[perf] pre-wave (DB config/secret/settings): ${Date.now() - tStart}ms`);
@@ -255,6 +264,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers, absNow, llStats,
     listenarrQ, listenarrHist, listenarrHealthIssues, listenarrData,
+    qbitQ, qbStats,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -305,6 +315,9 @@ export async function getSnapshot(): Promise<Snapshot> {
     listenarrOn ? safe(listenarrHistory) : Promise.resolve(null),
     listenarrOn ? safe(listenarrHealth) : Promise.resolve(null),
     listenarrOn ? safe(listenarrStats) : Promise.resolve(null),
+    // qBittorrent: only the active queue source fires the torrent list; stats always fire when configured.
+    queueSource === "qbittorrent" ? perf("live:qbittorrentQueue", safe(qbittorrentQueue)) : Promise.resolve(null),
+    qbitOn ? perf("live:qbittorrentStats", safe(qbittorrentStats)) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -344,7 +357,7 @@ export async function getSnapshot(): Promise<Snapshot> {
 
   const nowPlaying: NowPlaying[] = [...(ttAct?.sessions ?? []), ...(jfNow ?? []), ...(absNow ?? [])];
   // Only the active queue source fetched (the others resolved null), so this stays single-source.
-  const queue: QueueItem[] = [...(sonarrQ ?? []), ...(radarrQ ?? []), ...(listenarrQ ?? []), ...(nzbgetQ ?? [])];
+  const queue: QueueItem[] = [...(sonarrQ ?? []), ...(radarrQ ?? []), ...(listenarrQ ?? []), ...(nzbgetQ ?? []), ...(qbitQ ?? [])];
   const bandwidth = ttAct ? { totalMbps: ttAct.totalKbps / 1000, wanMbps: ttAct.wanKbps / 1000 } : null;
 
   // ── Overseerr identity join: attribute each request to the portal account that
@@ -466,6 +479,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
     metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
     queueSource, arrQueueConfigured: arrQueueOn, nzbgetConfigured: nzbgetOn, nzbgetStatus: nzbgetStat ?? null,
+    qbittorrentConfigured: qbitOn, qbittorrent: qbStats ?? null,
     discover, requestCounts: osRequestCounts ?? null,
     wizarr: wizarrData ?? null, prowlarr: prowlarrData ?? null,
     agregarr: agregarrData ?? null, bazarrWanted: bazarrData ?? null,

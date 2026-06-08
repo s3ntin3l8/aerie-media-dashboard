@@ -34,6 +34,35 @@ export interface HttpOpts {
   insecureTls?: boolean;
 }
 
+/**
+ * Like fetchJson but returns the raw Response object instead of parsing JSON.
+ * Use for endpoints that return non-JSON bodies (e.g. qBittorrent login → text/plain)
+ * or where you need response headers (Set-Cookie).
+ * Does NOT throw on non-2xx — the caller must inspect res.status / res.ok.
+ */
+export async function fetchRaw(url: string, opts: HttpOpts): Promise<Response> {
+  const { service, timeoutMs = 5000, headers = {}, method = "GET", body, insecureTls = false } = opts;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const init = {
+      method,
+      headers: { ...headers },
+      body: body != null ? (typeof body === "string" ? body : JSON.stringify(body)) : undefined,
+      signal: ctrl.signal,
+      cache: "no-store" as const,
+    };
+    return (insecureTls
+      ? await undiciFetch(url, { ...init, dispatcher: getInsecureAgent() })
+      : await fetch(url, init)) as unknown as Response;
+  } catch (e) {
+    if (e instanceof IntegrationError) throw e;
+    throw new IntegrationError(service, e instanceof Error ? e.message : String(e));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchJson<T>(url: string, opts: HttpOpts): Promise<T> {
   const { service, timeoutMs = 5000, headers = {}, method = "GET", body, insecureTls = false } = opts;
   const ctrl = new AbortController();

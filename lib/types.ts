@@ -294,6 +294,29 @@ export interface NzbgetStatus {
   standby: boolean;
 }
 
+/** Which download client feeds the shared Download Queue panel. */
+export type QueueSource = "arr" | "nzbget" | "qbittorrent";
+
+/** qBittorrent global transfer stats + torrent counts. */
+export interface QbittorrentStats {
+  /** bytes/sec download speed */
+  dlSpeed: number;
+  /** bytes/sec upload speed */
+  upSpeed: number;
+  /** bytes downloaded this session */
+  downloaded: number;
+  /** bytes uploaded this session */
+  uploaded: number;
+  /** active downloading torrents (downloading/queued/stalled) */
+  downloading: number;
+  /** active seeding/uploading torrents */
+  seeding: number;
+  /** total torrent count */
+  torrents: number;
+  /** connection status from qBittorrent ("connected" | "firewalled" | "disconnected") */
+  connectionStatus: string;
+}
+
 /** A discoverable title in the request modal's catalog. */
 export interface DiscoverItem {
   id: string;

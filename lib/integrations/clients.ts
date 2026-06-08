@@ -5,10 +5,10 @@
 // to mock so a dead or unconfigured upstream only degrades its panel.
 // ============================================================
 import "server-only";
-import { fetchJson, fetchJson as fetchJsonRaw, IntegrationError, type HttpOpts } from "./http";
+import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -2182,6 +2182,154 @@ export function listenarrLibraryStats(s: ListenarrStats): LibraryStat[] {
     : [];
 }
 
+// ── qBittorrent — WebUI v2 cookie-session download client ──
+// qBittorrent has no API key: it authenticates via a form-POST login that returns
+// a SID session cookie. The stored secret holds "username:password" (same colon-pair
+// convention as NZBGet/Beszel). All subsequent API calls send Cookie: SID=…
+// plus Referer/Origin to satisfy qBittorrent's CSRF guard.
+
+function splitQbitCreds(apiKey: string): { username: string; password: string } {
+  const i = apiKey.indexOf(":");
+  if (i < 0) throw new IntegrationError("qbittorrent", "apiKey must be 'username:password'");
+  return { username: apiKey.slice(0, i), password: apiKey.slice(i + 1) };
+}
+
+interface QbitSidEntry { sid: string; at: number; }
+const qbitSidCache = new Map<string, QbitSidEntry>();
+const qbitAuthInflight = new Map<string, Promise<string>>();
+/** TTL = 30 min; re-auth on 403/401 covers server-side expiry before that. */
+const QBIT_SID_TTL = 30 * 60_000;
+
+/**
+ * Obtain a valid qBittorrent SID cookie, caching it until 30 s before expiry.
+ * Returns the SID string (without the "SID=" prefix).
+ */
+async function qbitAuth(base: string, apiKey: string, insecureTls: boolean, force = false): Promise<string> {
+  if (!force) {
+    const hit = qbitSidCache.get(base);
+    if (hit && Date.now() - hit.at < QBIT_SID_TTL - 30_000) return hit.sid;
+    const inflight = qbitAuthInflight.get(base);
+    if (inflight) return inflight;
+  }
+  const { username, password } = splitQbitCreds(apiKey);
+  const p = (async () => {
+    const res = await fetchRaw(`${base}/api/v2/auth/login`, {
+      service: "qbittorrent",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Referer: base,
+        Origin: base,
+      },
+      body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+      insecureTls,
+    });
+    if (res.status === 403) throw new IntegrationError("qbittorrent", "IP temporarily banned by qBittorrent (too many failed logins)", 403);
+    const text = await res.text();
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    const sidMatch = setCookie.match(/\bSID=([^;]+)/);
+    if (!sidMatch || !text.trim().startsWith("Ok")) {
+      throw new IntegrationError("qbittorrent", "invalid credentials (bad username/password)");
+    }
+    const sid = sidMatch[1];
+    qbitSidCache.set(base, { sid, at: Date.now() });
+    return sid;
+  })();
+  qbitAuthInflight.set(base, p);
+  try {
+    return await p;
+  } finally {
+    qbitAuthInflight.delete(base);
+  }
+}
+
+/**
+ * Authenticated JSON GET against qBittorrent, with one re-auth retry on 403/401
+ * (expired SID). Sends Cookie + Referer + Origin on every request.
+ */
+async function qbitGet<T>(base: string, apiKey: string, insecureTls: boolean, path: string): Promise<T> {
+  const sid = await qbitAuth(base, apiKey, insecureTls);
+  const hdrs = { Cookie: `SID=${sid}`, Referer: base, Origin: base };
+  try {
+    return await fetchJsonRaw<T>(`${base}${path}`, { service: "qbittorrent", headers: hdrs, insecureTls });
+  } catch (e) {
+    if (e instanceof IntegrationError && (e.status === 403 || e.status === 401)) {
+      const fresh = await qbitAuth(base, apiKey, insecureTls, true);
+      return await fetchJsonRaw<T>(`${base}${path}`, {
+        service: "qbittorrent",
+        headers: { Cookie: `SID=${fresh}`, Referer: base, Origin: base },
+        insecureTls,
+      });
+    }
+    throw e;
+  }
+}
+
+/** Credentials helper that also surfaces insecureTls (needed for the auth flow). */
+async function qbitCreds(): Promise<{ baseUrl: string; apiKey: string; insecureTls: boolean }> {
+  const c = await getServiceCredentials("qbittorrent");
+  if (!c || !c.apiKey) throw new IntegrationError("qbittorrent", "not configured (no credentials)");
+  return { baseUrl: c.baseUrl.replace(/\/$/, ""), apiKey: c.apiKey, insecureTls: c.insecureTls };
+}
+
+interface QbitTorrentRecord {
+  hash?: string;
+  name?: string;
+  progress?: number;   // 0–1
+  eta?: number;        // seconds; 8640000 = no ETA / stalled
+  dlspeed?: number;    // bytes/sec
+  state?: string;      // "downloading" | "stalledDL" | "metaDL" | "uploading" | "stalledUP" | …
+}
+
+interface QbitTransferInfo {
+  dl_info_speed?: number;   // bytes/sec
+  up_info_speed?: number;   // bytes/sec
+  dl_info_data?: number;    // bytes this session
+  up_info_data?: number;    // bytes this session
+  connection_status?: string; // "connected" | "firewalled" | "disconnected"
+}
+
+const QBIT_DOWNLOADING_STATES = new Set(["downloading", "stalledDL", "metaDL", "forcedDL", "queuedDL"]);
+const QBIT_SEEDING_STATES = new Set(["uploading", "stalledUP", "forcedUP", "queuedUP"]);
+/** ETA sentinel (qBittorrent uses 8640000 = 100 days for "no ETA / stalled"). */
+const QBIT_ETA_SENTINEL = 8_640_000;
+
+export async function qbittorrentQueue(): Promise<QueueItem[]> {
+  const { baseUrl, apiKey, insecureTls } = await qbitCreds();
+  const torrents = await qbitGet<QbitTorrentRecord[]>(baseUrl, apiKey, insecureTls, "/api/v2/torrents/info");
+  return (torrents ?? []).map((t) => {
+    const pct = Math.min(100, Math.max(0, Math.round((t.progress ?? 0) * 100)));
+    const etaSec = t.eta ?? 0;
+    return {
+      id: `qbittorrent-${t.hash ?? Math.random()}`,
+      title: t.name || "(unnamed)",
+      svc: "qbittorrent",
+      pct,
+      eta: etaSec > 0 && etaSec < QBIT_ETA_SENTINEL ? fmtEtaSeconds(etaSec) : "—",
+      speed: (t.dlspeed ?? 0) > 0 ? `${((t.dlspeed ?? 0) / 1_048_576).toFixed(1)} MB/s` : "",
+    };
+  });
+}
+
+export async function qbittorrentStats(): Promise<QbittorrentStats> {
+  const { baseUrl, apiKey, insecureTls } = await qbitCreds();
+  const [info, torrents] = await Promise.all([
+    qbitGet<QbitTransferInfo>(baseUrl, apiKey, insecureTls, "/api/v2/transfer/info"),
+    qbitGet<QbitTorrentRecord[]>(baseUrl, apiKey, insecureTls, "/api/v2/torrents/info"),
+  ]);
+  const list = torrents ?? [];
+  return {
+    dlSpeed: info.dl_info_speed ?? 0,
+    upSpeed: info.up_info_speed ?? 0,
+    downloaded: info.dl_info_data ?? 0,
+    uploaded: info.up_info_data ?? 0,
+    downloading: list.filter((t) => QBIT_DOWNLOADING_STATES.has(t.state ?? "")).length,
+    seeding: list.filter((t) => QBIT_SEEDING_STATES.has(t.state ?? "")).length,
+    torrents: list.length,
+    connectionStatus: info.connection_status ?? "unknown",
+  };
+}
+
 // ── Version detection ──────────────────────────────────────
 
 type ServiceKind =
@@ -2195,6 +2343,7 @@ type ServiceKind =
   | "audiobookshelf" // /api/libraries (Bearer; no version field)
   | "nzbhydra" // /internalapi/updates/infos?apikey= → currentVersion
   | "nzbget" // JSON-RPC /jsonrpc "version" (Basic auth from "username:password" secret)
+  | "qbittorrent" // WebUI v2 /api/v2/app/version (cookie session from "username:password" secret)
   | "tautulli"
   | "prometheus"
   | "gatus" // /api/v1/endpoints/statuses (optional Bearer; no version field)
@@ -2216,6 +2365,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("audiobookshelf")) return "audiobookshelf";
   if (l.includes("nzbget")) return "nzbget";
   if (l.includes("nzbhydra") || l.includes("hydra")) return "nzbhydra";
+  if (l.includes("qbittorrent") || l.includes("qbit")) return "qbittorrent";
   if (l.includes("listenarr")) return "listenarr";
   if (l.includes("prowlarr") || l.includes("lidarr") || l.includes("readarr")) return "arr-v1";
   if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
@@ -2311,6 +2461,34 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
       body: { method: "version", params: [] },
     });
     return normalizeVersion(d.result);
+  }
+  if (kind === "qbittorrent") {
+    // Login with form-encoded credentials (SID cookie), then GET plain-text version.
+    // The local fetchJson override (injecting insecureTls) doesn't work for the raw login
+    // fetch, so we pass insecureTls explicitly via HttpOpts.
+    const { username, password } = splitQbitCreds(apiKey);
+    const loginRes = await fetchRaw(`${b}/api/v2/auth/login`, {
+      service: "version-detect",
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Referer: b, Origin: b },
+      body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+      insecureTls,
+    });
+    if (loginRes.status === 403) throw new IntegrationError("version-detect", "IP temporarily banned by qBittorrent");
+    const loginBody = await loginRes.text();
+    const setCookie = loginRes.headers.get("set-cookie") ?? "";
+    const sidMatch = setCookie.match(/\bSID=([^;]+)/);
+    if (!sidMatch || !loginBody.trim().startsWith("Ok")) {
+      throw new IntegrationError("version-detect", "invalid qBittorrent credentials");
+    }
+    const sid = sidMatch[1];
+    const verRes = await fetchRaw(`${b}/api/v2/app/version`, {
+      service: "version-detect",
+      headers: { Cookie: `SID=${sid}`, Referer: b, Origin: b },
+      insecureTls,
+    });
+    if (!verRes.ok) throw new IntegrationError("version-detect", `HTTP ${verRes.status}`);
+    return normalizeVersion(await verRes.text());
   }
   if (kind === "nzbhydra") {
     // Spring Boot actuator /info is empty in the default LSIO package; use the internal

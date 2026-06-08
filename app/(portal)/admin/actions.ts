@@ -187,10 +187,10 @@ export async function setMetricsSource(source: "prometheus" | "beszel"): Promise
   revalidatePath("/status");
 }
 
-/** Select which source fills the Download Queue panel (the *arrs and NZBGet report the same downloads). */
-export async function setQueueSource(source: "arr" | "nzbget"): Promise<void> {
+/** Select which source fills the Download Queue panel. */
+export async function setQueueSource(source: "arr" | "nzbget" | "qbittorrent"): Promise<void> {
   await requireAdmin();
-  if (source !== "arr" && source !== "nzbget") throw new Error(`Unknown queue source: ${source}`);
+  if (source !== "arr" && source !== "nzbget" && source !== "qbittorrent") throw new Error(`Unknown queue source: ${source}`);
   await setDeploymentSetting("queueSource", source);
   revalidatePath("/");
 }
