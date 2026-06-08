@@ -223,7 +223,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     has("bazarr"),
     has("nzbhydra"),
     has("lazylibrarian"),
-    has("nzbget"),
+    isActive("nzbget"), // NZBGet can run without credentials (auth disabled)
     has("listenarr"),
     has("qbittorrent"),
   ]);

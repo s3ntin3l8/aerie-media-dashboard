@@ -1546,12 +1546,16 @@ export async function arrQueue(serviceId: "sonarr" | "radarr"): Promise<QueueIte
 // (ControlUsername/ControlPassword), so the stored secret holds
 // "username:password" (same convention as Beszel's email:password).
 async function nzbgetRpc<T>(method: string): Promise<T> {
-  const { baseUrl, apiKey } = await creds("nzbget");
-  const auth = Buffer.from(apiKey).toString("base64");
-  const res = await fetchJson<{ result: T }>(`${baseUrl}/jsonrpc`, {
+  const c = await getServiceCredentials("nzbget");
+  if (!c) throw new IntegrationError("nzbget", "not configured");
+  const base = c.baseUrl.replace(/\/$/, "");
+  // apiKey is null when NZBGet auth is disabled — omit the Authorization header.
+  const hdrs: Record<string, string> = { "Content-Type": "application/json" };
+  if (c.apiKey) hdrs.Authorization = `Basic ${Buffer.from(c.apiKey).toString("base64")}`;
+  const res = await fetchJson<{ result: T }>(`${base}/jsonrpc`, {
     service: "nzbget",
     method: "POST",
-    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    headers: hdrs,
     body: { method, params: [] },
   });
   return res.result;
