@@ -12,7 +12,7 @@ export default defineConfig({
     coverage: {
       reporter: ["text", "lcov"],
       include: ["app/**", "components/**", "lib/**"],
-      exclude: ["node_modules/", "tests/"],
+      exclude: ["node_modules/", "tests/", "tests/setup.ts"],
     },
     projects: [
       {
@@ -38,3 +38,4 @@ export default defineConfig({
     ],
   },
 });
+
