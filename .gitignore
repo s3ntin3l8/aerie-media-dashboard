@@ -54,3 +54,6 @@ docker-compose.override.yml
 
 # design prototype (local reference only; not shipped)
 /design/prototype/
+
+# Superpowers
+docs/superpowers/
