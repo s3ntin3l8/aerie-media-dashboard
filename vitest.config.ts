@@ -11,5 +11,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './'),
     },
+    coverage: {
+      reporter: ['text', 'lcov'],
+      include: ['app/**', 'components/**', 'lib/**'],
+      exclude: ['node_modules/', 'tests/setup.ts'],
+    },
   },
 })

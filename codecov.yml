@@ -1,0 +1,23 @@
+# Codecov configuration
+codecov:
+  notify:
+    after_n_builds: 1
+    wait_for_ci: yes
+
+coverage:
+  status:
+    project:
+      default:
+        # Target coverage: fail if it drops below the current percentage or a fixed value
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        # Only track coverage for the changed lines in the PR
+        target: auto
+        threshold: 0%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: no # Print the comment even if coverage doesn't change

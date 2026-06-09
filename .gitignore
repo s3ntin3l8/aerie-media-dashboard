@@ -57,3 +57,4 @@ docker-compose.override.yml
 
 # Superpowers
 docs/superpowers/
+coverage/
