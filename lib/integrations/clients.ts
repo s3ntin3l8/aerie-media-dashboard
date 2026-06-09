@@ -51,6 +51,12 @@ export function bustCache(key: string): void {
   ttlCache.delete(key);
 }
 
+/** Drop every cached entry. Tests use this between cases; do not call from request paths. */
+export function clearCache(): void {
+  ttlCache.clear();
+  ttlInflight.clear();
+}
+
 // ── Gatus — per-service health + heartbeat ─────────────────
 export interface ServiceHealth {
   key: string; // matched to our service id where possible

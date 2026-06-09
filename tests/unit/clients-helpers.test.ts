@@ -52,6 +52,7 @@ import {
   overseerrRequests,
   matchOverseerrUserId,
   bustCache,
+  clearCache,
   type OverseerrUser,
 } from "@/lib/integrations/clients";
 
@@ -112,7 +113,7 @@ function makeTautulliSession(overrides: Record<string, unknown> = {}) {
 describe("clients — private helpers via exported functions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    bustCache("");
+    clearCache();
   });
 
   describe("gatusHealth — beat mapping & uptime", () => {
@@ -434,8 +435,10 @@ it("maps height to resolution labels", async () => {
 
   describe("overseerrRequests — OVERSEERR_STATUS mapping", () => {
     beforeEach(() => {
+      // Production cache keys: `overseerr:requests` and `overseerr:quota:${userId}`.
+      // The quota key requires the user id; tests query user 1.
       bustCache("overseerr:requests");
-      bustCache("overseerr:quota:");
+      bustCache("overseerr:quota:1");
     });
 
     it("maps Overseerr request status 1 → pending, 2 → approved, 3 → declined, 4 → failed", async () => {
