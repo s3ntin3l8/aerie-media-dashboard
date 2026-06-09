@@ -25,13 +25,14 @@ npm run build       # production build (this is what CI gates on)
 npm run start       # serve the production build
 npm run lint        # eslint
 npm run typecheck   # tsc --noEmit
+npm run test         # vitest run
+npm run test:coverage # vitest run --coverage (used in CI)
 npm run db:generate # drizzle-kit generate (new migration from schema.ts changes)
 npm run db:migrate  # drizzle-kit migrate
 npm run db:seed     # tsx scripts/seed.ts
 ```
 
-There is **no test runner** in this project. The quality gates are `lint`, `typecheck`, and
-`build`. Match those before considering work done.
+The quality gates are `lint`, `typecheck`, `test:coverage`, and `build`. Match those before considering work done. CI runs `test:coverage` (which generates `coverage/coverage-summary.json` for Codecov upload and threshold enforcement); pre-push runs plain `test` (faster, no instrumentation).
 
 Migrations normally don't need to be run by hand: `lib/db/bootstrap.ts` lazily applies them
 and seeds from mock data on first DB use (`ensureDb()`), so a fresh deployment self-bootstraps.
@@ -39,8 +40,11 @@ Only run `db:generate` when you change `lib/db/schema.ts`.
 
 ## Quality gates (enforced, not optional)
 
-- **CI** (`.github/workflows/ci.yml`): `lint → typecheck → build` plus a Docker image build,
-  on every push/PR to `main`. Node 24.
+- **CI** (`.github/workflows/`): calls org reusable workflows from `s3ntin3l8/.github`:
+  - `ci.yml` → `ci-node` (lint, typecheck, test with coverage, Codecov upload, build) + `docker-publish` (edge image push to GHCR on main)
+  - `codeql.yml` → CodeQL security scan (weekly + on push/PR to main)
+  - `release.yml` → Release Please (changelog + versioning on push to main)
+  - `cleanup.yml` → GHCR untagged image cleanup (weekly)
 - **pre-commit** (Husky + lint-staged): `eslint --fix` on staged `*.{ts,tsx,js,mjs}`.
 - **pre-push** (Husky): the full `npm run typecheck && npm run lint && npm run build`. A push
   will be rejected locally if any of these fail.
@@ -191,7 +195,7 @@ stored in `service_secrets`.
 
 ## Deployment
 
-Standalone `Dockerfile` + `docker-compose.yml` behind Traefik. Production setup:
+Standalone `Dockerfile` + `docker-compose.yml` behind Traefik. CI pushes edge images to `ghcr.io/s3ntin3l8/aerie` on every main push; release tags push versioned images. Production setup:
 `cp .env.example .env` (OIDC creds **or** leave them blank for the first-run local-admin setup;
 `AUTH_SECRET`, `ENCRYPTION_KEY`) → `db:migrate` (or rely on runtime bootstrap) → sign in (OIDC or
 create the local admin at `/login`) → add services and enter each API key in **Admin → Services**

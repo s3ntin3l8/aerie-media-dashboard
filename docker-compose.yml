@@ -6,7 +6,7 @@
 # ============================================================
 services:
   aerie:
-    image: ghcr.io/you/aerie:latest # or pin a built image
+    image: ghcr.io/s3ntin3l8/aerie:latest
     restart: unless-stopped
     env_file: .env
     # The DB folder is bind-mounted from the host (see volumes below), so the

@@ -9,8 +9,12 @@ export default defineConfig({
   resolve: { alias: rootAlias },
   test: {
     globals: true,
+    // In CI, also emit a JUnit report so the org ci-node workflow can upload it
+    // to Codecov Test Analytics. Local runs keep the default console reporter only.
+    reporters: process.env.CI ? ["default", "junit"] : ["default"],
+    outputFile: { junit: "./test-results/junit.xml" },
     coverage: {
-      reporter: ["text", "lcov"],
+      reporter: ["text", "lcov", "json-summary"],
       include: ["app/**", "components/**", "lib/**"],
       exclude: ["node_modules/", "tests/", "tests/setup.ts"],
     },
