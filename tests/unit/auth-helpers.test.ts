@@ -1,16 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { normalizeGroups, deriveRole } from "@/lib/auth/role";
+import { env } from "@/lib/env";
 
-function normalizeGroups(claim: unknown): string[] {
-  if (Array.isArray(claim)) return claim.map(String);
-  if (typeof claim === "string") return claim.split(/[\s,]+/).filter(Boolean);
-  return [];
-}
-
-function deriveRole(groups: string[], email?: string | null, adminGroup = "admins", adminEmails: string[] = []): "admin" | "user" {
-  if (groups.includes(adminGroup)) return "admin";
-  if (email && adminEmails.includes(email.toLowerCase())) return "admin";
-  return "user";
-}
+const ADMIN_GROUP = env.adminGroup;
+const ADMIN_EMAILS = env.adminEmails;
 
 describe("normalizeGroups", () => {
   it("passes through an array of strings", () => {
@@ -48,7 +41,7 @@ describe("normalizeGroups", () => {
 
 describe("deriveRole", () => {
   it("returns admin when groups contain admin group", () => {
-    expect(deriveRole(["admins", "users"], "user@example.com")).toBe("admin");
+    expect(deriveRole(["admins", "users"], "user@example.com", ADMIN_GROUP, ADMIN_EMAILS)).toBe("admin");
   });
 
   it("returns admin when email is in adminEmails", () => {
@@ -56,11 +49,11 @@ describe("deriveRole", () => {
   });
 
   it("returns user when neither in admin group nor admin email", () => {
-    expect(deriveRole(["users"], "user@example.com")).toBe("user");
+    expect(deriveRole(["users"], "user@example.com", ADMIN_GROUP, ADMIN_EMAILS)).toBe("user");
   });
 
   it("returns user when groups are empty and email is not admin", () => {
-    expect(deriveRole([], "user@example.com")).toBe("user");
+    expect(deriveRole([], "user@example.com", ADMIN_GROUP, ADMIN_EMAILS)).toBe("user");
   });
 
   it("is case-insensitive for email matching", () => {
@@ -72,6 +65,6 @@ describe("deriveRole", () => {
   });
 
   it("returns user with no email", () => {
-    expect(deriveRole(["users"], undefined)).toBe("user");
+    expect(deriveRole(["users"], undefined, ADMIN_GROUP, ADMIN_EMAILS)).toBe("user");
   });
 });
