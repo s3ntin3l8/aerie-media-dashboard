@@ -1121,10 +1121,6 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
   return { fileIndex, profileIndex };
 }
 
-async function arrMovieFileIndex(): Promise<Map<number, FileInfo>> {
-  return (await arrMovieIndexes()).fileIndex;
-}
-
 /** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
 export async function overseerrMovieProfiles(): Promise<QualityProfile[]> {
   if (movieProfilesCache && Date.now() - movieProfilesCache.at < QUALITY_PROFILES_TTL) return movieProfilesCache.profiles;

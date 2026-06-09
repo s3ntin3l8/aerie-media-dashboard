@@ -7,9 +7,7 @@ import { useRouter } from "next/navigation";
 import { Icon, Kbd, Eyebrow, catColor } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData } from "@/components/portal/DataProvider";
 import type { Service } from "@/lib/types";
-import { isVisible } from "@/lib/visibility";
 import { PALETTE_NAV_ITEMS } from "@/lib/nav";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 

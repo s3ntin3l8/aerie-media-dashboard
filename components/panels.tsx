@@ -6,7 +6,7 @@
 // ============================================================
 import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus } from "@/lib/types";
-import { useData, useRefresh, useSnapshotTime } from "@/components/portal/DataProvider";
+import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setQueueSource } from "@/app/(portal)/admin/actions";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { isVisible } from "@/lib/visibility";

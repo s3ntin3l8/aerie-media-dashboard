@@ -31,6 +31,10 @@
     "yaml": "^2.6.1",
     "zod": "^4.4.3"
   },
+  "overrides": {
+    "postcss": ">=8.5.10",
+    "esbuild": ">=0.25.0"
+  },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
