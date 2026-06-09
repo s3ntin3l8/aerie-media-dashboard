@@ -30,7 +30,7 @@ export default defineConfig({
         test: {
           name: "server",
           environment: "node",
-          setupFiles: ["./tests/unit/server.setup.ts"],
+          setupFiles: ["./tests/unit/server.env.ts", "./tests/unit/server.setup.ts"],
           globals: true,
           include: ["tests/unit/**/*.test.ts"],
         },
