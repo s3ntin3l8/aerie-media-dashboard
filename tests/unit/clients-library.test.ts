@@ -47,10 +47,7 @@ import { getServiceCredentials } from "@/lib/integrations/registry";
 import {
   lazylibrarianLibraryStats,
   listenarrLibraryStats,
-  matchOverseerrUserId,
   overseerrUserQuota,
-  type LazyLibrarianStats,
-  type ListenarrStats,
   type OverseerrUser,
 } from "@/lib/integrations/clients";
 
@@ -153,17 +150,31 @@ describe("mapQuota via overseerrUserQuota", () => {
     vi.clearAllMocks();
   });
 
-  it("maps limit=0 to null and passes through other fields", async () => {
+  it("maps limit=0 to null and passes through every other field", async () => {
     mockGetCreds.mockResolvedValue({ baseUrl: "http://os", apiKey: "key", insecureTls: false });
     mockFetchJson.mockResolvedValue({
       movie: { limit: 0, days: 7, used: 0, remaining: 0, restricted: false },
-      tv: { limit: 5, days: 7, used: 2, remaining: 3, restricted: true },
+      tv: { limit: 5, days: 14, used: 2, remaining: 3, restricted: true },
     });
 
     const result = await overseerrUserQuota(1);
-    expect(result.movie.limit).toBeNull();
-    expect(result.movie.days).toBe(7);
-    expect(result.tv.limit).toBe(5);
-    expect(result.tv.restricted).toBe(true);
+
+    // movie: limit=0 → null; other fields pass through
+    expect(result.movie).toEqual({
+      limit: null,
+      days: 7,
+      used: 0,
+      remaining: 0,
+      restricted: false,
+    });
+
+    // tv: limit=5 stays 5; all other fields pass through
+    expect(result.tv).toEqual({
+      limit: 5,
+      days: 14,
+      used: 2,
+      remaining: 3,
+      restricted: true,
+    });
   });
 });
