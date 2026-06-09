@@ -1,0 +1,166 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("@/lib/integrations/http", () => ({
+  fetchJson: vi.fn(),
+  fetchJsonRaw: vi.fn(),
+  IntegrationError: class IntegrationError extends Error {
+    service: string;
+    status?: number;
+    constructor(service: string, message: string, status?: number) {
+      super(`[${service}] ${message}`);
+      this.name = "IntegrationError";
+      this.service = service;
+      this.status = status;
+    }
+  },
+}));
+
+vi.mock("@/lib/integrations/registry", () => ({
+  getServiceCredentials: vi.fn(),
+  getDeploymentSetting: vi.fn(),
+}));
+
+vi.mock("@/lib/env", () => ({
+  env: {
+    encryptionKey: "0".repeat(64),
+    authSecret: "test",
+    prometheusInstance: undefined,
+    configFile: "/dev/null",
+    brand: "AERIE",
+    portalUrl: "https://test",
+    adminGroup: "admins",
+    adminEmails: [],
+    authIssuer: "",
+    authClientId: "",
+    authClientSecret: "",
+    oidcProviderId: "oidc",
+    oidcProviderName: "SSO",
+    oidcProviderIcon: "shield_person",
+    oidcScopes: "openid email profile groups",
+    oidcGroupsClaim: "groups",
+    databaseUrl: "file::memory:",
+  },
+  authConfigured: false,
+}));
+
+import { fetchJson } from "@/lib/integrations/http";
+import { getServiceCredentials } from "@/lib/integrations/registry";
+import { detectVersion, probeVersion } from "@/lib/integrations/clients";
+
+const mockFetchJson = vi.mocked(fetchJson);
+const mockGetCreds = vi.mocked(getServiceCredentials);
+
+describe("serviceKind — via detectVersion and probeVersion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("detectVersion — unknown service kind returns null", () => {
+    it("returns null for an unrecognized service id", async () => {
+      mockGetCreds.mockResolvedValue({ baseUrl: "http://svc", apiKey: "key", insecureTls: false });
+      const result = await detectVersion("unknown-service");
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("probeVersion — version detection per service kind", () => {
+    it("detects Sonarr version via /api/v3/system/status", async () => {
+      mockFetchJson.mockResolvedValue({ version: "4.0.11.2680" });
+      const result = await probeVersion("http://sonarr:8989", "key", "sonarr");
+      expect(result).toBe("4.0.11.2680");
+      expect(mockFetchJson).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v3/system/status"),
+        expect.objectContaining({ service: "version-detect" }),
+      );
+    });
+
+    it("detects Radarr version via /api/v3/system/status", async () => {
+      mockFetchJson.mockResolvedValue({ version: "5.14.0.9383" });
+      const result = await probeVersion("http://radarr:7878", "key", "radarr");
+      expect(result).toBe("5.14.0.9383");
+    });
+
+    it("detects Prowlarr version via /api/v1/system/status (v1 API)", async () => {
+      mockFetchJson.mockResolvedValue({ version: "1.31.2.6552" });
+      const result = await probeVersion("http://prowlarr:9696", "key", "prowlarr");
+      expect(result).toBe("1.31.2.6552");
+      expect(mockFetchJson).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/system/status"),
+        expect.anything(),
+      );
+    });
+
+    it("detects Jellyfin version via /System/Info", async () => {
+      mockFetchJson.mockResolvedValue({ Version: "10.9.11" });
+      const result = await probeVersion("http://jellyfin:8096", "key", "jellyfin");
+      expect(result).toBe("10.9.11");
+      expect(mockFetchJson).toHaveBeenCalledWith(
+        expect.stringContaining("/System/Info"),
+        expect.anything(),
+      );
+    });
+
+    it("detects Overseerr version via /api/v1/status", async () => {
+      mockFetchJson.mockResolvedValue({ version: "1.34.0" });
+      const result = await probeVersion("http://overseerr:5055", "key", "overseerr");
+      expect(result).toBe("1.34.0");
+    });
+
+    it("detects Jellyseerr as overseerr kind", async () => {
+      mockFetchJson.mockResolvedValue({ version: "2.0.0" });
+      const result = await probeVersion("http://jellyseerr:5055", "key", "jellyseerr");
+      expect(result).toBe("2.0.0");
+      expect(mockFetchJson).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/status"),
+        expect.anything(),
+      );
+    });
+
+    it("strips leading v from version via normalizeVersion", async () => {
+      mockFetchJson.mockResolvedValue({ version: "v1.2.3" });
+      const result = await probeVersion("http://svc:8080", "key", "sonarr");
+      expect(result).toBe("1.2.3");
+    });
+
+    it("strips leading V from version via normalizeVersion", async () => {
+      mockFetchJson.mockResolvedValue({ version: "V2.0.0" });
+      const result = await probeVersion("http://svc:8080", "key", "radarr");
+      expect(result).toBe("2.0.0");
+    });
+
+    it("shortens develop-SHA versions via normalizeVersion", async () => {
+      mockFetchJson.mockResolvedValue({ version: "develop-abcdef12345678" });
+      const result = await probeVersion("http://svc:8080", "key", "sonarr");
+      expect(result).toBe("develop-abcdef1");
+    });
+
+    it("returns null for null/undefined version", async () => {
+      mockFetchJson.mockResolvedValue({ version: undefined });
+      const result = await probeVersion("http://svc:8080", "key", "sonarr");
+      expect(result).toBeNull();
+    });
+
+    it("returns null for unrecognized kind", async () => {
+      const result = await probeVersion("http://svc:8080", "key", "random-tool");
+      expect(result).toBeNull();
+    });
+
+    it("handles Tautulli version detection", async () => {
+      mockFetchJson.mockResolvedValue({ response: { data: { tautulli_version: "v2.14.5" } } });
+      const result = await probeVersion("http://tautulli:8181", "key", "tautulli");
+      expect(result).toBe("2.14.5");
+    });
+
+    it("handles Gatus (connectivity check, returns empty string)", async () => {
+      mockFetchJson.mockResolvedValue({});
+      const result = await probeVersion("http://gatus:8080", "key", "gatus");
+      expect(result).toBe("");
+    });
+
+    it("returns null on fetch error", async () => {
+      mockFetchJson.mockRejectedValue(new Error("connection refused"));
+      const result = await probeVersion("http://svc:8080", "key", "sonarr");
+      expect(result).toBeNull();
+    });
+  });
+});
