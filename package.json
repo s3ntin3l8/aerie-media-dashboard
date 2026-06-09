@@ -47,7 +47,7 @@
     "jsdom": "^29.1.1",
     "lint-staged": "^17.0.6",
     "tsx": "^4.22.3",
-    "typescript": "^5",
+    "typescript": "^6",
     "vitest": "^4.1.8"
   }
 }
