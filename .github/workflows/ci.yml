@@ -17,6 +17,7 @@ jobs:
       node-version: '24'
       typecheck-script: 'typecheck'
       test-script: 'test:coverage'
+      build-env: 'NEXT_TELEMETRY_DISABLED=1'
     secrets: inherit
 
   docker:
