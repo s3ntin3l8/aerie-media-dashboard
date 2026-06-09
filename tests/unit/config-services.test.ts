@@ -1,43 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { z } from "zod";
+import { serviceSchema, fileSchema, interpolate } from "@/lib/config/services";
 
 const CATEGORIES = ["stream", "request", "automation", "monitor", "infra"] as const;
-
-const serviceSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  cat: z.enum(CATEGORIES),
-  icon: z.string().min(1),
-  host: z.string().min(1),
-  baseUrl: z.string().optional(),
-  internalUrl: z.string().optional(),
-  embeddable: z.boolean().optional(),
-  central: z.boolean().optional(),
-  centralLabel: z.string().nullish(),
-  version: z.string().nullish(),
-  note: z.string().nullish(),
-  logoSlug: z.string().optional(),
-  apiKey: z.string().optional(),
-  monitoringKey: z.string().nullish(),
-});
-
-const fileSchema = z.object({
-  services: z.array(serviceSchema).default([]),
-  groups: z.array(z.object({ name: z.string().min(1), label: z.string().optional() })).optional(),
-  visibility: z
-    .array(z.object({ serviceId: z.string().min(1), groupName: z.string().min(1), visible: z.boolean() }))
-    .optional(),
-});
-
-const ENV_REF = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
-function interpolate(value: unknown): unknown {
-  if (typeof value === "string") return value.replace(ENV_REF, (_, name) => (process.env[name] ?? "").trim());
-  if (Array.isArray(value)) return value.map(interpolate);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, interpolate(v)]));
-  }
-  return value;
-}
 
 describe("config/services — interpolate()", () => {
   beforeEach(() => {
@@ -147,7 +111,7 @@ describe("config/services — fileSchema", () => {
   });
 });
 
-describe("config/services — duplicate ID detection", () => {
+describe("config/services — duplicate ID detection (loadServiceConfigFile contract)", () => {
   it("detects duplicate service IDs", () => {
     const ids = ["a", "b", "a"];
     const dupes = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
