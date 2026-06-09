@@ -24,26 +24,6 @@ const CACHE_CONTROL: Record<Kind, string> = {
   avatar: "private, max-age=86400",
 };
 
-// Blocks SSRF via user-supplied `ref` URLs for sonarr/radarr remoteUrl passthrough.
-function isPrivateHost(url: string): boolean {
-  try {
-    const { hostname, protocol } = new URL(url);
-    if (protocol !== "http:" && protocol !== "https:") return true;
-    return (
-      hostname === "localhost" ||
-      hostname === "::1" ||
-      /^127\./.test(hostname) ||
-      /^10\./.test(hostname) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^169\.254\./.test(hostname) ||
-      hostname.endsWith(".local")
-    );
-  } catch {
-    return true;
-  }
-}
-
 function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: string, kind: Kind): string | null {
   const base = baseUrl.replace(/\/$/, "");
   const { w, h } = DIMS[kind];
@@ -72,8 +52,9 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
       return `https://image.tmdb.org/t/p/w342${ref}`;
     case "sonarr":
     case "radarr":
-      // ref is either a full external URL (remoteUrl) or a local path (/MediaCover/…)
-      if (ref.startsWith("http")) return ref;
+      // ref must be a local path (/MediaCover/…); remoteUrl CDN links are used
+      // directly by arrPoster() and never flow through this proxy.
+      if (!ref.startsWith("/")) return null;
       return `${base}${ref}?apikey=${apiKey ?? ""}`;
     default:
       return null;
@@ -92,10 +73,9 @@ export async function GET(req: NextRequest) {
 
   const url = upstreamUrl(svc, creds.baseUrl, creds.apiKey, ref, kind);
   if (!url) return new NextResponse("unsupported", { status: 400 });
-  if (isPrivateHost(url)) return new NextResponse("forbidden", { status: 403 });
 
   try {
-    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000) }); // lgtm[js/request-forgery]
+    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000) });
     if (!res.ok || !res.body) return new NextResponse("upstream error", { status: 502 });
     return new NextResponse(res.body, {
       status: 200,

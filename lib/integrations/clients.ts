@@ -1662,8 +1662,11 @@ function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefine
   // Sonarr episodes: poster lives on rec.series.images; Radarr movies: rec.images
   const imgs = (rec.series?.images?.length ? rec.series.images : rec.images) ?? [];
   const img = imgs.find((i) => i.coverType === "poster") ?? imgs[0];
-  const ref = img?.remoteUrl || img?.url;
-  return ref ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(ref)}` : undefined;
+  if (!img) return undefined;
+  // remoteUrl is a public CDN URL (no auth needed) — use directly so it never
+  // flows through the artwork proxy as a user-controlled URL (SSRF mitigation).
+  if (img.remoteUrl) return img.remoteUrl;
+  return img.url ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(img.url)}` : undefined;
 }
 
 export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<UpcomingItem[]> {
