@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import {
+  EMAIL_RE,
+  validateName,
+  validateEmail,
+  validatePassword,
+  validatePasswordConfirm,
+} from "@/lib/auth/validation";
 
 describe("EMAIL_RE", () => {
   it("matches valid emails", () => {
@@ -39,26 +44,61 @@ describe("EMAIL_RE", () => {
   });
 });
 
-describe("createInitialAdmin validation", () => {
-  it("password length < 8 is invalid", () => {
-    expect("abc1234".length).toBeLessThan(8);
+describe("validateName", () => {
+  it("rejects empty string", () => {
+    expect(validateName("")).toEqual({ ok: false, error: "Enter a display name." });
   });
 
-  it("password length >= 8 is valid", () => {
-    expect("abc12345".length).toBeGreaterThanOrEqual(8);
+  it("rejects whitespace-only string", () => {
+    expect(validateName("   ")).toEqual({ ok: false, error: "Enter a display name." });
   });
 
-  it("mismatched passwords fail equality check", () => {
-    const password = "abcdefgh";
-    const confirm = "abcdefgh1";
-    expect(password).not.toBe(confirm);
+  it("accepts a non-empty name", () => {
+    expect(validateName("Admin")).toEqual({ ok: true });
+  });
+});
+
+describe("validateEmail", () => {
+  it("rejects empty string", () => {
+    expect(validateEmail("")).toEqual({ ok: false, error: "Enter a valid email address." });
   });
 
-  it("missing name is detected", () => {
-    expect("".trim()).toBe("");
+  it("rejects malformed email", () => {
+    expect(validateEmail("not-an-email")).toEqual({ ok: false, error: "Enter a valid email address." });
   });
 
-  it("non-empty name passes", () => {
-    expect("Admin".trim()).toBe("Admin");
+  it("accepts a well-formed email", () => {
+    expect(validateEmail("admin@example.com")).toEqual({ ok: true });
+  });
+});
+
+describe("validatePassword", () => {
+  it("rejects passwords shorter than 8 chars", () => {
+    expect(validatePassword("abc1234")).toEqual({ ok: false, error: "Password must be at least 8 characters." });
+  });
+
+  it("accepts passwords of exactly 8 chars", () => {
+    expect(validatePassword("abcdefgh")).toEqual({ ok: true });
+  });
+
+  it("accepts passwords longer than 8 chars", () => {
+    expect(validatePassword("a-much-longer-password")).toEqual({ ok: true });
+  });
+});
+
+describe("validatePasswordConfirm", () => {
+  it("rejects mismatched passwords", () => {
+    expect(validatePasswordConfirm("abcdefgh", "abcdefgh1")).toEqual({
+      ok: false,
+      error: "Passwords do not match.",
+    });
+  });
+
+  it("accepts matching passwords", () => {
+    expect(validatePasswordConfirm("abcdefgh", "abcdefgh")).toEqual({ ok: true });
+  });
+
+  it("accepts two empty strings as matching", () => {
+    expect(validatePasswordConfirm("", "")).toEqual({ ok: true });
   });
 });
