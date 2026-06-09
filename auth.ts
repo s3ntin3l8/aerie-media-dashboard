@@ -10,6 +10,7 @@
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { env, authConfigured } from "@/lib/env";
+import { normalizeGroups, deriveRole } from "@/lib/auth/role";
 
 type OidcProfile = Record<string, unknown> & {
   sub?: string;
@@ -17,20 +18,6 @@ type OidcProfile = Record<string, unknown> & {
   preferred_username?: string;
   email?: string;
 };
-
-/** Normalize a groups claim that may be an array or a delimited string. */
-function normalizeGroups(claim: unknown): string[] {
-  if (Array.isArray(claim)) return claim.map(String);
-  if (typeof claim === "string") return claim.split(/[\s,]+/).filter(Boolean);
-  return [];
-}
-
-/** admin when in the admin group OR when the email is allow-listed. */
-function deriveRole(groups: string[], email?: string | null): "admin" | "user" {
-  if (groups.includes(env.adminGroup)) return "admin";
-  if (email && env.adminEmails.includes(email.toLowerCase())) return "admin";
-  return "user";
-}
 
 const providers: NextAuthConfig["providers"] = authConfigured
   ? [
@@ -50,7 +37,7 @@ const providers: NextAuthConfig["providers"] = authConfigured
             name: profile.name || profile.preferred_username || profile.email,
             email: profile.email,
             groups,
-            role: deriveRole(groups, profile.email),
+            role: deriveRole(groups, profile.email, env.adminGroup, env.adminEmails),
           } as { id: string; name?: string | null; email?: string | null; groups: string[]; role: "admin" | "user" };
         },
       },
@@ -94,7 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (profile) {
         const groups = normalizeGroups((profile as OidcProfile)[env.oidcGroupsClaim]);
         token.groups = groups;
-        token.role = deriveRole(groups, (profile as OidcProfile).email);
+        token.role = deriveRole(groups, (profile as OidcProfile).email, env.adminGroup, env.adminEmails);
       }
       // Credentials sign-in: carry role/groups off the authorized user.
       if (user) {

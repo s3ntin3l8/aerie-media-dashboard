@@ -15,7 +15,7 @@ import { env } from "@/lib/env";
 
 const CATEGORIES = ["stream", "request", "automation", "monitor", "infra"] as const;
 
-const serviceSchema = z.object({
+export const serviceSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   cat: z.enum(CATEGORIES),
@@ -37,7 +37,7 @@ const serviceSchema = z.object({
   monitoringKey: z.string().nullish(),
 });
 
-const fileSchema = z.object({
+export const fileSchema = z.object({
   services: z.array(serviceSchema).default([]),
   groups: z.array(z.object({ name: z.string().min(1), label: z.string().optional() })).optional(),
   visibility: z
@@ -51,7 +51,7 @@ export type ServiceConfigFile = z.infer<typeof fileSchema>;
 // Replace ${VAR} tokens in every string with process.env[VAR] (trimmed).
 // Unresolved tokens become "" — for a secret that means "skip" downstream.
 const ENV_REF = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
-function interpolate(value: unknown): unknown {
+export function interpolate(value: unknown): unknown {
   if (typeof value === "string") return value.replace(ENV_REF, (_, name) => (process.env[name] ?? "").trim());
   if (Array.isArray(value)) return value.map(interpolate);
   if (value && typeof value === "object") {

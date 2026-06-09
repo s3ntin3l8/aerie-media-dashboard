@@ -7,12 +7,11 @@ import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
 import { authConfigured } from "@/lib/env";
 import { createLocalAdmin, localAdminExists } from "@/lib/integrations/registry";
+import { validateName, validateEmail, validatePassword, validatePasswordConfirm } from "@/lib/auth/validation";
 
 export interface LoginState {
   error?: string;
 }
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function signInWithPassword(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
@@ -38,10 +37,14 @@ export async function createInitialAdmin(_prev: LoginState, formData: FormData):
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
 
-  if (!name) return { error: "Enter a display name." };
-  if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address." };
-  if (password.length < 8) return { error: "Password must be at least 8 characters." };
-  if (password !== confirm) return { error: "Passwords do not match." };
+  const nameResult = validateName(name);
+  if (!nameResult.ok) return { error: nameResult.error };
+  const emailResult = validateEmail(email);
+  if (!emailResult.ok) return { error: emailResult.error };
+  const passwordResult = validatePassword(password);
+  if (!passwordResult.ok) return { error: passwordResult.error };
+  const confirmResult = validatePasswordConfirm(password, confirm);
+  if (!confirmResult.ok) return { error: confirmResult.error };
 
   await createLocalAdmin({ name, email, password });
 

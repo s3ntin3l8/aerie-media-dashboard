@@ -135,7 +135,7 @@ export interface Snapshot {
   listenarr: ListenarrStats | null;
 }
 
-async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
+export async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn();
   } catch {
@@ -153,7 +153,7 @@ function perf<T>(label: string, p: Promise<T>): Promise<T> {
   return p.finally(() => console.log(`[perf] ${label}: ${Date.now() - t0}ms`));
 }
 
-function padBeats(beats: number[]): number[] {
+export function padBeats(beats: number[]): number[] {
   if (beats.length >= 30) return beats.slice(-30);
   return [...Array(30 - beats.length).fill(1), ...beats];
 }
