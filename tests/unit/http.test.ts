@@ -116,12 +116,10 @@ describe("fetchJson", () => {
     ).rejects.toThrow(IntegrationError);
   });
 
-  it("preserves IntegrationError from nested fetch failures", async () => {
+  it("re-throws IntegrationError as-is (does not wrap)", async () => {
     const httpErr = new IntegrationError("svc", "HTTP 500 for /api", 500);
     globalThis.fetch = vi.fn().mockRejectedValue(httpErr);
 
-    // Should NOT wrap an IntegrationError in another IntegrationError
-    // but the current code re-throws it as-is
     try {
       await fetchJson("http://svc/api", { service: "svc" });
       expect.unreachable("should have thrown");
