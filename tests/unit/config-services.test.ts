@@ -67,12 +67,12 @@ describe("config/services — serviceSchema", () => {
   });
 
   it("rejects missing required id", () => {
-    const { id, ...noId } = valid;
+    const noId = { ...valid, id: undefined };
     expect(() => serviceSchema.parse(noId)).toThrow();
   });
 
   it("rejects missing required name", () => {
-    const { name, ...noName } = valid;
+    const noName = { ...valid, name: undefined };
     expect(() => serviceSchema.parse(noName)).toThrow();
   });
 

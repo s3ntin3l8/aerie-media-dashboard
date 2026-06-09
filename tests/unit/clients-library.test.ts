@@ -50,7 +50,6 @@ import {
   overseerrUserQuota,
   type LazyLibrarianStats,
   type ListenarrStats,
-  type OverseerrUser,
 } from "@/lib/integrations/clients";
 
 const mockFetchJson = vi.mocked(fetchJson);

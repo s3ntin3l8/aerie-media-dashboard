@@ -59,6 +59,6 @@ describe("isVisible", () => {
 
   it("ignores rules for groups other than friends", () => {
     const rules = [makeRow("svc1", "admins", false)];
-    expect(isVisible({ id: "svc1", cat: "infra" }, "user", rules)).toBe(false);
+    expect(isVisible({ id: "svc1", cat: "stream" }, "user", rules)).toBe(true);
   });
 });

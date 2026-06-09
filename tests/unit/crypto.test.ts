@@ -84,8 +84,8 @@ describe("crypto", () => {
   });
 
   describe("encryptionConfigured", () => {
-    it("is a boolean (value depends on import-time env)", () => {
-      expect(typeof encryptionConfigured).toBe("boolean");
+    it("is true when ENCRYPTION_KEY is set", () => {
+      expect(encryptionConfigured).toBe(true);
     });
   });
 });
