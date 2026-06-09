@@ -99,8 +99,6 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
           <div style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "var(--on-surface-variant)" }}>{loading ? "Searching…" : <>No titles match &ldquo;{q}&rdquo;.</>}</div>
         ) : (
           results.map((d) => {
-            const inLib = d.state === "available";
-            const requested = d.state === "pending" || d.state === "approved";
             const itemAtQuota = d.kind === "series" ? tvAtQuota : movieAtQuota;
             const blocked = itemAtQuota;
             return (

@@ -2,13 +2,11 @@
 // ============================================================
 // AERIE — Service launcher + embed/launch service view
 // ============================================================
-import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Service } from "@/lib/types";
 import { CAT, catColor, CAT_ORDER } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
-import { isVisible } from "@/lib/visibility";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { useEmbedProbe } from "@/components/hooks/useEmbedProbe";
 import { Icon, StatusDot, Heartbeat, Divider, SearchField } from "@/components/primitives";

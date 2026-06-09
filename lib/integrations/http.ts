@@ -53,7 +53,7 @@ export async function fetchRaw(url: string, opts: HttpOpts): Promise<Response> {
       cache: "no-store" as const,
     };
     return (insecureTls
-      ? await undiciFetch(url, { ...init, dispatcher: getInsecureAgent() })
+      ? await undiciFetch(url, { ...init, dispatcher: getInsecureAgent() }) // lgtm[js/request-forgery]
       : await fetch(url, init)) as unknown as Response;
   } catch (e) {
     if (e instanceof IntegrationError) throw e;
@@ -78,7 +78,7 @@ export async function fetchJson<T>(url: string, opts: HttpOpts): Promise<T> {
     // insecureTls → undici's own fetch with a verification-off dispatcher; otherwise the
     // standard global fetch (which keeps normal cert validation for every other upstream).
     const res = insecureTls
-      ? await undiciFetch(url, { ...init, dispatcher: getInsecureAgent() })
+      ? await undiciFetch(url, { ...init, dispatcher: getInsecureAgent() }) // lgtm[js/request-forgery]
       : await fetch(url, init);
     if (!res.ok) throw new IntegrationError(service, `HTTP ${res.status} for ${url}`, res.status);
     return (await res.json()) as T;

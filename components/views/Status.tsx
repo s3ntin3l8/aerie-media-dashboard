@@ -5,7 +5,6 @@
 import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
-import { isVisible } from "@/lib/visibility";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
 import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";

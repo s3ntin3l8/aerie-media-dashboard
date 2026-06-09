@@ -48,6 +48,7 @@ import {
   gatusHealth,
   jellyfinNowPlaying,
   tautulliActivity,
+  arrCalendar,
   overseerrSearch,
   overseerrRequests,
   matchOverseerrUserId,
@@ -482,5 +483,45 @@ it("maps height to resolution labels", async () => {
       expect(results[1].status).toBe("processing");
       expect(results[2].status).toBe("processing");
     });
+  });
+});
+
+describe("arrCalendar poster URL", () => {
+  beforeEach(() => {
+    clearCache();
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://radarr:7878", apiKey: "key", insecureTls: false });
+  });
+
+  it("uses remoteUrl directly when present", async () => {
+    mockFetchJson.mockResolvedValue([{
+      id: 1,
+      title: "Movie",
+      inCinemas: "2025-01-01T00:00:00Z",
+      images: [{ coverType: "poster", remoteUrl: "https://cdn.tvdb.com/poster.jpg", url: "/MediaCover/1/poster.jpg" }],
+    }]);
+    const items = await arrCalendar("radarr");
+    expect(items[0].art).toBe("https://cdn.tvdb.com/poster.jpg");
+  });
+
+  it("proxies local url path when no remoteUrl", async () => {
+    mockFetchJson.mockResolvedValue([{
+      id: 2,
+      title: "Movie",
+      inCinemas: "2025-01-01T00:00:00Z",
+      images: [{ coverType: "poster", url: "/MediaCover/2/poster.jpg" }],
+    }]);
+    const items = await arrCalendar("radarr");
+    expect(items[0].art).toBe("/api/artwork?svc=radarr&ref=%2FMediaCover%2F2%2Fposter.jpg");
+  });
+
+  it("returns undefined art when images is empty", async () => {
+    mockFetchJson.mockResolvedValue([{
+      id: 3,
+      title: "Movie",
+      inCinemas: "2025-01-01T00:00:00Z",
+      images: [],
+    }]);
+    const items = await arrCalendar("radarr");
+    expect(items[0].art).toBeUndefined();
   });
 });

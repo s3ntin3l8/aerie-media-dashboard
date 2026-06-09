@@ -52,8 +52,9 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
       return `https://image.tmdb.org/t/p/w342${ref}`;
     case "sonarr":
     case "radarr":
-      // ref is either a full external URL (remoteUrl) or a local path (/MediaCover/…)
-      if (ref.startsWith("http")) return ref;
+      // ref must be a local path (/MediaCover/…); remoteUrl CDN links are used
+      // directly by arrPoster() and never flow through this proxy.
+      if (!ref.startsWith("/")) return null;
       return `${base}${ref}?apikey=${apiKey ?? ""}`;
     default:
       return null;

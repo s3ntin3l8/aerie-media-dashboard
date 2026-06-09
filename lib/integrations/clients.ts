@@ -1121,10 +1121,6 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
   return { fileIndex, profileIndex };
 }
 
-async function arrMovieFileIndex(): Promise<Map<number, FileInfo>> {
-  return (await arrMovieIndexes()).fileIndex;
-}
-
 /** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
 export async function overseerrMovieProfiles(): Promise<QualityProfile[]> {
   if (movieProfilesCache && Date.now() - movieProfilesCache.at < QUALITY_PROFILES_TTL) return movieProfilesCache.profiles;
@@ -1666,8 +1662,11 @@ function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefine
   // Sonarr episodes: poster lives on rec.series.images; Radarr movies: rec.images
   const imgs = (rec.series?.images?.length ? rec.series.images : rec.images) ?? [];
   const img = imgs.find((i) => i.coverType === "poster") ?? imgs[0];
-  const ref = img?.remoteUrl || img?.url;
-  return ref ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(ref)}` : undefined;
+  if (!img) return undefined;
+  // remoteUrl is a public CDN URL (no auth needed) — use directly so it never
+  // flows through the artwork proxy as a user-controlled URL (SSRF mitigation).
+  if (img.remoteUrl) return img.remoteUrl;
+  return img.url ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(img.url)}` : undefined;
 }
 
 export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<UpcomingItem[]> {
