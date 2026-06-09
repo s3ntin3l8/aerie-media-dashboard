@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     globals: true,
     coverage: {
-      reporter: ["text", "lcov"],
+      reporter: ["text", "lcov", "json-summary"],
       include: ["app/**", "components/**", "lib/**"],
       exclude: ["node_modules/", "tests/", "tests/setup.ts"],
     },
