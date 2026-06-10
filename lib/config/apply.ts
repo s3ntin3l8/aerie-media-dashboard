@@ -37,6 +37,7 @@ export async function applyServiceConfig(db: DB, cfg: ServiceConfigFile): Promis
           icon: s.icon,
           logoSlug: s.logoSlug ?? null,
           embeddable: s.embeddable ?? false,
+          keepAlive: s.keepAlive ?? false,
           active: s.active ?? true,
           central: s.central ?? false,
           centralLabel: s.centralLabel ?? null,

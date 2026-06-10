@@ -32,6 +32,8 @@ export interface ServiceConfig {
   insecureTls: boolean;
   /** false → fully disabled: hidden from every end-user surface and never polled (config kept) */
   active: boolean;
+  /** true → keep the embeddable iframe mounted (hidden) after first open to preserve in-app state */
+  keepAlive: boolean;
 }
 
 export async function getServiceConfigs(): Promise<ServiceConfig[]> {
@@ -56,6 +58,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       monitoringKey: r.monitoringKey ?? null,
       insecureTls: r.insecureTls,
       active: r.active,
+      keepAlive: r.keepAlive,
     }));
   } catch {
     return [];
@@ -298,5 +301,11 @@ export async function createLocalAdmin(u: { name: string; email: string; passwor
     .values({ id, name: u.name, email: id, role: "admin", passwordHash: hashPassword(u.password), createdAt: new Date() })
     .onConflictDoUpdate({ target: schema.users.id, set: { name: u.name, email: id, role: "admin", passwordHash: hashPassword(u.password) } });
   await db.insert(schema.accountLinks).values({ portalUserId: id, linked: false }).onConflictDoNothing();
+}
+
+/** Persist a freshly-detected version string for a service. */
+export async function updateServiceVersion(serviceId: string, version: string): Promise<void> {
+  await ensureDb();
+  await db.update(schema.services).set({ version }).where(eq(schema.services.id, serviceId));
 }
 

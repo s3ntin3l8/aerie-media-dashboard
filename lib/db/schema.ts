@@ -28,6 +28,9 @@ export const services = sqliteTable("services", {
   insecureTls: integer("insecure_tls", { mode: "boolean" }).notNull().default(false),
   /** false → service is fully disabled: hidden from every end-user surface and never polled (config kept) */
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  /** true → keep this embeddable service's iframe mounted (hidden) after first open, so switching
+   *  between services preserves its in-app state instead of reloading. No-op for non-embeddable services. */
+  keepAlive: integer("keep_alive", { mode: "boolean" }).notNull().default(false),
 });
 
 // Encrypted per-service secrets (API keys/tokens). AES-256-GCM at rest.

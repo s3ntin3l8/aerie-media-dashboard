@@ -179,6 +179,9 @@ export function ServiceViewById({ serviceId }: { serviceId: string }) {
       </section>
     );
   }
+  // Keep-alive embeds are owned by the persistent EmbedHost (mounted in the shell) so their
+  // iframe survives navigation; the page renders nothing for them and lets EmbedHost overlay.
+  if (s.embeddable && s.keepAlive) return null;
   return <ServiceView s={s} />;
 }
 

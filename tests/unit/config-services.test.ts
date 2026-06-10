@@ -62,8 +62,12 @@ describe("config/services — serviceSchema", () => {
   });
 
   it("accepts all optional fields", () => {
-    const full = { ...valid, baseUrl: "http://plex:32400", embeddable: true, central: true, apiKey: "key" };
-    expect(serviceSchema.parse(full)).toEqual(expect.objectContaining({ embeddable: true }));
+    const full = { ...valid, baseUrl: "http://plex:32400", embeddable: true, keepAlive: true, central: true, apiKey: "key" };
+    expect(serviceSchema.parse(full)).toEqual(expect.objectContaining({ embeddable: true, keepAlive: true }));
+  });
+
+  it("leaves keepAlive undefined when omitted (DB default applies)", () => {
+    expect(serviceSchema.parse(valid).keepAlive).toBeUndefined();
   });
 
   it("rejects missing required id", () => {

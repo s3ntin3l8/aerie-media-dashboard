@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `keep_alive` integer DEFAULT false NOT NULL;

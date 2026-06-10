@@ -7,7 +7,7 @@
 // ============================================================
 import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
-import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
+import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
   tautulliActivity,
@@ -57,6 +57,7 @@ import {
   type ListenarrStats,
   qbittorrentQueue,
   qbittorrentStats,
+  detectVersion,
   type ServiceHealth,
   type NodeMetrics,
   type WizarrStats,
@@ -161,6 +162,20 @@ export function padBeats(beats: number[]): number[] {
 // The most recent fully-assembled snapshot, kept in-process so the shell can render
 // instantly even when a fresh getSnapshot() would be slow (cold upstream after idle).
 let lastSnapshot: Snapshot | null = null;
+
+// Per-service timestamp of the last version-refresh attempt. Governs how often the
+// snapshot triggers a background version check without blocking the response.
+const versionLastScheduled = new Map<string, number>();
+const VERSION_REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
+
+function scheduleVersionRefresh(serviceId: string): void {
+  const last = versionLastScheduled.get(serviceId) ?? 0;
+  if (Date.now() - last < VERSION_REFRESH_INTERVAL) return;
+  versionLastScheduled.set(serviceId, Date.now()); // stamp before the async call to prevent concurrent double-fires
+  void detectVersion(serviceId)
+    .then((version) => version ? updateServiceVersion(serviceId, version) : Promise.resolve())
+    .catch(() => {}); // silent — stale version stays until next successful check
+}
 
 /**
  * Snapshot for the blocking shell render: race a fresh getSnapshot() against a short
@@ -343,6 +358,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     logoSlug: c.logoSlug ?? undefined,
     embeddable: c.embeddable,
     active: c.active,
+    keepAlive: c.keepAlive,
     central: c.central,
     centralLabel: c.centralLabel ?? undefined,
     host: c.host,
@@ -354,6 +370,12 @@ export async function getSnapshot(): Promise<Snapshot> {
     monitoringKey: c.monitoringKey ?? undefined,
     ...healthFor(c.id, c.name, c.monitoringKey),
   }));
+
+  // Background version refresh — does not block this response; DB is updated asynchronously
+  // and the new version is served by the next snapshot poll (≤12 s later).
+  for (const c of configs) {
+    if (c.active) scheduleVersionRefresh(c.id);
+  }
 
   const nowPlaying: NowPlaying[] = [...(ttAct?.sessions ?? []), ...(jfNow ?? []), ...(absNow ?? [])];
   // Only the active queue source fetched (the others resolved null), so this stays single-source.
