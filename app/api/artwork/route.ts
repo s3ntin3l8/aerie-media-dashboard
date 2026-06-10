@@ -24,6 +24,14 @@ const CACHE_CONTROL: Record<Kind, string> = {
   avatar: "private, max-age=86400",
 };
 
+// `ref` is concatenated raw into a URL *path* for the overseerr/*arr cases (not encoded as a
+// query param), so constrain it to a plain absolute path: a leading "/", but not "//"
+// (protocol-relative) or a backslash that a URL parser could fold into the authority. The origin
+// guard in GET() is the real backstop against request forgery; this rejects obvious abuse early.
+export function isPlainPath(ref: string): boolean {
+  return ref.startsWith("/") && !ref.startsWith("//") && !ref.includes("\\");
+}
+
 function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: string, kind: Kind): string | null {
   const base = baseUrl.replace(/\/$/, "");
   const { w, h } = DIMS[kind];
@@ -49,12 +57,13 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
     case "overseerr":
       // ref is a TMDB poster_path (e.g. "/b8VtW6I.jpg"); proxy through to avoid
       // exposing the TMDB CDN directly and to apply our cache headers.
+      if (!isPlainPath(ref)) return null;
       return `https://image.tmdb.org/t/p/w342${ref}`;
     case "sonarr":
     case "radarr":
       // ref must be a local path (/MediaCover/…); remoteUrl CDN links are used
       // directly by arrPoster() and never flow through this proxy.
-      if (!ref.startsWith("/")) return null;
+      if (!isPlainPath(ref)) return null;
       return `${base}${ref}?apikey=${apiKey ?? ""}`;
     default:
       return null;
@@ -74,8 +83,22 @@ export async function GET(req: NextRequest) {
   const url = upstreamUrl(svc, creds.baseUrl, creds.apiKey, ref, kind);
   if (!url) return new NextResponse("unsupported", { status: 400 });
 
+  // SSRF guard: pin the resolved upstream to the expected origin — the service's own base
+  // (tautulli/jellyfin/abs/*arr) or the fixed TMDB CDN (overseerr). `ref` is user-supplied, so
+  // this prevents request forgery no matter what `ref` contains; legitimate refs never change
+  // the origin, so nothing is blocked.
+  let target: URL;
+  let expectedOrigin: string;
   try {
-    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000) });
+    target = new URL(url);
+    expectedOrigin = svc === "overseerr" ? "https://image.tmdb.org" : new URL(creds.baseUrl).origin;
+  } catch {
+    return new NextResponse("bad url", { status: 400 });
+  }
+  if (target.origin !== expectedOrigin) return new NextResponse("blocked", { status: 400 });
+
+  try {
+    const res = await fetch(target, { cache: "no-store", signal: AbortSignal.timeout(6000) });
     if (!res.ok || !res.body) return new NextResponse("upstream error", { status: 502 });
     return new NextResponse(res.body, {
       status: 200,
