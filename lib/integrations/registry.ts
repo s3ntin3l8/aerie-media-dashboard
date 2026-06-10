@@ -303,3 +303,9 @@ export async function createLocalAdmin(u: { name: string; email: string; passwor
   await db.insert(schema.accountLinks).values({ portalUserId: id, linked: false }).onConflictDoNothing();
 }
 
+/** Persist a freshly-detected version string for a service. */
+export async function updateServiceVersion(serviceId: string, version: string): Promise<void> {
+  await ensureDb();
+  await db.update(schema.services).set({ version }).where(eq(schema.services.id, serviceId));
+}
+

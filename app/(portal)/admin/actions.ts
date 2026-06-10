@@ -173,7 +173,13 @@ export async function probeServiceVersion(baseUrl: string, apiKey: string, idHin
  */
 export async function testStoredConnection(serviceId: string): Promise<string | null> {
   await requireAdmin();
-  return detectVersion(serviceId);
+  const version = await detectVersion(serviceId);
+  if (version) {
+    await ensureDb();
+    await db.update(schema.services).set({ version }).where(eq(schema.services.id, serviceId));
+    revalidatePath("/admin");
+  }
+  return version;
 }
 
 /**
