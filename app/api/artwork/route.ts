@@ -83,19 +83,19 @@ export async function GET(req: NextRequest) {
   const url = upstreamUrl(svc, creds.baseUrl, creds.apiKey, ref, kind);
   if (!url) return new NextResponse("unsupported", { status: 400 });
 
-  // SSRF guard: pin the resolved upstream to the expected origin — the service's own base
-  // (tautulli/jellyfin/abs/*arr) or the fixed TMDB CDN (overseerr). `ref` is user-supplied, so
-  // this prevents request forgery no matter what `ref` contains; legitimate refs never change
-  // the origin, so nothing is blocked.
+  // SSRF guard: pin the upstream host to the service's own host (tautulli/jellyfin/abs/*arr) or
+  // the fixed TMDB CDN host (overseerr). `ref` is user-supplied but only reaches the URL path, so
+  // it can never change the host — this rejects any forged host outright. Legitimate refs always
+  // keep the expected host, so nothing real is blocked.
   let target: URL;
-  let expectedOrigin: string;
+  let expectedHost: string;
   try {
     target = new URL(url);
-    expectedOrigin = svc === "overseerr" ? "https://image.tmdb.org" : new URL(creds.baseUrl).origin;
+    expectedHost = svc === "overseerr" ? "image.tmdb.org" : new URL(creds.baseUrl).hostname;
   } catch {
     return new NextResponse("bad url", { status: 400 });
   }
-  if (target.origin !== expectedOrigin) return new NextResponse("blocked", { status: 400 });
+  if (target.hostname !== expectedHost) return new NextResponse("blocked", { status: 400 });
 
   try {
     const res = await fetch(target, { cache: "no-store", signal: AbortSignal.timeout(6000) });
