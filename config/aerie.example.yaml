@@ -36,6 +36,10 @@ services:
     icon: smart_display
     host: jellyfin.aerie.tv
     embeddable: true
+    # keepAlive keeps the embedded iframe mounted (hidden) after first open so switching between
+    # services preserves its state instead of reloading. Only applies to embeddable services; the
+    # app keeps running in the background while hidden. Defaults to false.
+    keepAlive: true
     central: true
     centralLabel: Stream
     note: "Embeds in portal"

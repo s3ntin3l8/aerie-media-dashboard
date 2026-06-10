@@ -25,6 +25,8 @@ export const serviceSchema = z.object({
   /** internal/LAN URL for server-side API calls (e.g. http://10.0.0.5:8181); falls back to baseUrl. */
   internalUrl: z.string().optional(),
   embeddable: z.boolean().optional(),
+  /** true → keep the embeddable iframe mounted (hidden) after first open to preserve in-app state */
+  keepAlive: z.boolean().optional(),
   /** false → fully disabled: hidden everywhere and never polled (defaults to active) */
   active: z.boolean().optional(),
   central: z.boolean().optional(),

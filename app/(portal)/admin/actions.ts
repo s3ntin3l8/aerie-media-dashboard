@@ -78,6 +78,7 @@ export interface ServiceInput {
   monitoringKey?: string | null;
   insecureTls?: boolean;
   active?: boolean;
+  keepAlive?: boolean;
 }
 
 /** Create or update a service registry entry. */
@@ -101,6 +102,7 @@ export async function upsertService(input: ServiceInput) {
     monitoringKey: input.monitoringKey ?? null,
     insecureTls: input.insecureTls ?? false,
     active: input.active ?? true,
+    keepAlive: input.keepAlive ?? false,
   };
   await db
     .insert(schema.services)
@@ -114,6 +116,15 @@ export async function setServiceActive(id: string, active: boolean) {
   await requireAdmin();
   await ensureDb();
   await db.update(schema.services).set({ active }).where(eq(schema.services.id, id));
+  revalidatePath("/admin");
+}
+
+/** Flip a service's keep-alive flag without opening the edit modal (inline Admin toggle).
+ *  When on, EmbedHost keeps the embeddable service's iframe mounted (hidden) after first open. */
+export async function setServiceKeepAlive(id: string, keepAlive: boolean) {
+  await requireAdmin();
+  await ensureDb();
+  await db.update(schema.services).set({ keepAlive }).where(eq(schema.services.id, id));
   revalidatePath("/admin");
 }
 

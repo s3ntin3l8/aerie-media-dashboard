@@ -24,6 +24,7 @@ export interface ServiceForm {
   insecureTls: boolean;
   version: string;
   embeddable: boolean;
+  keepAlive: boolean;
   active: boolean;
   central: boolean;
   centralLabel: string;
@@ -162,6 +163,7 @@ export function ServiceModal({
     insecureTls: false,
     version: "",
     embeddable: true,
+    keepAlive: false,
     active: true,
     central: false,
     centralLabel: "",
@@ -191,6 +193,7 @@ export function ServiceModal({
         insecureTls: service.insecureTls ?? false,
         version: service.version || "",
         embeddable: service.embeddable,
+        keepAlive: service.keepAlive,
         active: service.active,
         central: Boolean(service.central),
         centralLabel: service.centralLabel || "",
@@ -428,6 +431,16 @@ export function ServiceModal({
               title="Embed inside the portal"
               desc={f.embeddable ? "Renders in an in-portal frame via forward-auth." : "Opens in a new browser tab — frame-ancestors blocked."}
             />
+            {f.embeddable && (
+              <ToggleRow
+                on={f.keepAlive}
+                onChange={(v) => set("keepAlive", v)}
+                color="var(--primary)"
+                icon="cached"
+                title="Keep session alive"
+                desc="Keep the iframe mounted after first open so switching between services preserves its state (it keeps running in the background)."
+              />
+            )}
             <Field label="API key" hint={editing ? "leave blank to keep current key" : "encrypted at rest"}>
               <div style={{ display: "flex", gap: 7 }}>
                 <div style={{ position: "relative", flex: 1, minWidth: 0 }}>

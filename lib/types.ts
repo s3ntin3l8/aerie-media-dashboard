@@ -23,6 +23,9 @@ export interface Service {
   embeddable: boolean;
   /** false → fully disabled: hidden from every end-user surface and never polled (config kept) */
   active: boolean;
+  /** true → keep this embeddable service's iframe mounted (hidden) after first open, so switching
+   *  away and back preserves its in-app state instead of reloading. No-op for non-embeddable services. */
+  keepAlive: boolean;
   central?: boolean;
   centralLabel?: string;
   host: string;

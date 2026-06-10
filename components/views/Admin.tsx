@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { setVisibility, upsertService, setServiceSecret, setServiceActive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota } from "@/app/(portal)/admin/actions";
+import { setVisibility, upsertService, setServiceSecret, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
@@ -54,7 +54,7 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
   const { favorites, toggleFavorite } = usePortal();
   const patchData = usePatchData();
   const [, startActiveTransition] = useTransition();
-  const cols = "1.6fr 1fr 0.6fr 0.6fr 1.1fr 0.5fr";
+  const cols = "1.6fr 1fr 0.6fr 0.6fr 0.7fr 1.1fr 0.5fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
 
   // Optimistically flip active in the snapshot (so the row dims + the service drops from
@@ -66,6 +66,18 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
     flip(next);
     startActiveTransition(async () => {
       try { await setServiceActive(s.id, next); }
+      catch { flip(!next); }
+    });
+  };
+  // Keep-alive is only meaningful for embeddable services (EmbedHost keeps their iframe mounted).
+  const toggleKeepAlive = (s: Service) => {
+    if (!s.embeddable) return;
+    const next = !s.keepAlive;
+    const flip = (a: boolean) =>
+      patchData((snap) => ({ ...snap, services: snap.services.map((sv) => (sv.id === s.id ? { ...sv, keepAlive: a } : sv)) }));
+    flip(next);
+    startActiveTransition(async () => {
+      try { await setServiceKeepAlive(s.id, next); }
       catch { flip(!next); }
     });
   };
@@ -125,6 +137,15 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>Active</Eyebrow>
                   <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Eyebrow style={{ width: 52, flexShrink: 0 }}>Keep</Eyebrow>
+                  <span
+                    title={s.embeddable ? "Keep the iframe mounted after first open so its state survives switching" : "Only embeddable services can be kept alive"}
+                    style={{ opacity: s.embeddable ? undefined : 0.3, pointerEvents: s.embeddable ? undefined : "none" }}
+                  >
+                    <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
+                  </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>Host</Eyebrow>
@@ -204,6 +225,7 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
             );
           })}
           <Eyebrow>Active</Eyebrow>
+          <Eyebrow>Keep alive</Eyebrow>
           <Eyebrow>API key</Eyebrow>
           <span />
         </div>
@@ -230,6 +252,12 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
               <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
               <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
+              <span
+                title={s.embeddable ? "Keep this service's iframe mounted (hidden) after first open so its state survives switching" : "Only embeddable services can be kept alive"}
+                style={{ opacity: s.embeddable ? undefined : 0.3, pointerEvents: s.embeddable ? undefined : "none" }}
+              >
+                <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
+              </span>
               <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", opacity: dim }}>
                 <Icon name="lock" size={12} color="var(--originator-own)" />
                 ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
@@ -615,6 +643,7 @@ export function Admin() {
       baseUrl: `${form.scheme}://${form.host.trim()}`,
       internalUrl,
       embeddable: form.embeddable,
+      keepAlive: form.keepAlive,
       active: form.active,
       central: form.central,
       centralLabel: form.central ? form.centralLabel || null : null,
@@ -630,8 +659,8 @@ export function Admin() {
 
     // Optimistically update the local snapshot so the service appears immediately.
     const optimisticService: Service = editing
-      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
-      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
+      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
     // Dedupe by id: in add mode the service may already be in the snapshot from a prior
     // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).
     patchData((s) => ({

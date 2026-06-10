@@ -32,6 +32,8 @@ export interface ServiceConfig {
   insecureTls: boolean;
   /** false → fully disabled: hidden from every end-user surface and never polled (config kept) */
   active: boolean;
+  /** true → keep the embeddable iframe mounted (hidden) after first open to preserve in-app state */
+  keepAlive: boolean;
 }
 
 export async function getServiceConfigs(): Promise<ServiceConfig[]> {
@@ -56,6 +58,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       monitoringKey: r.monitoringKey ?? null,
       insecureTls: r.insecureTls,
       active: r.active,
+      keepAlive: r.keepAlive,
     }));
   } catch {
     return [];

@@ -343,6 +343,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     logoSlug: c.logoSlug ?? undefined,
     embeddable: c.embeddable,
     active: c.active,
+    keepAlive: c.keepAlive,
     central: c.central,
     centralLabel: c.centralLabel ?? undefined,
     host: c.host,
