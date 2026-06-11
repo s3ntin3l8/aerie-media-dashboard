@@ -2,18 +2,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-// Controllable pathname (hoisted so the vi.mock factory can read it).
-const nav = vi.hoisted(() => ({ path: "/s/sonarr" }));
+// Controllable pathname + query (hoisted so the vi.mock factory can read them).
+const nav = vi.hoisted(() => ({ path: "/s/sonarr", search: "" }));
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.path,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn() }));
-// Stub ServiceView so we can assert mount/visibility without the real iframe tree.
+// Stub ServiceView so we can assert mount/visibility + the deep-link prop without the iframe tree.
 vi.mock("@/components/views/Launcher", () => ({
-  ServiceView: ({ s }: { s: { id: string } }) => <div data-testid={`sv-${s.id}`}>{s.id}</div>,
+  ServiceView: ({ s, deepPath }: { s: { id: string }; deepPath?: string }) => (
+    <div data-testid={`sv-${s.id}`} data-deep={deepPath ?? ""}>{s.id}</div>
+  ),
 }));
 
 import { useData } from "@/components/portal/DataProvider";
@@ -44,6 +46,7 @@ const setData = (services: unknown[]) =>
 describe("EmbedHost", () => {
   beforeEach(() => {
     nav.path = "/s/sonarr";
+    nav.search = "";
     vi.mocked(useData).mockReset();
   });
 
@@ -82,6 +85,27 @@ describe("EmbedHost", () => {
 
     await waitFor(() => expect(container.firstChild).toHaveStyle({ display: "none" }));
     expect(screen.getByTestId("sv-sonarr")).toBeInTheDocument(); // kept alive
+  });
+
+  it("forwards the ?at deep path to the active embed only", async () => {
+    setData([svc("sonarr"), svc("radarr")]);
+    nav.search = "at=/series/the-show";
+    const { rerender } = render(<EmbedHost />);
+    expect(screen.getByTestId("sv-sonarr")).toHaveAttribute("data-deep", "/series/the-show");
+
+    // Open radarr (different deep path); the now-inactive sonarr must not keep receiving it.
+    nav.path = "/s/radarr";
+    nav.search = "at=/movie/dune";
+    rerender(<EmbedHost />);
+    await waitFor(() => expect(screen.getByTestId("sv-radarr")).toBeInTheDocument());
+    expect(screen.getByTestId("sv-radarr")).toHaveAttribute("data-deep", "/movie/dune");
+    expect(screen.getByTestId("sv-sonarr")).toHaveAttribute("data-deep", "");
+  });
+
+  it("passes no deep path when ?at is absent", () => {
+    setData([svc("sonarr")]);
+    render(<EmbedHost />);
+    expect(screen.getByTestId("sv-sonarr")).toHaveAttribute("data-deep", "");
   });
 
   it("prunes an embed when its keep-alive flag is turned off", async () => {

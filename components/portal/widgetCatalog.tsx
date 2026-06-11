@@ -10,7 +10,7 @@
 // "Top Streamers" reuses the existing Tautulli-backed LeaderboardPanel.
 // ============================================================
 import React from "react";
-import type { Role, Service, DiscoverItem } from "@/lib/types";
+import type { Role, Service, DiscoverItem, UpcomingItem } from "@/lib/types";
 import { compactAll, findSlot, type Tile, type WidgetMeta } from "@/components/portal/gridLayout";
 import {
   CentralServices,
@@ -35,6 +35,7 @@ export interface WidgetCtx {
   onOpenService: (s: Service) => void;
   onAct?: (id: string, action: "approve" | "decline") => void;
   onRequest?: (item: DiscoverItem) => void;
+  onSelectUpcoming?: (item: UpcomingItem) => void;
 }
 
 export type WidgetSettingSpec =
@@ -163,7 +164,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "30", label: "Next 30 days" },
       ]},
     ],
-    render: (_c, s) => <UpcomingPanel fill limit={s.limit != null ? Number(s.limit) : undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} />,
+    render: (c, s) => <UpcomingPanel fill limit={s.limit != null ? Number(s.limit) : undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} onSelect={c.onSelectUpcoming} />,
   },
   leaderboard: {
     type: "leaderboard", name: "Top Streamers", icon: "leaderboard", accent: "var(--originator-own)", group: "Monitoring",

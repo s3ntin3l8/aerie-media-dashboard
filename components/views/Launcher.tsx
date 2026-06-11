@@ -2,7 +2,9 @@
 // ============================================================
 // AERIE — Service launcher + embed/launch service view
 // ============================================================
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { embedSrc } from "@/lib/embed/deepLink";
 import type { Service } from "@/lib/types";
 import { CAT, catColor, CAT_ORDER } from "@/lib/categories";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -167,7 +169,7 @@ export function Launcher() {
 // iframe load is the ground-truth embed check (see ServiceView). Non-embeddable
 // services fall through to the launch screen. (Traefik must rewrite
 // frame-ancestors + forward-auth for the host — see docs/EMBEDDING.md.)
-export function ServiceViewById({ serviceId }: { serviceId: string }) {
+export function ServiceViewById({ serviceId, deepPath }: { serviceId: string; deepPath?: string }) {
   const { services } = useData();
   const s = services.find((x) => x.id === serviceId);
   if (!s) {
@@ -182,19 +184,26 @@ export function ServiceViewById({ serviceId }: { serviceId: string }) {
   // Keep-alive embeds are owned by the persistent EmbedHost (mounted in the shell) so their
   // iframe survives navigation; the page renders nothing for them and lets EmbedHost overlay.
   if (s.embeddable && s.keepAlive) return null;
-  return <ServiceView s={s} />;
+  return <ServiceView s={s} deepPath={deepPath} />;
 }
 
 // EMBED_LOAD_TIMEOUT_MS and EMBED_BADGE constants live in
 // components/hooks/useEmbedProbe.ts (source of truth).
 // ServiceView consumes the hook; mobile MobileServiceView does the same.
 
-export function ServiceView({ s }: { s: Service }) {
+export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) {
   const router = useRouter();
   const { paletteOpen, modalOpen, favorites, toggleFavorite, user, oidc } = usePortal();
   const pinned = favorites.includes(s.id);
   const c = catColor(s.cat);
   const url = `${s.scheme}://${s.host}`;
+  // The iframe src: base origin, or a deep path when one is supplied. Held in
+  // state so an explicit deep-link navigates the frame (incl. keep-alive embeds)
+  // while a plain re-render with no deepPath leaves a kept frame untouched.
+  const [frameSrc, setFrameSrc] = useState(() => embedSrc(s.scheme, s.host, deepPath));
+  useEffect(() => {
+    if (deepPath) setFrameSrc(embedSrc(s.scheme, s.host, deepPath));
+  }, [deepPath, s.scheme, s.host]);
   const monitored = s.status !== "unknown";
 
   const { embedState, badge, onLoad, onError } = useEmbedProbe(s);
@@ -271,7 +280,7 @@ export function ServiceView({ s }: { s: Service }) {
             {/* Real embed. Traefik must serve this host with a frame-ancestors
                 CSP allowing the portal origin + forward-auth (see docs/EMBEDDING.md). */}
             <iframe
-              src={url}
+              src={frameSrc}
               title={`${s.name} (embedded)`}
               onLoad={onLoad}
               // onError rarely fires for cross-origin frame blocks, but when it

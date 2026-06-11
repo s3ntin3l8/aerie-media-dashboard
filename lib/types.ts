@@ -376,8 +376,28 @@ export interface UpcomingItem {
   when: string;
   /** episode label, e.g. "S02E05 · Title" (series only) */
   ep?: string;
+  /** service id ("sonarr" | "radarr") — also the id used for the /s/{svc} embed */
   svc: string;
   art?: string;
+  // — optional detail fields surfaced in the detail modal (all best-effort) —
+  year?: number;
+  /** runtime in minutes */
+  runtime?: number;
+  /** normalized critic rating, 0–10 */
+  rating?: number;
+  genres?: string[];
+  overview?: string;
+  /** Radarr studio / Sonarr network */
+  studio?: string;
+  monitored?: boolean;
+  /** already downloaded */
+  hasFile?: boolean;
+  /** movie release-date breakdown (ISO) */
+  inCinemas?: string;
+  digitalRelease?: string;
+  physicalRelease?: string;
+  /** root-relative path into the service's web UI, e.g. "/movie/{slug}" */
+  deepPath?: string;
 }
 
 /** A recently grabbed/imported download event from an *arr history feed. */

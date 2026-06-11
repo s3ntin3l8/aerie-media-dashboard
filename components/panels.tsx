@@ -5,7 +5,7 @@
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
 import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
-import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus } from "@/lib/types";
+import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus, UpcomingItem } from "@/lib/types";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setQueueSource } from "@/app/(portal)/admin/actions";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -1367,7 +1367,7 @@ export function StoragePanel() {
 }
 
 // ── COMING SOON (upcoming *arr calendar) ───────────────────
-export function UpcomingPanel({ fill, limit, window: windowDays, title }: { fill?: boolean; limit?: number; window?: number; title?: string } = {}) {
+export function UpcomingPanel({ fill, limit, window: windowDays, title, onSelect }: { fill?: boolean; limit?: number; window?: number; title?: string; onSelect?: (item: UpcomingItem) => void } = {}) {
   const { upcoming } = useData();
   const now = useTick(60000); // update cutoff every minute
   const cutoff = windowDays != null ? new Date(now + windowDays * 86400000) : null;
@@ -1386,7 +1386,12 @@ export function UpcomingPanel({ fill, limit, window: windowDays, title }: { fill
         (() => {
           const list = windowFiltered.slice(0, sliceCap);
           const renderItem = (u: (typeof list)[number]) => (
-            <div key={u.id} style={{ width: 76, flexShrink: 0 }}>
+            <div
+              key={u.id}
+              style={{ width: 76, flexShrink: 0, cursor: onSelect ? "pointer" : "default" }}
+              onClick={() => onSelect?.(u)}
+              title={u.title}
+            >
               <PosterTile title={u.title} kind={u.kind} cat="request" w={76} art={u.art} />
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.title}</div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={u.ep || ""}>

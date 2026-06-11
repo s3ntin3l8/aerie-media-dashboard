@@ -525,3 +525,89 @@ describe("arrCalendar poster URL", () => {
     expect(items[0].art).toBeUndefined();
   });
 });
+
+describe("arrCalendar detail fields", () => {
+  beforeEach(() => {
+    clearCache();
+  });
+
+  it("captures Radarr movie detail fields and normalizes keyed ratings", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://radarr:7878", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue([{
+      id: 10,
+      title: "The Movie",
+      year: 2025,
+      runtime: 122,
+      genres: ["Action", "Sci-Fi"],
+      overview: "A synopsis.",
+      studio: "Acme",
+      monitored: true,
+      hasFile: false,
+      inCinemas: "2025-01-01T00:00:00Z",
+      digitalRelease: "2025-02-01T00:00:00Z",
+      physicalRelease: "2025-03-01T00:00:00Z",
+      ratings: { imdb: { value: 7.456 }, tmdb: { value: 8.1 } },
+      titleSlug: "the-movie-2025",
+    }]);
+    const items = await arrCalendar("radarr");
+    expect(items[0]).toMatchObject({
+      kind: "movie",
+      year: 2025,
+      runtime: 122,
+      rating: 7.5, // imdb preferred, rounded to 1dp
+      genres: ["Action", "Sci-Fi"],
+      overview: "A synopsis.",
+      studio: "Acme",
+      monitored: true,
+      hasFile: false,
+      digitalRelease: "2025-02-01T00:00:00Z",
+      deepPath: "/movie/the-movie-2025",
+    });
+  });
+
+  it("omits deepPath when titleSlug is absent", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://radarr:7878", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue([{ id: 11, title: "No Slug", inCinemas: "2025-01-01T00:00:00Z" }]);
+    const items = await arrCalendar("radarr");
+    expect(items[0].deepPath).toBeUndefined();
+  });
+
+  it("uses series-level detail and flat ratings for Sonarr episodes", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://sonarr:8989", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue([{
+      id: 20,
+      title: "Pilot",
+      seasonNumber: 1,
+      episodeNumber: 2,
+      airDateUtc: "2025-01-05T00:00:00Z",
+      overview: "Episode synopsis.",
+      monitored: true,
+      hasFile: true,
+      series: {
+        title: "The Show",
+        titleSlug: "the-show",
+        year: 2024,
+        runtime: 45,
+        genres: ["Drama"],
+        network: "HBO",
+        ratings: { value: 8.9 },
+      },
+    }]);
+    const items = await arrCalendar("sonarr");
+    expect(items[0]).toMatchObject({
+      kind: "series",
+      title: "The Show",
+      ep: "S01E02 · Pilot",
+      year: 2024,
+      runtime: 45,
+      rating: 8.9,
+      genres: ["Drama"],
+      overview: "Episode synopsis.",
+      studio: "HBO",
+      hasFile: true,
+      deepPath: "/series/the-show",
+    });
+    // movie-only release dates stay undefined for series
+    expect(items[0].inCinemas).toBeUndefined();
+  });
+});

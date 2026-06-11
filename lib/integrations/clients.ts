@@ -1644,11 +1644,29 @@ export async function arrHealth(serviceId: "sonarr" | "radarr"): Promise<HealthI
 }
 
 // ── *arr — upcoming calendar (cached) ──────────────────────
+// Ratings come in two shapes: Radarr keys them by source ({ imdb: { value }, tmdb: { value } }),
+// Sonarr series uses a flat { value }. Normalize to one number (prefer imdb → tmdb → flat value).
+type ArrRating = { value?: number };
+type ArrRatings = { value?: number; imdb?: ArrRating; tmdb?: ArrRating };
+
+interface ArrSeries {
+  title?: string;
+  titleSlug?: string;
+  images?: { coverType: string; remoteUrl?: string; url?: string }[];
+  overview?: string;
+  runtime?: number;
+  year?: number;
+  genres?: string[];
+  network?: string;
+  ratings?: ArrRatings;
+}
+
 interface ArrCalendarRecord {
   id: number;
   title?: string;        // Radarr movie title
+  titleSlug?: string;    // Radarr movie slug (web-UI deep link)
   seriesTitle?: string;  // sometimes present on Sonarr records
-  series?: { title?: string; images?: { coverType: string; remoteUrl?: string; url?: string }[] };
+  series?: ArrSeries;
   seasonNumber?: number;
   episodeNumber?: number;
   airDateUtc?: string;   // Sonarr
@@ -1656,6 +1674,15 @@ interface ArrCalendarRecord {
   digitalRelease?: string;
   physicalRelease?: string;
   images?: { coverType: string; remoteUrl?: string; url?: string }[];
+  // detail fields (Radarr movie record / Sonarr episode record)
+  overview?: string;
+  runtime?: number;
+  year?: number;
+  genres?: string[];
+  studio?: string;
+  monitored?: boolean;
+  hasFile?: boolean;
+  ratings?: ArrRatings;
 }
 
 function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefined {
@@ -1667,6 +1694,11 @@ function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefine
   // flows through the artwork proxy as a user-controlled URL (SSRF mitigation).
   if (img.remoteUrl) return img.remoteUrl;
   return img.url ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(img.url)}` : undefined;
+}
+
+function arrRating(r?: ArrRatings): number | undefined {
+  const v = r?.imdb?.value ?? r?.tmdb?.value ?? r?.value;
+  return typeof v === "number" && v > 0 ? Math.round(v * 10) / 10 : undefined;
 }
 
 export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<UpcomingItem[]> {
@@ -1687,6 +1719,11 @@ export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<Upcom
       const ep = isSeries && rec.seasonNumber != null && rec.episodeNumber != null
         ? `S${String(rec.seasonNumber).padStart(2, "0")}E${String(rec.episodeNumber).padStart(2, "0")}${rec.title ? ` · ${rec.title}` : ""}`
         : undefined;
+      // For series, prefer episode-level detail then fall back to the series record.
+      const genres = (isSeries ? rec.series?.genres : rec.genres) ?? undefined;
+      // Deep link into the service's web UI: Radarr /movie/{slug}, Sonarr /series/{slug}.
+      const slug = isSeries ? rec.series?.titleSlug : rec.titleSlug;
+      const deepPath = slug ? (isSeries ? `/series/${slug}` : `/movie/${slug}`) : undefined;
       out.push({
         id: `${serviceId}-${rec.id}`,
         title: isSeries ? seriesTitle || rec.title || "Untitled" : rec.title || "Untitled",
@@ -1695,6 +1732,18 @@ export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<Upcom
         ep,
         svc: serviceId,
         art: arrPoster(serviceId, rec),
+        year: isSeries ? rec.series?.year : rec.year,
+        runtime: isSeries ? rec.series?.runtime : rec.runtime,
+        rating: arrRating(isSeries ? rec.series?.ratings : rec.ratings),
+        genres: genres && genres.length ? genres : undefined,
+        overview: rec.overview || rec.series?.overview || undefined,
+        studio: isSeries ? rec.series?.network : rec.studio,
+        monitored: rec.monitored,
+        hasFile: rec.hasFile,
+        inCinemas: isSeries ? undefined : rec.inCinemas,
+        digitalRelease: isSeries ? undefined : rec.digitalRelease,
+        physicalRelease: isSeries ? undefined : rec.physicalRelease,
+        deepPath,
       });
     }
     return out;
