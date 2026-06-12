@@ -67,7 +67,7 @@ import {
   type Nzbhydra2Stats,
 } from "@/lib/integrations/clients";
 import { env } from "@/lib/env";
-import { resolveBySource } from "@/lib/widgets/capabilities";
+import { buildLibrary, buildRecent, buildMetricsBySource } from "@/lib/data/assemble";
 
 export interface Snapshot {
   services: Service[];
@@ -452,27 +452,19 @@ export async function getSnapshot(): Promise<Snapshot> {
   );
   if (PERF) console.log(`[perf] quota-wave (${members.length} members): ${Date.now() - tQuota}ms | getSnapshot TOTAL: ${Date.now() - tStart}ms`);
 
-  // ── library: collect every configured source, tagged with `source` so a widget
-  // can pick one. `library` is the Auto-resolved view (Tautulli/Plex wins for media;
-  // Jellyfin only when Plex has none; books/audiobooks always appended) for naive
-  // consumers; `libraryAll` keeps every source. 24h-plays row is Tautulli-only. ──
-  const libraryAll: LibraryStat[] = [
-    ...(ttLibs ?? []).map((c) => ({ ...c, source: "tautulli" })),
-    ...(ttLibs && ttLibs.length > 0
-      ? [{ id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now`, source: "tautulli" }]
-      : []),
-    ...(jfLibs ?? []).map((c) => ({ ...c, source: "jellyfin" })),
-    ...(llStats ? lazylibrarianLibraryStats(llStats).map((c) => ({ ...c, source: "lazylibrarian" })) : []),
-    ...(listenarrData ? listenarrLibraryStats(listenarrData).map((c) => ({ ...c, source: "listenarr" })) : []),
-  ];
-  const library: LibraryStat[] = resolveBySource(libraryAll, "", ["tautulli", "jellyfin"]);
-
-  // recent: collect Tautulli + Jellyfin tagged; `recent` is the Auto winner (Plex, else Jellyfin).
-  const recentAll: RecentItem[] = [
-    ...(ttRecent ?? []).map((r) => ({ ...r, source: "tautulli" })),
-    ...(jfRecent ?? []).map((r) => ({ ...r, source: "jellyfin" })),
-  ];
-  const recent: RecentItem[] = resolveBySource(recentAll, "", ["tautulli", "jellyfin"]);
+  // ── library / recent: collect every configured source (tagged with `source` so a
+  // widget can pick one); `library`/`recent` are the Auto-resolved views (Tautulli/Plex
+  // wins for media, books/audiobooks always appended). See buildLibrary/buildRecent. ──
+  const { libraryAll, library } = buildLibrary({
+    tautulli: ttLibs,
+    jellyfin: jfLibs,
+    lazylibrarian: llStats ? lazylibrarianLibraryStats(llStats) : null,
+    listenarr: listenarrData ? listenarrLibraryStats(listenarrData) : null,
+    playsCard: ttLibs && ttLibs.length > 0
+      ? { id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }
+      : null,
+  });
+  const { recentAll, recent } = buildRecent(ttRecent, jfRecent);
 
   // Rolling 24h play activity, bucketed hourly by Tautulli history (empty until configured).
   const plays24h: number[] = ttPlays?.hourly ?? [];
@@ -513,10 +505,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   // Host metrics per source, so a Host Stats tile can pick Prometheus or Beszel
   // (Auto = the active metricsSource). The active source is metricsResult; the
   // other configured source (if any) is altMetricsResult.
-  const metricsBySource: { prometheus: NodeMetrics | null; beszel: NodeMetrics | null } =
-    metricsSource === "beszel"
-      ? { beszel: metricsResult ?? null, prometheus: altMetricsResult ?? null }
-      : { prometheus: metricsResult ?? null, beszel: altMetricsResult ?? null };
+  const metricsBySource = buildMetricsBySource(metricsSource, metricsResult ?? null, altMetricsResult ?? null);
 
   const snapshot: Snapshot = {
     services, nowPlaying, requests, users, library, libraryAll, recent, recentAll, queue, plays24h, bandwidth,
