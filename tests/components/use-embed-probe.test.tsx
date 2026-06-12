@@ -43,6 +43,12 @@ describe("useEmbedProbe — reload + reloadKey", () => {
     expect(result.current.embedState).toBe("ok");
   });
 
+  it("onError soft-fails immediately, before the timeout elapses", () => {
+    const { result } = renderHook(() => useEmbedProbe(svc));
+    act(() => result.current.onError());
+    expect(result.current.embedState).toBe("unverified");
+  });
+
   it("reloadKey is monotonically increasing across reloads", () => {
     const { result } = renderHook(() => useEmbedProbe(svc));
     const k0 = result.current.reloadKey;
