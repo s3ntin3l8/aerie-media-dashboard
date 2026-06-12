@@ -14,7 +14,7 @@ import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } f
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
 import { MediaLinks } from "@/components/modals/MediaLinks";
-import { ArrDetailSection } from "@/components/modals/ArrDetailSection";
+import { useMediaArrDetail, arrBadges, ArrQuality } from "@/components/modals/ArrDetailSection";
 import { mediaLinks, linkCtxFromServices } from "@/lib/media/links";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
@@ -138,6 +138,14 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
 }
 
 function InfoStep({ pick, serviceLinks }: { pick: DiscoverItem; serviceLinks?: React.ReactNode }) {
+  const detail = useMediaArrDetail({ kind: pick.kind, tmdbId: Number(pick.id) || undefined, arrId: pick.arrId });
+  const arrB = arrBadges(detail);
+  const badges = pick.state || arrB ? (
+    <>
+      {pick.state && <StateBadge state={pick.state} />}
+      {arrB}
+    </>
+  ) : undefined;
   return (
     <div style={{ padding: "18px 20px 22px" }}>
       <MediaDetailBody
@@ -149,10 +157,11 @@ function InfoStep({ pick, serviceLinks }: { pick: DiscoverItem; serviceLinks?: R
         serviceLinks={serviceLinks}
         meta={[pick.kind === "series" ? "Series" : "Movie", String(pick.year)]}
         rating={pick.rating}
-        badges={pick.state ? <StateBadge state={pick.state} /> : undefined}
+        badges={badges}
+        genres={detail?.genres}
         overview={pick.overview || undefined}
       >
-        <ArrDetailSection kind={pick.kind} tmdbId={Number(pick.id) || undefined} arrId={pick.arrId} />
+        <ArrQuality kind={pick.kind} detail={detail} available={pick.state === "available"} />
       </MediaDetailBody>
     </div>
   );
@@ -308,6 +317,7 @@ function ResultPanel({ icon, color, title, body, onClose, extra }: { icon: strin
 
 function ReviewBody({ req, note, setNote, requester, serviceLinks, readOnly }: { req: MediaRequest; note: string; setNote: (v: string) => void; requester?: User; serviceLinks?: React.ReactNode; readOnly?: boolean }) {
   const u = requester;
+  const detail = useMediaArrDetail({ kind: req.kind, tmdbId: req.tmdbId, arrId: req.arrId });
   const fact = (label: string, value: React.ReactNode, mono?: boolean) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Eyebrow>{label}</Eyebrow>
@@ -326,6 +336,8 @@ function ReviewBody({ req, note, setNote, requester, serviceLinks, readOnly }: {
           serviceLinks={serviceLinks}
           titleRight={<Pill tone={RQ_TONE[req.status]}>{RQ_LABEL[req.status]}</Pill>}
           meta={[req.kind === "series" ? "Series" : "Movie", String(req.year), req.id]}
+          badges={arrBadges(detail) ?? undefined}
+          genres={detail?.genres}
           overview={req.overview || undefined}
         />
       </div>
@@ -369,7 +381,7 @@ function ReviewBody({ req, note, setNote, requester, serviceLinks, readOnly }: {
             : "Movie",
         )}
       </div>
-      <ArrDetailSection kind={req.kind} tmdbId={req.tmdbId} arrId={req.arrId} fileInfoHint={req.fileInfo} />
+      <ArrQuality kind={req.kind} detail={detail} fileInfoHint={req.fileInfo} available={req.status === "available"} />
       {!readOnly && (
         <Field label="Note to requester" hint="posted as an Overseerr comment">
           <textarea className="input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a comment visible in Overseerr…" style={{ ...fieldInput, resize: "vertical", fontFamily: "var(--font-body)", lineHeight: 1.5 }} />

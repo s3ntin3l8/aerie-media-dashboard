@@ -267,6 +267,10 @@ export interface MediaArrDetail {
   fileInfo?: FileInfo;
   /** per-season downloaded quality (series) */
   seasons?: SeasonQuality[];
+  /** genres (Radarr/Sonarr metadata) */
+  genres?: string[];
+  /** Radarr studio / Sonarr network */
+  studio?: string;
 }
 
 export interface OverseerrQuota {

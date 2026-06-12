@@ -948,6 +948,7 @@ interface OverseerrMediaDetails {
   releaseDate?: string;  // movies
   firstAirDate?: string; // tv shows
   overview?: string;
+  mediaInfo?: { status?: number; mediaUrl?: string; plexUrl?: string; jellyfinMediaId?: string; ratingKey?: string; serviceUrl?: string; externalServiceId?: number };
 }
 
 // Cache enriched media details by "type:tmdbId".
@@ -959,6 +960,13 @@ interface EnrichedDetails {
   year?: number;
   overview?: string;
   cachedAt: number;
+  // — Overseerr media status + deep-link ids (for the Plex watchlist, which arrives
+  //   without mediaInfo). Mutable-ish, but acceptably fresh for the 5-min watchlist. —
+  state?: RequestStatus | null;
+  plexUrl?: string;
+  jellyfinItemId?: string;
+  serviceUrl?: string;
+  arrId?: number;
 }
 const enrichCache = new Map<string, EnrichedDetails>();
 const ENRICH_TTL = 60 * 60 * 1000;
@@ -993,12 +1001,18 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
         { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 15000 },
       );
       const dateStr = details.releaseDate || details.firstAirDate || "";
+      const mi = details.mediaInfo;
       const result: EnrichedDetails = {
         title: details.title || details.name || "",
         posterPath: details.posterPath ?? undefined,
         year: dateStr ? Number(dateStr.slice(0, 4)) : undefined,
         overview: details.overview || undefined,
         cachedAt: Date.now(),
+        state: mediaStatusToState(mi?.status),
+        plexUrl: mi?.mediaUrl ?? mi?.plexUrl,
+        jellyfinItemId: mi?.jellyfinMediaId,
+        serviceUrl: mi?.serviceUrl,
+        arrId: mi?.externalServiceId,
       };
       enrichCache.set(cacheKey, result);
       return result;
@@ -1133,7 +1147,7 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
 
 const MOVIE_FILE_INDEX_TTL = 30 * 60 * 1000;
 /** Radarr download/monitor state for a movie (by tmdbId). */
-interface MovieMeta { monitored?: boolean; hasFile?: boolean }
+interface MovieMeta { monitored?: boolean; hasFile?: boolean; genres?: string[]; studio?: string }
 interface MovieIndexes { fileIndex: Map<number, FileInfo>; profileIndex: Map<number, number>; metaIndex: Map<number, MovieMeta> }
 let movieIndexCache: { at: number } & MovieIndexes | null = null;
 
@@ -1147,6 +1161,8 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
     qualityProfileId?: number;
     monitored?: boolean;
     hasFile?: boolean;
+    genres?: string[];
+    studio?: string;
     movieFile?: {
       size?: number;
       quality?: { quality?: { resolution?: number; source?: string } };
@@ -1165,7 +1181,7 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
   for (const m of movies) {
     if (!m.tmdbId) continue;
     if (m.qualityProfileId != null) profileIndex.set(m.tmdbId, m.qualityProfileId);
-    metaIndex.set(m.tmdbId, { monitored: m.monitored, hasFile: m.hasFile });
+    metaIndex.set(m.tmdbId, { monitored: m.monitored, hasFile: m.hasFile, genres: m.genres?.length ? m.genres : undefined, studio: m.studio || undefined });
     if (!m.movieFile) continue;
     const q = m.movieFile.quality?.quality;
     const res = q?.resolution ? `${q.resolution}p` : undefined;
@@ -1178,23 +1194,23 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
   return { fileIndex, profileIndex, metaIndex };
 }
 
-/** Radarr monitor/download state for a single movie by tmdbId (uses the cached index). */
-export async function radarrMovieMeta(tmdbId: number): Promise<{ monitored?: boolean; hasFile?: boolean; fileInfo?: FileInfo }> {
+/** Radarr monitor/download state + metadata for a single movie by tmdbId (uses the cached index). */
+export async function radarrMovieMeta(tmdbId: number): Promise<{ monitored?: boolean; hasFile?: boolean; fileInfo?: FileInfo; genres?: string[]; studio?: string }> {
   const { fileIndex, metaIndex } = await arrMovieIndexes();
   return { ...(metaIndex.get(tmdbId) ?? {}), fileInfo: fileIndex.get(tmdbId) };
 }
 
-/** Sonarr series monitor/download state by series id. */
-export async function sonarrSeriesMeta(seriesId: number): Promise<{ monitored?: boolean; hasFile?: boolean }> {
+/** Sonarr series monitor/download state + metadata by series id. */
+export async function sonarrSeriesMeta(seriesId: number): Promise<{ monitored?: boolean; hasFile?: boolean; genres?: string[]; studio?: string }> {
   return cached(`sonarr:seriesmeta:${seriesId}`, 60_000, async () => {
     const { baseUrl, apiKey } = await creds("sonarr");
-    type S = { monitored?: boolean; statistics?: { episodeFileCount?: number } };
+    type S = { monitored?: boolean; statistics?: { episodeFileCount?: number }; genres?: string[]; network?: string };
     const s = await fetchJson<S>(`${baseUrl}/api/v3/series/${seriesId}`, {
       service: "sonarr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 8000,
     });
-    return { monitored: s.monitored, hasFile: (s.statistics?.episodeFileCount ?? 0) > 0 };
+    return { monitored: s.monitored, hasFile: (s.statistics?.episodeFileCount ?? 0) > 0, genres: s.genres?.length ? s.genres : undefined, studio: s.network || undefined };
   });
 }
 
@@ -1511,10 +1527,11 @@ export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
     const raw = (data.results ?? [])
       .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")
       .slice(0, 50);
-    // Watchlist items come from Plex and lack TMDB fields — enrich any that are missing art or date.
+    // Watchlist items come from Plex and arrive WITHOUT mediaInfo, so mapDiscoverResult
+    // can't see the request/library status — always enrich by TMDB id to resolve the
+    // real Overseerr state + deep-link ids (and any missing art/year).
     return Promise.all(raw.map(async (r) => {
       const base = mapDiscoverResult({ ...r, id: r.tmdbId ?? r.id });
-      if (base.art && base.year) return base;
       const tmdbId = r.tmdbId ?? r.id;
       if (!tmdbId) return base;
       const type = r.mediaType === "tv" ? "tv" : "movie";
@@ -1523,6 +1540,12 @@ export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
         ...base,
         year: base.year || enriched.year || 0,
         art: base.art ?? (enriched.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(enriched.posterPath)}` : undefined),
+        // status + deep-link ids resolved from the per-title detail (watchlist lacks them)
+        state: base.state ?? enriched.state ?? null,
+        plexUrl: base.plexUrl ?? enriched.plexUrl,
+        jellyfinItemId: base.jellyfinItemId ?? enriched.jellyfinItemId,
+        serviceUrl: base.serviceUrl ?? enriched.serviceUrl,
+        arrId: base.arrId ?? enriched.arrId,
       };
     }));
   });
