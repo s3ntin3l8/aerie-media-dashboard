@@ -443,4 +443,85 @@ export function BazarrWidget({ fill }: { fill?: boolean } = {}) {
   );
 }
 
+function fmtUptime(sec: number | null): string {
+  if (sec == null) return "—";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  if (d > 0) return `${d}d ${h}h`;
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// ── HOST STATS — Prometheus or Beszel host metrics on the grid ──
+// Brings the host metric cards (previously Status-only) onto the home grid with a
+// per-tile source pick (Auto = the active metricsSource).
+export function HostStatsWidget({ fill, source }: { fill?: boolean; source?: string } = {}) {
+  const { metricsBySource, metrics, metricsSource } = useData();
+  const src = source || metricsSource;
+  const m = (src === "beszel" ? metricsBySource?.beszel : metricsBySource?.prometheus) ?? (source ? null : metrics);
+  return (
+    <PanelShell fill={fill} title="Host Stats" icon="memory" accent="var(--primary)" live={!!m}>
+      {!m ? (
+        <Empty icon="memory" line="No host metrics" sub="Add Prometheus or Beszel to show CPU, memory, disk and network." />
+      ) : (
+        <StatRow>
+          <Metric label="CPU" value={m.cpuPct != null ? m.cpuPct.toFixed(0) : "—"} unit={m.cpuPct != null ? "%" : undefined} icon="memory" color="var(--primary)" />
+          <Metric label="Memory" value={fmtBytes(m.memUsedBytes)} unit={` / ${fmtBytes(m.memTotalBytes)}`} icon="memory_alt" color="var(--originator-court)" />
+          <Metric label="Disk" value={m.diskUsedBytes != null && m.diskTotalBytes ? String(Math.round((m.diskUsedBytes / m.diskTotalBytes) * 100)) : "—"} unit={m.diskTotalBytes ? "%" : undefined} icon="hard_drive" color="var(--amber)" />
+          <Metric label="Net out" value={m.netOutBps != null ? (m.netOutBps / 1e6).toFixed(1) : "—"} unit=" Mbps" icon="arrow_upward" color="var(--originator-third-party)" />
+          <Metric label="Net in" value={m.netInBps != null ? (m.netInBps / 1e6).toFixed(1) : "—"} unit=" Mbps" icon="arrow_downward" color="var(--originator-court)" />
+          <Metric label="Load" value={m.sysLoad != null ? m.sysLoad.toFixed(2) : "—"} icon="speed" color="var(--originator-own)" />
+          {m.uptimeSec != null && <Metric label="Uptime" value={fmtUptime(m.uptimeSec)} icon="schedule" color="var(--primary)" />}
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── SERVICE WARNINGS — *arr health issues on the grid ──────
+export function HealthWidget({ fill }: { fill?: boolean } = {}) {
+  const { arrHealth } = useData();
+  return (
+    <PanelShell fill={fill} title="Service Warnings" icon="warning" accent="var(--amber)" count={arrHealth.length ? `${arrHealth.length}` : undefined} live={arrHealth.length > 0}>
+      {arrHealth.length === 0 ? (
+        <Empty icon="check_circle" line="No warnings" sub="Sonarr / Radarr / Listenarr health issues will appear here." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {arrHealth.map((h, i) => {
+            const isError = h.type.toLowerCase() === "error";
+            const c = isError ? "var(--error)" : "var(--amber)";
+            return (
+              <div key={`${h.svc}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                <Icon name={isError ? "error" : "warning"} size={15} color={c} />
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", color: c, flex: "0 0 56px" }}>{h.svc}</span>
+                <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1 }}>{h.message}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── 24h ACTIVITY — Tautulli rolling play histogram ─────────
+export function ActivityWidget({ fill }: { fill?: boolean } = {}) {
+  const { plays24h } = useData();
+  const total = plays24h.reduce((a, b) => a + b, 0);
+  return (
+    <PanelShell fill={fill} title="24h Activity" icon="show_chart" accent="var(--primary)" live={total > 0}>
+      {plays24h.length === 0 ? (
+        <Empty icon="show_chart" line="No activity data" sub="Connect Tautulli to chart plays over the last 24 hours." />
+      ) : (
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10, height: "100%", boxSizing: "border-box" }}>
+          <Metric label="Plays · last 24h" value={total.toLocaleString("en-US")} icon="play_arrow" color="var(--primary)" />
+          <div style={{ flex: 1, minHeight: 56, position: "relative" }}>
+            <FluidArea data={plays24h} color="var(--primary)" />
+          </div>
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
 export type { CSS };

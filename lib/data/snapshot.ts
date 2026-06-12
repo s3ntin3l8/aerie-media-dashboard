@@ -115,6 +115,8 @@ export interface Snapshot {
   /** the group name that maps to the admin role (locked "always" in visibility) */
   adminGroup: string;
   metrics: NodeMetrics | null;
+  /** host metrics per source (Auto = the active metricsSource), for a per-tile Host Stats source pick */
+  metricsBySource: { prometheus: NodeMetrics | null; beszel: NodeMetrics | null };
   /** which source fills `metrics` (the active source; toggle when both are configured) */
   metricsSource: "prometheus" | "beszel";
   /** Prometheus service exists in config (drives the source toggle's visibility) */
@@ -286,7 +288,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers, absNow, llStats,
     listenarrQ, listenarrHist, listenarrHealthIssues, listenarrData,
-    qbitQ, qbStats,
+    qbitQ, qbStats, altMetricsResult,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -340,6 +342,11 @@ export async function getSnapshot(): Promise<Snapshot> {
     // qBittorrent: only the active queue source fires the torrent list; stats always fire when configured.
     queueSource === "qbittorrent" ? perf("live:qbittorrentQueue", safe(qbittorrentQueue)) : Promise.resolve(null),
     qbitOn ? perf("live:qbittorrentStats", safe(qbittorrentStats)) : Promise.resolve(null),
+    // Per-widget Host Stats source pick: fetch the OTHER configured metrics source too (the
+    // active one comes via metricsResult). Bounded to one extra call, only when both are set up.
+    (metricsSource === "beszel" ? promOn : beszelOn)
+      ? perf("live:metrics(alt)", safe(metricsSource === "beszel" ? prometheusMetrics : beszelMetrics))
+      : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -503,10 +510,18 @@ export async function getSnapshot(): Promise<Snapshot> {
       }
     : null;
 
+  // Host metrics per source, so a Host Stats tile can pick Prometheus or Beszel
+  // (Auto = the active metricsSource). The active source is metricsResult; the
+  // other configured source (if any) is altMetricsResult.
+  const metricsBySource: { prometheus: NodeMetrics | null; beszel: NodeMetrics | null } =
+    metricsSource === "beszel"
+      ? { beszel: metricsResult ?? null, prometheus: altMetricsResult ?? null }
+      : { prometheus: metricsResult ?? null, beszel: altMetricsResult ?? null };
+
   const snapshot: Snapshot = {
     services, nowPlaying, requests, users, library, libraryAll, recent, recentAll, queue, plays24h, bandwidth,
     storage, issues, arrHealth: arrHealthIssues, upcoming, downloads, topStats,
-    groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
+    groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null, metricsBySource,
     metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
     queueSource, arrQueueConfigured: arrQueueOn, nzbgetConfigured: nzbgetOn, nzbgetStatus: nzbgetStat ?? null,
     qbittorrentConfigured: qbitOn, qbittorrent: qbStats ?? null,

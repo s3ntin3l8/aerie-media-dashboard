@@ -1353,11 +1353,16 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
 }
 
 // ── STORAGE (per-mount disk usage) ─────────────────────────
-export function StoragePanel() {
+export function StoragePanel({ fill }: { fill?: boolean } = {}) {
   const { storage } = useData();
-  if (storage.length === 0) return null;
+  if (storage.length === 0)
+    return fill ? (
+      <PanelShell fill title="Storage" icon="hard_drive" accent="var(--amber)">
+        <Empty icon="hard_drive" line="No storage data" sub="Add Sonarr or Radarr to show disk usage per mount." />
+      </PanelShell>
+    ) : null;
   return (
-    <PanelShell title="Storage" icon="hard_drive" accent="var(--amber)" count={`${storage.length} ${storage.length === 1 ? "mount" : "mounts"}`}>
+    <PanelShell fill={fill} title="Storage" icon="hard_drive" accent="var(--amber)" count={`${storage.length} ${storage.length === 1 ? "mount" : "mounts"}`}>
       <div style={{ display: "flex", flexDirection: "column" }}>
         {storage.map((m, i) => {
           const used = m.totalBytes - m.freeBytes;

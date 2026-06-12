@@ -26,8 +26,9 @@ import {
   QueuePanel,
   DownloadsPanel,
   DiscoverFeedPanel,
+  StoragePanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, IndexersWidget, AgregarrWidget, BazarrWidget, BooksWidget, QbittorrentWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, IndexersWidget, AgregarrWidget, BazarrWidget, BooksWidget, QbittorrentWidget, HostStatsWidget, HealthWidget, ActivityWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -190,6 +191,33 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Live streaming throughput plus host network rates.",
     defaultW: 8, defaultH: 6, minW: 4, minH: 4, maxW: 12, maxH: 10,
     render: (_c, _s) => <BandwidthWidget fill />,
+  },
+  hostStats: {
+    type: "hostStats", name: "Host Stats", icon: "memory", accent: "var(--primary)", group: "Monitoring", adminOnly: true,
+    desc: "Host CPU, memory, disk, network and uptime from Prometheus or Beszel.",
+    defaultW: 8, defaultH: 4, minW: 4, minH: 3, maxW: 12, maxH: 8,
+    settings: [
+      { key: "source", label: "Data source", type: "source", capability: "metrics", hint: "Auto uses the active metrics source." },
+    ],
+    render: (_c, s) => <HostStatsWidget fill source={s.source as string | undefined} />,
+  },
+  storage: {
+    type: "storage", name: "Storage", icon: "hard_drive", accent: "var(--amber)", group: "Monitoring", adminOnly: true,
+    desc: "Per-mount disk usage from your *arr download clients.",
+    defaultW: 4, defaultH: 6, minW: 3, minH: 3, maxW: 8, maxH: 12,
+    render: (_c, _s) => <StoragePanel fill />,
+  },
+  serviceWarnings: {
+    type: "serviceWarnings", name: "Service Warnings", icon: "warning", accent: "var(--amber)", group: "Monitoring", adminOnly: true,
+    desc: "Health warnings and errors from Sonarr, Radarr and Listenarr.",
+    defaultW: 4, defaultH: 5, minW: 3, minH: 3, maxW: 12, maxH: 12,
+    render: (_c, _s) => <HealthWidget fill />,
+  },
+  activity: {
+    type: "activity", name: "24h Activity", icon: "show_chart", accent: "var(--primary)", group: "Monitoring",
+    desc: "Plays over the last 24 hours (Tautulli).",
+    defaultW: 4, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 8,
+    render: (_c, _s) => <ActivityWidget fill />,
   },
   queue: {
     type: "queue", name: "Download Queue", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
