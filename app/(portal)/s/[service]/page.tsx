@@ -1,6 +1,13 @@
 import { ServiceViewById } from "@/components/views/Launcher";
 
-export default async function ServicePage({ params }: { params: Promise<{ service: string }> }) {
+export default async function ServicePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ service: string }>;
+  searchParams: Promise<{ at?: string }>;
+}) {
   const { service } = await params;
-  return <ServiceViewById serviceId={service} />;
+  const { at } = await searchParams;
+  return <ServiceViewById serviceId={service} deepPath={at} />;
 }

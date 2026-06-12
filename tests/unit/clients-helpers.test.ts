@@ -54,6 +54,12 @@ import {
   matchOverseerrUserId,
   bustCache,
   clearCache,
+  tmdbFromGuids,
+  sonarrSeasonQuality,
+  sonarrSeriesMeta,
+  radarrMovieMeta,
+  overseerrMediaByTmdb,
+  overseerrWatchlist,
   type OverseerrUser,
 } from "@/lib/integrations/clients";
 
@@ -110,6 +116,17 @@ function makeTautulliSession(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("tmdbFromGuids", () => {
+  it("extracts the TMDB id from a Plex guids array", () => {
+    expect(tmdbFromGuids(["imdb://tt41021125", "tmdb://7041216", "tvdb://11780710"])).toBe(7041216);
+  });
+  it("returns undefined when absent or malformed", () => {
+    expect(tmdbFromGuids(["imdb://tt1", "tvdb://2"])).toBeUndefined();
+    expect(tmdbFromGuids([])).toBeUndefined();
+    expect(tmdbFromGuids(undefined)).toBeUndefined();
+  });
+});
 
 describe("clients — private helpers via exported functions", () => {
   beforeEach(() => {
@@ -523,5 +540,214 @@ describe("arrCalendar poster URL", () => {
     }]);
     const items = await arrCalendar("radarr");
     expect(items[0].art).toBeUndefined();
+  });
+});
+
+describe("arrCalendar detail fields", () => {
+  beforeEach(() => {
+    clearCache();
+  });
+
+  it("captures Radarr movie detail fields and normalizes keyed ratings", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://radarr:7878", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue([{
+      id: 10,
+      title: "The Movie",
+      year: 2025,
+      runtime: 122,
+      genres: ["Action", "Sci-Fi"],
+      overview: "A synopsis.",
+      studio: "Acme",
+      monitored: true,
+      hasFile: false,
+      inCinemas: "2025-01-01T00:00:00Z",
+      digitalRelease: "2025-02-01T00:00:00Z",
+      physicalRelease: "2025-03-01T00:00:00Z",
+      ratings: { imdb: { value: 7.456 }, tmdb: { value: 8.1 } },
+      titleSlug: "the-movie-2025",
+    }]);
+    const items = await arrCalendar("radarr");
+    expect(items[0]).toMatchObject({
+      kind: "movie",
+      year: 2025,
+      runtime: 122,
+      rating: 7.5, // imdb preferred, rounded to 1dp
+      genres: ["Action", "Sci-Fi"],
+      overview: "A synopsis.",
+      studio: "Acme",
+      monitored: true,
+      hasFile: false,
+      digitalRelease: "2025-02-01T00:00:00Z",
+      deepPath: "/movie/the-movie-2025",
+    });
+  });
+
+  it("omits deepPath when titleSlug is absent", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://radarr:7878", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue([{ id: 11, title: "No Slug", inCinemas: "2025-01-01T00:00:00Z" }]);
+    const items = await arrCalendar("radarr");
+    expect(items[0].deepPath).toBeUndefined();
+  });
+
+  it("uses series-level detail and flat ratings for Sonarr episodes", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://sonarr:8989", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue([{
+      id: 20,
+      title: "Pilot",
+      seasonNumber: 1,
+      episodeNumber: 2,
+      airDateUtc: "2025-01-05T00:00:00Z",
+      overview: "Episode synopsis.",
+      monitored: true,
+      hasFile: true,
+      series: {
+        title: "The Show",
+        titleSlug: "the-show",
+        year: 2024,
+        runtime: 45,
+        genres: ["Drama"],
+        network: "HBO",
+        ratings: { value: 8.9 },
+      },
+    }]);
+    const items = await arrCalendar("sonarr");
+    expect(items[0]).toMatchObject({
+      kind: "series",
+      title: "The Show",
+      ep: "S01E02 · Pilot",
+      year: 2024,
+      runtime: 45,
+      rating: 8.9,
+      genres: ["Drama"],
+      overview: "Episode synopsis.",
+      studio: "HBO",
+      hasFile: true,
+      deepPath: "/series/the-show",
+    });
+    // movie-only release dates stay undefined for series
+    expect(items[0].inCinemas).toBeUndefined();
+  });
+});
+describe("sonarrSeasonQuality — per-season grouping", () => {
+  beforeEach(() => {
+    clearCache();
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://sonarr:8989", apiKey: "key", insecureTls: false });
+  });
+
+  it("groups downloaded episodes by season with the dominant quality label and summed size", async () => {
+    mockFetchJson.mockResolvedValue([
+      { seasonNumber: 1, hasFile: true, episodeFile: { size: 1_000_000_000, quality: { quality: { resolution: 1080, source: "web" } } } },
+      { seasonNumber: 1, hasFile: true, episodeFile: { size: 1_000_000_000, quality: { quality: { resolution: 1080, source: "web" } } } },
+      { seasonNumber: 1, hasFile: true, episodeFile: { size: 500_000_000, quality: { quality: { resolution: 720, source: "hdtv" } } } },
+      { seasonNumber: 2, hasFile: false },
+      { seasonNumber: 0, hasFile: true, episodeFile: { size: 100, quality: { quality: { resolution: 480 } } } },
+    ]);
+    const out = await sonarrSeasonQuality(42);
+    // season 2 has no files and season 0 (specials) are dropped → only season 1
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ season: 1, episodeCount: 3 });
+    // "web" maps to WEB-DL and 1080p is the dominant (2 of 3) label
+    expect(out[0].label).toBe("1080p WEB-DL");
+    expect(out[0].sizeBytes).toBe(2_500_000_000);
+  });
+
+  it("returns an empty array when nothing is downloaded", async () => {
+    mockFetchJson.mockResolvedValue([{ seasonNumber: 1, hasFile: false }]);
+    expect(await sonarrSeasonQuality(7)).toEqual([]);
+  });
+});
+
+describe("sonarrSeriesMeta — monitored / hasFile / metadata", () => {
+  beforeEach(() => {
+    clearCache();
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://sonarr:8989", apiKey: "key", insecureTls: false });
+  });
+
+  it("derives hasFile from episodeFileCount and maps network → studio", async () => {
+    mockFetchJson.mockResolvedValue({ monitored: true, statistics: { episodeFileCount: 8 }, genres: ["Drama"], network: "HBO" });
+    expect(await sonarrSeriesMeta(1)).toEqual({ monitored: true, hasFile: true, genres: ["Drama"], studio: "HBO" });
+  });
+
+  it("hasFile is false when no episode files", async () => {
+    mockFetchJson.mockResolvedValue({ monitored: false, statistics: { episodeFileCount: 0 } });
+    expect(await sonarrSeriesMeta(2)).toMatchObject({ monitored: false, hasFile: false });
+  });
+});
+
+describe("radarrMovieMeta — by tmdbId via the movie index", () => {
+  beforeEach(() => {
+    clearCache();
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://radarr:7878", apiKey: "key", insecureTls: false });
+  });
+
+  it("returns monitored/hasFile/genres/studio + fileInfo for an indexed movie", async () => {
+    mockFetchJson.mockResolvedValue([
+      {
+        tmdbId: 603,
+        monitored: true,
+        hasFile: true,
+        genres: ["Action"],
+        studio: "Warner Bros.",
+        qualityProfileId: 4,
+        movieFile: { size: 8_000_000_000, quality: { quality: { resolution: 2160, source: "bluray" } }, mediaInfo: { videoCodec: "x265" } },
+      },
+    ]);
+    const meta = await radarrMovieMeta(603);
+    expect(meta).toMatchObject({ monitored: true, hasFile: true, genres: ["Action"], studio: "Warner Bros." });
+    expect(meta.fileInfo?.label).toBe("2160p Blu-ray · X265");
+    expect(meta.fileInfo?.sizeBytes).toBe(8_000_000_000);
+  });
+
+  it("returns an empty object for a movie not in the library", async () => {
+    mockFetchJson.mockResolvedValue([{ tmdbId: 1, monitored: true, hasFile: false }]);
+    expect(await radarrMovieMeta(999)).toEqual({ fileInfo: undefined });
+  });
+});
+
+describe("overseerrMediaByTmdb — single-title DiscoverItem", () => {
+  beforeEach(() => {
+    clearCache();
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://os", apiKey: "key", insecureTls: false });
+  });
+
+  it("maps a movie detail (mediaUrl → plexUrl, externalServiceId → arrId, status → state)", async () => {
+    mockFetchJson.mockResolvedValue({
+      title: "Dune",
+      releaseDate: "2021-10-22",
+      voteAverage: 8,
+      overview: "Spice.",
+      mediaInfo: { status: 5, mediaUrl: "https://app.plex.tv/x", serviceUrl: "http://radarr/movie/438631", externalServiceId: 12 },
+    });
+    const item = await overseerrMediaByTmdb(438631, "movie");
+    expect(item).toMatchObject({ id: "438631", kind: "movie", state: "available", plexUrl: "https://app.plex.tv/x", serviceUrl: "http://radarr/movie/438631", arrId: 12 });
+  });
+
+  it("maps a tv detail and carries numberOfSeasons", async () => {
+    mockFetchJson.mockResolvedValue({ name: "The Bear", firstAirDate: "2022-06-23", numberOfSeasons: 3, mediaInfo: { status: 2 } });
+    const item = await overseerrMediaByTmdb(136315, "series");
+    expect(item).toMatchObject({ id: "136315", kind: "series", title: "The Bear", state: "pending", seasons: 3 });
+  });
+});
+
+describe("overseerrWatchlist — resolves status for items that arrive without mediaInfo", () => {
+  beforeEach(() => {
+    clearCache();
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://os", apiKey: "key", insecureTls: false });
+  });
+
+  it("enriches state + deep-link ids by TMDB id (Plex watchlist lacks mediaInfo)", async () => {
+    mockFetchJson.mockImplementation(async (url: string) => {
+      if (url.includes("/discover/watchlist")) {
+        // Plex-sourced item: no mediaInfo, so status is unknown at this point.
+        return { results: [{ id: 0, tmdbId: 550, mediaType: "movie", title: "Fight Club", posterPath: "/p.jpg" }] };
+      }
+      if (url.includes("/api/v1/movie/550")) {
+        return { title: "Fight Club", releaseDate: "1999-10-15", mediaInfo: { status: 5, mediaUrl: "https://app.plex.tv/fc", externalServiceId: 7 } };
+      }
+      return {};
+    });
+    const items = await overseerrWatchlist();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id: "550", state: "available", plexUrl: "https://app.plex.tv/fc", arrId: 7 });
   });
 });

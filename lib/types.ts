@@ -54,6 +54,12 @@ export interface NowPlaying {
   kind: MediaKind;
   year?: number;
   ep?: string;
+  /** TMDB id (movies); for series resolve the show via grandparentRatingKey. */
+  tmdbId?: number;
+  /** Plex rating key of the playing item. */
+  ratingKey?: string;
+  /** Plex rating key of the show (series), for resolving the show's TMDB id. */
+  grandparentRatingKey?: string;
   user: string;
   src: string;
   device: string;
@@ -221,6 +227,14 @@ export interface MediaRequest {
   mediaOverseerrId?: number;
   /** TMDB ID for the media item — used to construct Overseerr deep-links. */
   tmdbId?: number;
+  /** absolute Plex web URL (app.plex.tv) for an available item (from Overseerr). */
+  plexUrl?: string;
+  /** Jellyfin library item id for an available item → /web/#/details?id={id}. */
+  jellyfinItemId?: string;
+  /** absolute Sonarr/Radarr URL Overseerr resolved for a requested/processing item. */
+  serviceUrl?: string;
+  /** the *arr's internal id (Radarr movie id / Sonarr series id) — for live quality lookups. */
+  arrId?: number;
   /** ISO timestamp of last modification (status change etc.) — used for sort-by-modified. */
   modified?: string;
   /** Actual downloaded file quality from Radarr (movies only). */
@@ -231,6 +245,32 @@ export interface FileInfo {
   /** Human-readable label, e.g. "2160p Blu-ray · x265". */
   label: string;
   sizeBytes?: number;
+}
+
+/** Downloaded quality for one season of a series (from Sonarr episode files). */
+export interface SeasonQuality {
+  season: number;
+  /** dominant quality label, e.g. "1080p Blu-ray" (empty if no files yet). */
+  label: string;
+  /** episodes with a downloaded file. */
+  episodeCount: number;
+  sizeBytes?: number;
+}
+
+/** Live Sonarr/Radarr detail for a media item, merged with Overseerr state in the modal. */
+export interface MediaArrDetail {
+  /** the *arr is tracking it for downloads */
+  monitored?: boolean;
+  /** at least one file is downloaded */
+  hasFile?: boolean;
+  /** movie file quality */
+  fileInfo?: FileInfo;
+  /** per-season downloaded quality (series) */
+  seasons?: SeasonQuality[];
+  /** genres (Radarr/Sonarr metadata) */
+  genres?: string[];
+  /** Radarr studio / Sonarr network */
+  studio?: string;
 }
 
 export interface OverseerrQuota {
@@ -274,6 +314,12 @@ export interface RecentItem {
   cat: Category;
   /** proxied cover-art URL (/api/artwork?…), if available */
   art?: string;
+  /** TMDB id (movies); for series resolve the show via grandparentRatingKey. */
+  tmdbId?: number;
+  /** Plex rating key of the added item. */
+  ratingKey?: string;
+  /** Plex rating key of the show (series), for resolving the show's TMDB id. */
+  grandparentRatingKey?: string;
 }
 
 export interface QueueItem {
@@ -332,6 +378,15 @@ export interface DiscoverItem {
   overview: string;
   /** proxied cover-art URL (/api/artwork?…), if available */
   art?: string;
+  // — watch/service deep-link ids, surfaced by Overseerr for synced items (all best-effort) —
+  /** absolute Plex web URL (app.plex.tv) for an available item */
+  plexUrl?: string;
+  /** Jellyfin library item id for an available item → /web/#/details?id={id} */
+  jellyfinItemId?: string;
+  /** absolute Sonarr/Radarr URL Overseerr resolved for a requested/processing item */
+  serviceUrl?: string;
+  /** the *arr's internal id (Radarr movie id / Sonarr series id) — for live quality lookups. */
+  arrId?: number;
 }
 
 /** A request quality profile option. */
@@ -376,8 +431,28 @@ export interface UpcomingItem {
   when: string;
   /** episode label, e.g. "S02E05 · Title" (series only) */
   ep?: string;
+  /** service id ("sonarr" | "radarr") — also the id used for the /s/{svc} embed */
   svc: string;
   art?: string;
+  // — optional detail fields surfaced in the detail modal (all best-effort) —
+  year?: number;
+  /** runtime in minutes */
+  runtime?: number;
+  /** normalized critic rating, 0–10 */
+  rating?: number;
+  genres?: string[];
+  overview?: string;
+  /** Radarr studio / Sonarr network */
+  studio?: string;
+  monitored?: boolean;
+  /** already downloaded */
+  hasFile?: boolean;
+  /** movie release-date breakdown (ISO) */
+  inCinemas?: string;
+  digitalRelease?: string;
+  physicalRelease?: string;
+  /** root-relative path into the service's web UI, e.g. "/movie/{slug}" */
+  deepPath?: string;
 }
 
 /** A recently grabbed/imported download event from an *arr history feed. */

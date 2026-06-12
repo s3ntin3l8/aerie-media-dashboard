@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -55,6 +55,12 @@ export function bustCache(key: string): void {
 export function clearCache(): void {
   ttlCache.clear();
   ttlInflight.clear();
+  // Module-level singletons (not in ttlCache) — reset for deterministic tests.
+  enrichCache.clear();
+  qualityProfilesCache = null;
+  movieProfilesCache = null;
+  tvProfilesCache = null;
+  movieIndexCache = null;
 }
 
 // ── Gatus — per-service health + heartbeat ─────────────────
@@ -118,6 +124,9 @@ interface TautulliSession {
   title: string;
   media_type: string;
   year?: string;
+  rating_key?: string | number;
+  grandparent_rating_key?: string | number;
+  guids?: string[];
   parent_title?: string;
   grandparent_title?: string;
   user: string;
@@ -184,6 +193,16 @@ interface TautulliSession {
 
 /** Tautulli encodes booleans as "1"/"0" (sometimes numeric). */
 const ttBool = (v: string | number | undefined): boolean => v === "1" || v === 1;
+
+/** Extract a TMDB id from a Plex/Tautulli guids array, e.g. ["tmdb://1234", …]. */
+export function tmdbFromGuids(guids?: string[]): number | undefined {
+  if (!Array.isArray(guids)) return undefined;
+  for (const g of guids) {
+    const m = /tmdb:\/\/(\d+)/.exec(String(g));
+    if (m) return Number(m[1]);
+  }
+  return undefined;
+}
 /** Strip channel-layout qualifiers, e.g. "5.1(side)" → "5.1". */
 const cleanLayout = (v: string | undefined): string | undefined => v?.replace(/\s*\([^)]*\)\s*/g, "").trim() || undefined;
 
@@ -201,6 +220,11 @@ function mapTautulliSession(s: TautulliSession): NowPlaying {
     kind,
     year: s.year ? Number(s.year) : undefined,
     ep: kind === "series" ? s.title : undefined,
+    // Movie guids carry the movie's TMDB id; an episode's are the episode's, so for
+    // series we resolve the show TMDB lazily from the grandparent rating key.
+    tmdbId: kind === "series" ? undefined : tmdbFromGuids(s.guids),
+    ratingKey: s.rating_key != null ? String(s.rating_key) : undefined,
+    grandparentRatingKey: s.grandparent_rating_key != null ? String(s.grandparent_rating_key) : undefined,
     user: s.user,
     src: "plex",
     device: s.player,
@@ -507,6 +531,9 @@ interface TautulliRecent {
   thumb?: string;
   parent_thumb?: string;
   grandparent_thumb?: string;
+  rating_key?: string | number;
+  grandparent_rating_key?: string | number;
+  guids?: string[];
 }
 
 export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
@@ -528,9 +555,24 @@ export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
         year: it.year ? Number(it.year) : 0,
         cat: "stream" as const,
         art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
+        // Movie guids carry the movie's TMDB id; for a recently-added episode the
+        // grandparent rating key resolves the show TMDB lazily on click.
+        tmdbId: kind === "series" ? undefined : tmdbFromGuids(it.guids),
+        ratingKey: it.rating_key != null ? String(it.rating_key) : undefined,
+        grandparentRatingKey: it.grandparent_rating_key != null ? String(it.grandparent_rating_key) : undefined,
       };
     });
   });
+}
+
+/** Resolve a show/movie TMDB id from a Plex rating key (via Tautulli get_metadata guids). */
+export async function tautulliShowTmdb(ratingKey: number | string): Promise<number | undefined> {
+  const { baseUrl, apiKey } = await creds("tautulli");
+  const data = await fetchJson<{ response?: { data?: { guids?: string[] } } }>(
+    `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_metadata&rating_key=${ratingKey}`,
+    { service: "tautulli", timeoutMs: 8000 },
+  );
+  return tmdbFromGuids(data.response?.data?.guids);
 }
 
 // ── Tautulli — weekly leaderboard (cached) ─────────────────
@@ -874,7 +916,22 @@ interface OverseerrRequest {
   id: number;
   type: "movie" | "tv";
   status: number; // 1 pending, 2 approved, 3 declined, 4 failed
-  media?: { id?: number; status?: number; tmdbId?: number; mediaType?: string };
+  // Overseerr enriches `media` with watch/service deep-links for synced items —
+  // free to read from the payload we already fetch (no extra upstream calls).
+  // NB: the Plex web link is `mediaUrl` (app.plex.tv/...); `plexUrl` is not present.
+  media?: {
+    id?: number;
+    status?: number;
+    tmdbId?: number;
+    mediaType?: string;
+    mediaUrl?: string;
+    plexUrl?: string;
+    jellyfinMediaId?: string;
+    ratingKey?: string;
+    serviceUrl?: string;
+    /** the *arr's internal id (Radarr movie id / Sonarr series id). */
+    externalServiceId?: number;
+  };
   requestedBy?: { id: number; displayName?: string; plexUsername?: string; email?: string };
   createdAt?: string;
   updatedAt?: string;
@@ -897,6 +954,7 @@ interface OverseerrMediaDetails {
   releaseDate?: string;  // movies
   firstAirDate?: string; // tv shows
   overview?: string;
+  mediaInfo?: { status?: number; mediaUrl?: string; plexUrl?: string; jellyfinMediaId?: string; ratingKey?: string; serviceUrl?: string; externalServiceId?: number };
 }
 
 // Cache enriched media details by "type:tmdbId".
@@ -908,6 +966,13 @@ interface EnrichedDetails {
   year?: number;
   overview?: string;
   cachedAt: number;
+  // — Overseerr media status + deep-link ids (for the Plex watchlist, which arrives
+  //   without mediaInfo). Mutable-ish, but acceptably fresh for the 5-min watchlist. —
+  state?: RequestStatus | null;
+  plexUrl?: string;
+  jellyfinItemId?: string;
+  serviceUrl?: string;
+  arrId?: number;
 }
 const enrichCache = new Map<string, EnrichedDetails>();
 const ENRICH_TTL = 60 * 60 * 1000;
@@ -942,12 +1007,18 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
         { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 15000 },
       );
       const dateStr = details.releaseDate || details.firstAirDate || "";
+      const mi = details.mediaInfo;
       const result: EnrichedDetails = {
         title: details.title || details.name || "",
         posterPath: details.posterPath ?? undefined,
         year: dateStr ? Number(dateStr.slice(0, 4)) : undefined,
         overview: details.overview || undefined,
         cachedAt: Date.now(),
+        state: mediaStatusToState(mi?.status),
+        plexUrl: mi?.mediaUrl ?? mi?.plexUrl,
+        jellyfinItemId: mi?.jellyfinMediaId,
+        serviceUrl: mi?.serviceUrl,
+        arrId: mi?.externalServiceId,
       };
       enrichCache.set(cacheKey, result);
       return result;
@@ -1081,17 +1152,23 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
 }
 
 const MOVIE_FILE_INDEX_TTL = 30 * 60 * 1000;
-interface MovieIndexes { fileIndex: Map<number, FileInfo>; profileIndex: Map<number, number> }
+/** Radarr download/monitor state for a movie (by tmdbId). */
+interface MovieMeta { monitored?: boolean; hasFile?: boolean; genres?: string[]; studio?: string }
+interface MovieIndexes { fileIndex: Map<number, FileInfo>; profileIndex: Map<number, number>; metaIndex: Map<number, MovieMeta> }
 let movieIndexCache: { at: number } & MovieIndexes | null = null;
 
 async function arrMovieIndexes(): Promise<MovieIndexes> {
   if (movieIndexCache && Date.now() - movieIndexCache.at < MOVIE_FILE_INDEX_TTL) {
-    return { fileIndex: movieIndexCache.fileIndex, profileIndex: movieIndexCache.profileIndex };
+    return { fileIndex: movieIndexCache.fileIndex, profileIndex: movieIndexCache.profileIndex, metaIndex: movieIndexCache.metaIndex };
   }
   const { baseUrl, apiKey } = await creds("radarr");
   type RMovie = {
     tmdbId: number;
     qualityProfileId?: number;
+    monitored?: boolean;
+    hasFile?: boolean;
+    genres?: string[];
+    studio?: string;
     movieFile?: {
       size?: number;
       quality?: { quality?: { resolution?: number; source?: string } };
@@ -1106,9 +1183,11 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
   const SOURCE: Record<string, string> = { bluray: "Blu-ray", webrip: "WEBRip", webdl: "WEB-DL", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
   const fileIndex = new Map<number, FileInfo>();
   const profileIndex = new Map<number, number>();
+  const metaIndex = new Map<number, MovieMeta>();
   for (const m of movies) {
     if (!m.tmdbId) continue;
     if (m.qualityProfileId != null) profileIndex.set(m.tmdbId, m.qualityProfileId);
+    metaIndex.set(m.tmdbId, { monitored: m.monitored, hasFile: m.hasFile, genres: m.genres?.length ? m.genres : undefined, studio: m.studio || undefined });
     if (!m.movieFile) continue;
     const q = m.movieFile.quality?.quality;
     const res = q?.resolution ? `${q.resolution}p` : undefined;
@@ -1117,8 +1196,72 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
     const parts = [res, src, codec ? `· ${codec}` : undefined].filter(Boolean);
     fileIndex.set(m.tmdbId, { label: parts.join(" ") || "Unknown", sizeBytes: m.movieFile.size });
   }
-  movieIndexCache = { at: Date.now(), fileIndex, profileIndex };
-  return { fileIndex, profileIndex };
+  movieIndexCache = { at: Date.now(), fileIndex, profileIndex, metaIndex };
+  return { fileIndex, profileIndex, metaIndex };
+}
+
+/** Radarr monitor/download state + metadata for a single movie by tmdbId (uses the cached index). */
+export async function radarrMovieMeta(tmdbId: number): Promise<{ monitored?: boolean; hasFile?: boolean; fileInfo?: FileInfo; genres?: string[]; studio?: string }> {
+  const { fileIndex, metaIndex } = await arrMovieIndexes();
+  return { ...(metaIndex.get(tmdbId) ?? {}), fileInfo: fileIndex.get(tmdbId) };
+}
+
+/** Sonarr series monitor/download state + metadata by series id. */
+export async function sonarrSeriesMeta(seriesId: number): Promise<{ monitored?: boolean; hasFile?: boolean; genres?: string[]; studio?: string }> {
+  return cached(`sonarr:seriesmeta:${seriesId}`, 60_000, async () => {
+    const { baseUrl, apiKey } = await creds("sonarr");
+    type S = { monitored?: boolean; statistics?: { episodeFileCount?: number }; genres?: string[]; network?: string };
+    const s = await fetchJson<S>(`${baseUrl}/api/v3/series/${seriesId}`, {
+      service: "sonarr",
+      headers: { "X-Api-Key": apiKey },
+      timeoutMs: 8000,
+    });
+    return { monitored: s.monitored, hasFile: (s.statistics?.episodeFileCount ?? 0) > 0, genres: s.genres?.length ? s.genres : undefined, studio: s.network || undefined };
+  });
+}
+
+// Per-season downloaded quality for a Sonarr series (by Sonarr series id), for the
+// "available qualities" section of the detail modal. Cached briefly per series.
+export async function sonarrSeasonQuality(seriesId: number): Promise<SeasonQuality[]> {
+  return cached(`sonarr:seasonq:${seriesId}`, 60_000, async () => {
+    const { baseUrl, apiKey } = await creds("sonarr");
+    type Ep = {
+      seasonNumber?: number;
+      hasFile?: boolean;
+      episodeFile?: { size?: number; quality?: { quality?: { resolution?: number; source?: string } } };
+    };
+    const eps = await fetchJson<Ep[]>(`${baseUrl}/api/v3/episode?seriesId=${seriesId}&includeEpisodeFile=true`, {
+      service: "sonarr",
+      headers: { "X-Api-Key": apiKey },
+      timeoutMs: 10000,
+    });
+    // Sonarr reports the web source as "web" (Radarr uses "webdl"/"webrip").
+    const SOURCE: Record<string, string> = { bluray: "Blu-ray", web: "WEB-DL", webdl: "WEB-DL", webrip: "WEBRip", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
+    const bySeason = new Map<number, { count: number; size: number; labels: Map<string, number> }>();
+    for (const e of eps) {
+      if (e.seasonNumber == null) continue;
+      let s = bySeason.get(e.seasonNumber);
+      if (!s) { s = { count: 0, size: 0, labels: new Map() }; bySeason.set(e.seasonNumber, s); }
+      if (e.hasFile && e.episodeFile) {
+        s.count++;
+        s.size += e.episodeFile.size ?? 0;
+        const q = e.episodeFile.quality?.quality;
+        const res = q?.resolution ? `${q.resolution}p` : undefined;
+        const src = q?.source ? (SOURCE[q.source] ?? q.source) : undefined;
+        const label = [res, src].filter(Boolean).join(" ");
+        if (label) s.labels.set(label, (s.labels.get(label) ?? 0) + 1);
+      }
+    }
+    return [...bySeason.entries()]
+      .filter(([season, s]) => season > 0 && s.count > 0) // skip specials + seasons with no downloads
+      .sort((a, b) => a[0] - b[0])
+      .map(([season, s]) => ({
+        season,
+        label: [...s.labels.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "",
+        episodeCount: s.count,
+        sizeBytes: s.size || undefined,
+      }));
+  });
 }
 
 /** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
@@ -1200,6 +1343,10 @@ async function fetchOverseerrRequests(): Promise<MediaRequest[]> {
       })(),
       mediaOverseerrId: r.media?.id,
       tmdbId: r.media?.tmdbId,
+      plexUrl: r.media?.mediaUrl ?? r.media?.plexUrl,
+      jellyfinItemId: r.media?.jellyfinMediaId,
+      serviceUrl: r.media?.serviceUrl,
+      arrId: r.media?.externalServiceId,
       modified: r.updatedAt ?? r.createdAt,
       fileInfo: r.type === "movie" && r.media?.tmdbId ? fileIndex.get(r.media.tmdbId) : undefined,
     };
@@ -1217,7 +1364,7 @@ interface OverseerrSearchResult {
   voteAverage?: number;
   overview?: string;
   posterPath?: string;
-  mediaInfo?: { status?: number };
+  mediaInfo?: { status?: number; mediaUrl?: string; plexUrl?: string; jellyfinMediaId?: string; ratingKey?: string; serviceUrl?: string; externalServiceId?: number };
 }
 
 // Overseerr MediaStatus → our request state.
@@ -1239,7 +1386,28 @@ function mapDiscoverResult(r: OverseerrSearchResult): DiscoverItem {
     state: mediaStatusToState(r.mediaInfo?.status),
     overview: r.overview || "",
     art: r.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(r.posterPath)}` : undefined,
+    plexUrl: r.mediaInfo?.mediaUrl ?? r.mediaInfo?.plexUrl,
+    jellyfinItemId: r.mediaInfo?.jellyfinMediaId,
+    serviceUrl: r.mediaInfo?.serviceUrl,
+    arrId: r.mediaInfo?.externalServiceId,
   };
+}
+
+/**
+ * Resolve a single DiscoverItem from Overseerr by TMDB id (used when opening the
+ * detail modal from a library widget that only knows the TMDB id). Carries the same
+ * mediaInfo enrichment (state, watch links, arrId) as search results.
+ */
+export async function overseerrMediaByTmdb(tmdbId: number, kind: MediaKind): Promise<DiscoverItem | null> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const path = kind === "series" ? "tv" : "movie";
+  const r = await fetchJson<OverseerrSearchResult & { numberOfSeasons?: number }>(
+    `${baseUrl}/api/v1/${path}/${tmdbId}`,
+    { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
+  );
+  const item = mapDiscoverResult({ ...r, id: tmdbId, mediaType: kind === "series" ? "tv" : "movie" });
+  if (kind === "series" && r.numberOfSeasons) item.seasons = r.numberOfSeasons;
+  return item;
 }
 
 export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
@@ -1365,10 +1533,11 @@ export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
     const raw = (data.results ?? [])
       .filter((r) => r.mediaType === "movie" || r.mediaType === "tv")
       .slice(0, 50);
-    // Watchlist items come from Plex and lack TMDB fields — enrich any that are missing art or date.
+    // Watchlist items come from Plex and arrive WITHOUT mediaInfo, so mapDiscoverResult
+    // can't see the request/library status — always enrich by TMDB id to resolve the
+    // real Overseerr state + deep-link ids (and any missing art/year).
     return Promise.all(raw.map(async (r) => {
       const base = mapDiscoverResult({ ...r, id: r.tmdbId ?? r.id });
-      if (base.art && base.year) return base;
       const tmdbId = r.tmdbId ?? r.id;
       if (!tmdbId) return base;
       const type = r.mediaType === "tv" ? "tv" : "movie";
@@ -1377,6 +1546,12 @@ export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
         ...base,
         year: base.year || enriched.year || 0,
         art: base.art ?? (enriched.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(enriched.posterPath)}` : undefined),
+        // status + deep-link ids resolved from the per-title detail (watchlist lacks them)
+        state: base.state ?? enriched.state ?? null,
+        plexUrl: base.plexUrl ?? enriched.plexUrl,
+        jellyfinItemId: base.jellyfinItemId ?? enriched.jellyfinItemId,
+        serviceUrl: base.serviceUrl ?? enriched.serviceUrl,
+        arrId: base.arrId ?? enriched.arrId,
       };
     }));
   });
@@ -1644,11 +1819,29 @@ export async function arrHealth(serviceId: "sonarr" | "radarr"): Promise<HealthI
 }
 
 // ── *arr — upcoming calendar (cached) ──────────────────────
+// Ratings come in two shapes: Radarr keys them by source ({ imdb: { value }, tmdb: { value } }),
+// Sonarr series uses a flat { value }. Normalize to one number (prefer imdb → tmdb → flat value).
+type ArrRating = { value?: number };
+type ArrRatings = { value?: number; imdb?: ArrRating; tmdb?: ArrRating };
+
+interface ArrSeries {
+  title?: string;
+  titleSlug?: string;
+  images?: { coverType: string; remoteUrl?: string; url?: string }[];
+  overview?: string;
+  runtime?: number;
+  year?: number;
+  genres?: string[];
+  network?: string;
+  ratings?: ArrRatings;
+}
+
 interface ArrCalendarRecord {
   id: number;
   title?: string;        // Radarr movie title
+  titleSlug?: string;    // Radarr movie slug (web-UI deep link)
   seriesTitle?: string;  // sometimes present on Sonarr records
-  series?: { title?: string; images?: { coverType: string; remoteUrl?: string; url?: string }[] };
+  series?: ArrSeries;
   seasonNumber?: number;
   episodeNumber?: number;
   airDateUtc?: string;   // Sonarr
@@ -1656,6 +1849,15 @@ interface ArrCalendarRecord {
   digitalRelease?: string;
   physicalRelease?: string;
   images?: { coverType: string; remoteUrl?: string; url?: string }[];
+  // detail fields (Radarr movie record / Sonarr episode record)
+  overview?: string;
+  runtime?: number;
+  year?: number;
+  genres?: string[];
+  studio?: string;
+  monitored?: boolean;
+  hasFile?: boolean;
+  ratings?: ArrRatings;
 }
 
 function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefined {
@@ -1667,6 +1869,11 @@ function arrPoster(serviceId: string, rec: ArrCalendarRecord): string | undefine
   // flows through the artwork proxy as a user-controlled URL (SSRF mitigation).
   if (img.remoteUrl) return img.remoteUrl;
   return img.url ? `/api/artwork?svc=${serviceId}&ref=${encodeURIComponent(img.url)}` : undefined;
+}
+
+function arrRating(r?: ArrRatings): number | undefined {
+  const v = r?.imdb?.value ?? r?.tmdb?.value ?? r?.value;
+  return typeof v === "number" && v > 0 ? Math.round(v * 10) / 10 : undefined;
 }
 
 export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<UpcomingItem[]> {
@@ -1687,6 +1894,11 @@ export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<Upcom
       const ep = isSeries && rec.seasonNumber != null && rec.episodeNumber != null
         ? `S${String(rec.seasonNumber).padStart(2, "0")}E${String(rec.episodeNumber).padStart(2, "0")}${rec.title ? ` · ${rec.title}` : ""}`
         : undefined;
+      // For series, prefer episode-level detail then fall back to the series record.
+      const genres = (isSeries ? rec.series?.genres : rec.genres) ?? undefined;
+      // Deep link into the service's web UI: Radarr /movie/{slug}, Sonarr /series/{slug}.
+      const slug = isSeries ? rec.series?.titleSlug : rec.titleSlug;
+      const deepPath = slug ? (isSeries ? `/series/${slug}` : `/movie/${slug}`) : undefined;
       out.push({
         id: `${serviceId}-${rec.id}`,
         title: isSeries ? seriesTitle || rec.title || "Untitled" : rec.title || "Untitled",
@@ -1695,6 +1907,18 @@ export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<Upcom
         ep,
         svc: serviceId,
         art: arrPoster(serviceId, rec),
+        year: isSeries ? rec.series?.year : rec.year,
+        runtime: isSeries ? rec.series?.runtime : rec.runtime,
+        rating: arrRating(isSeries ? rec.series?.ratings : rec.ratings),
+        genres: genres && genres.length ? genres : undefined,
+        overview: rec.overview || rec.series?.overview || undefined,
+        studio: isSeries ? rec.series?.network : rec.studio,
+        monitored: rec.monitored,
+        hasFile: rec.hasFile,
+        inCinemas: isSeries ? undefined : rec.inCinemas,
+        digitalRelease: isSeries ? undefined : rec.digitalRelease,
+        physicalRelease: isSeries ? undefined : rec.physicalRelease,
+        deepPath,
       });
     }
     return out;

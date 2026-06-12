@@ -13,7 +13,7 @@
 // Desktop only — mobile uses a separate render path (MobilePortal).
 // ============================================================
 import React, { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useData } from "@/components/portal/DataProvider";
 import { ServiceView } from "@/components/views/Launcher";
 import { serviceIdFromPath, nextMountedIds } from "@/lib/embed/keepAlive";
@@ -22,7 +22,10 @@ export function EmbedHost() {
   // `services` is active-only (DataProvider chokepoint) and now carries `keepAlive`.
   const { services } = useData();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const pathId = serviceIdFromPath(pathname);
+  // Deep-link path for the service currently in the URL (e.g. /s/radarr?at=/movie/x).
+  const deepPath = searchParams.get("at") ?? undefined;
 
   // Services whose embeds should persist: embeddable + admin-flagged keep-alive.
   const keepAlive = services.filter((s) => s.embeddable && s.keepAlive);
@@ -59,7 +62,7 @@ export function EmbedHost() {
               flexDirection: "column",
             }}
           >
-            <ServiceView s={s} />
+            <ServiceView s={s} deepPath={id === activeId ? deepPath : undefined} />
           </div>
         );
       })}

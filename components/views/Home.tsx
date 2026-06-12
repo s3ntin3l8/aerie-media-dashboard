@@ -5,7 +5,7 @@
 // ============================================================
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Service, Role, DashboardStore, DiscoverItem } from "@/lib/types";
+import type { Service, Role, DashboardStore, DiscoverItem, UpcomingItem, MediaKind } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
@@ -16,10 +16,11 @@ import { GridDashboard } from "@/components/portal/GridDashboard";
 import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
 import { CardSettingsModal } from "@/components/modals/CardSettingsModal";
 import { RequestModal } from "@/components/modals/RequestModal";
+import { UpcomingDetailModal } from "@/components/modals/UpcomingDetailModal";
 import { compactAll, type Tile } from "@/components/portal/gridLayout";
 import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, resolveSettings, type WidgetCtx } from "@/components/portal/widgetCatalog";
 import { setDashboardsAction } from "@/app/(portal)/actions";
-import { submitRequest } from "@/app/(portal)/requests/actions";
+import { submitRequest, resolveDiscoverItem } from "@/app/(portal)/requests/actions";
 
 // 40px aggregate health ticker
 function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
@@ -158,6 +159,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   const [addOpen, setAddOpen] = useState(false);
   const [configUid, setConfigUid] = useState<string | null>(null);
   const [reqPick, setReqPick] = useState<DiscoverItem | null>(null);
+  const [upcomingPick, setUpcomingPick] = useState<UpcomingItem | null>(null);
 
   // Both role layouts live in one store; setLayout persists the whole store so a
   // member's arrangement survives while an admin edits theirs (and vice-versa).
@@ -181,7 +183,12 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   const updateSettings = (uid: string, settings: Record<string, string | number | boolean>) =>
     setLayout((l) => l.map((t) => (t.uid === uid ? { ...t, settings } : t)));
 
-  const ctx: WidgetCtx = { role, onNavigate: (path) => router.push(path), onOpenService: openService, onAct, onRequest: setReqPick };
+  // Library widgets (Now Playing / Recently Added) only know a TMDB id or a Plex
+  // rating key — resolve to a full DiscoverItem, then open the detail modal.
+  const onSelectMedia = (hint: { kind: MediaKind; tmdbId?: number; grandparentRatingKey?: string }) => {
+    void resolveDiscoverItem(hint).then((d) => { if (d) setReqPick(d); });
+  };
+  const ctx: WidgetCtx = { role, onNavigate: (path) => router.push(path), onOpenService: openService, onAct, onRequest: setReqPick, onSelectUpcoming: setUpcomingPick, onSelectMedia };
   const renderWidget = (item: Tile) => {
     const m = WIDGET_CATALOG[item.type];
     if (!m) return <Empty icon="error" line="Unknown widget" sub={item.type} />;
@@ -302,6 +309,16 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
             return r;
           }}
           onAct={onAct}
+        />
+      )}
+      {upcomingPick && (
+        <UpcomingDetailModal
+          item={upcomingPick}
+          onClose={() => setUpcomingPick(null)}
+          onOpenService={(svc, at) => {
+            setUpcomingPick(null);
+            router.push(at ? `/s/${svc}?at=${encodeURIComponent(at)}` : `/s/${svc}`);
+          }}
         />
       )}
     </section>

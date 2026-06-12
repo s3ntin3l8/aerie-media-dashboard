@@ -10,7 +10,7 @@
 // "Top Streamers" reuses the existing Tautulli-backed LeaderboardPanel.
 // ============================================================
 import React from "react";
-import type { Role, Service, DiscoverItem } from "@/lib/types";
+import type { Role, Service, DiscoverItem, UpcomingItem, MediaKind } from "@/lib/types";
 import { compactAll, findSlot, type Tile, type WidgetMeta } from "@/components/portal/gridLayout";
 import {
   CentralServices,
@@ -35,6 +35,9 @@ export interface WidgetCtx {
   onOpenService: (s: Service) => void;
   onAct?: (id: string, action: "approve" | "decline") => void;
   onRequest?: (item: DiscoverItem) => void;
+  onSelectUpcoming?: (item: UpcomingItem) => void;
+  /** Open the detail modal for a library item (Now Playing / Recently Added). */
+  onSelectMedia?: (hint: { kind: MediaKind; tmdbId?: number; grandparentRatingKey?: string }) => void;
 }
 
 export type WidgetSettingSpec =
@@ -99,7 +102,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     type: "nowPlaying", name: "Now Playing", icon: "play_circle", accent: "var(--primary)", group: "Streaming",
     desc: "Live sessions — progress, device, codec and transcode state.",
     defaultW: 8, defaultH: 11, minW: 4, minH: 5, maxW: 12, maxH: 18,
-    render: (c, _s) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} />,
+    render: (c, _s) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} onSelect={c.onSelectMedia} />,
   },
   serviceTiles: {
     type: "serviceTiles", name: "Services", icon: "apps", accent: "var(--on-surface-variant)", group: "Services",
@@ -147,7 +150,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "track", label: "Music" },
       ]},
     ],
-    render: (_c, s) => <RecentlyAdded fill limit={s.limit != null ? Number(s.limit) : undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} />,
+    render: (c, s) => <RecentlyAdded fill limit={s.limit != null ? Number(s.limit) : undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} onSelect={c.onSelectMedia} />,
   },
   upcoming: {
     type: "upcoming", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Streaming",
@@ -163,7 +166,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "30", label: "Next 30 days" },
       ]},
     ],
-    render: (_c, s) => <UpcomingPanel fill limit={s.limit != null ? Number(s.limit) : undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} />,
+    render: (c, s) => <UpcomingPanel fill limit={s.limit != null ? Number(s.limit) : undefined} window={s.window ? Number(s.window) : undefined} title={s.title as string | undefined} onSelect={c.onSelectUpcoming} />,
   },
   leaderboard: {
     type: "leaderboard", name: "Top Streamers", icon: "leaderboard", accent: "var(--originator-own)", group: "Monitoring",
