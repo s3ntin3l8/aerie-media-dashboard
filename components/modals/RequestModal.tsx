@@ -9,16 +9,17 @@
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, SeasonQuality, User } from "@/lib/types";
+import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, User } from "@/lib/types";
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
 import { MediaLinks } from "@/components/modals/MediaLinks";
+import { ArrDetailSection } from "@/components/modals/ArrDetailSection";
 import { mediaLinks, linkCtxFromServices } from "@/lib/media/links";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { QUALITY_PROFILES } from "@/lib/categories";
-import { getQualityProfiles, getSeasonQuality, type SubmitResult } from "@/app/(portal)/requests/actions";
+import { getQualityProfiles, type SubmitResult } from "@/app/(portal)/requests/actions";
 import { REQ_TONE as RQ_TONE, REQ_LABEL as RQ_LABEL } from "@/lib/display";
 
 const REQ_C = "var(--originator-court)";
@@ -150,7 +151,9 @@ function InfoStep({ pick, serviceLinks }: { pick: DiscoverItem; serviceLinks?: R
         rating={pick.rating}
         badges={pick.state ? <StateBadge state={pick.state} /> : undefined}
         overview={pick.overview || undefined}
-      />
+      >
+        <ArrDetailSection kind={pick.kind} tmdbId={Number(pick.id) || undefined} arrId={pick.arrId} />
+      </MediaDetailBody>
     </div>
   );
 }
@@ -165,6 +168,7 @@ function ConfirmStep({
   onProfilesLoad,
   preloadedProfiles,
   serviceLinks,
+  fromSearch,
 }: {
   pick: DiscoverItem;
   quality: string;
@@ -175,6 +179,8 @@ function ConfirmStep({
   onProfilesLoad: (ps: QualityProfile[]) => void;
   preloadedProfiles: QualityProfile[];
   serviceLinks?: React.ReactNode;
+  /** true when this confirm step was reached via the in-modal search (so "Back to results" makes sense). */
+  fromSearch?: boolean;
 }) {
   const selCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
   // Prepend the "Default" (no-override) option so requests don't carry an
@@ -192,9 +198,11 @@ function ConfirmStep({
   return (
     <>
       <div style={{ padding: "18px 20px 6px" }}>
-        <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ paddingLeft: 7, marginBottom: 12 }}>
-          <Icon name="arrow_back" size={15} /> Back to results
-        </button>
+        {fromSearch && (
+          <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ paddingLeft: 7, marginBottom: 12 }}>
+            <Icon name="arrow_back" size={15} /> Back to results
+          </button>
+        )}
         <MediaDetailBody
           title={pick.title}
           kind={pick.kind}
@@ -298,64 +306,6 @@ function ResultPanel({ icon, color, title, body, onClose, extra }: { icon: strin
   );
 }
 
-function fmtGB(bytes?: number): string | undefined {
-  return bytes == null ? undefined : `${(bytes / 1e9).toFixed(1)} GB`;
-}
-
-function QualityCard({ title, label, sub }: { title: string; label: string; sub?: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "8px 11px", borderRadius: 9, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>{title}</span>
-      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--originator-own)" }}>{label || "—"}</span>
-      {sub && <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>{sub}</span>}
-    </div>
-  );
-}
-
-// Section 4 (available media): movie file quality (from the snapshot) or a per-season
-// grid for series (lazily fetched from Sonarr via getSeasonQuality on open).
-function AvailableQuality({ req }: { req: MediaRequest }) {
-  const [seasons, setSeasons] = useState<SeasonQuality[] | null>(req.kind === "series" ? null : []);
-  useEffect(() => {
-    if (req.kind !== "series") return;
-    let live = true;
-    if (req.arrId) getSeasonQuality(req.arrId).then((s) => { if (live) setSeasons(s); }).catch(() => { if (live) setSeasons([]); });
-    else setSeasons([]);
-    return () => { live = false; };
-  }, [req.kind, req.arrId]);
-
-  if (req.kind === "movie") {
-    if (!req.fileInfo) return null;
-    return (
-      <section>
-        <SectionLabel>Available quality</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
-          <QualityCard title="File" label={req.fileInfo.label} sub={fmtGB(req.fileInfo.sizeBytes)} />
-        </div>
-      </section>
-    );
-  }
-  if (seasons == null) {
-    return (
-      <section>
-        <SectionLabel>Available quality</SectionLabel>
-        <span style={{ fontSize: 12, color: "var(--on-surface-variant)" }}>Loading…</span>
-      </section>
-    );
-  }
-  if (seasons.length === 0) return null;
-  return (
-    <section>
-      <SectionLabel hint={`${seasons.length} season${seasons.length === 1 ? "" : "s"}`}>Available quality</SectionLabel>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
-        {seasons.map((s) => (
-          <QualityCard key={s.season} title={`Season ${s.season}`} label={s.label} sub={`${s.episodeCount} ep${s.episodeCount === 1 ? "" : "s"}${s.sizeBytes ? ` · ${fmtGB(s.sizeBytes)}` : ""}`} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function ReviewBody({ req, note, setNote, requester, serviceLinks, readOnly }: { req: MediaRequest; note: string; setNote: (v: string) => void; requester?: User; serviceLinks?: React.ReactNode; readOnly?: boolean }) {
   const u = requester;
   const fact = (label: string, value: React.ReactNode, mono?: boolean) => (
@@ -419,7 +369,7 @@ function ReviewBody({ req, note, setNote, requester, serviceLinks, readOnly }: {
             : "Movie",
         )}
       </div>
-      {req.status === "available" && <AvailableQuality req={req} />}
+      <ArrDetailSection kind={req.kind} tmdbId={req.tmdbId} arrId={req.arrId} fileInfoHint={req.fileInfo} />
       {!readOnly && (
         <Field label="Note to requester" hint="posted as an Overseerr comment">
           <textarea className="input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a comment visible in Overseerr…" style={{ ...fieldInput, resize: "vertical", fontFamily: "var(--font-body)", lineHeight: 1.5 }} />
@@ -458,6 +408,9 @@ export function RequestModal({
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const review = mode === "review";
   const detail = mode === "detail";
+  // "Back to results" only makes sense when the confirm step was reached via the
+  // in-modal search — a widget open passes initialPick and has no results to go back to.
+  const fromSearch = mode === "request" && !initialPick;
 
   // State-aware "open in" links (#27) — embed targets navigate the in-app embed.
   const linkCtx = linkCtxFromServices(services);
@@ -586,15 +539,22 @@ export function RequestModal({
           {qp.label}
           {pick.kind === "series" ? ` · ${seasonCount} season${seasonCount === 1 ? "" : "s"}` : ""}
         </span>
-        <button onClick={() => setPick(null)} className="btn btn-secondary btn-sm">
-          Back
-        </button>
+        {fromSearch ? (
+          <button onClick={() => setPick(null)} className="btn btn-secondary btn-sm">
+            Back
+          </button>
+        ) : (
+          <button onClick={onClose} className="btn btn-secondary btn-sm">
+            Close
+          </button>
+        )}
         <button onClick={submitRequest} disabled={noSeasons || submitting} className="btn btn-primary btn-sm">
           <Icon name="send" size={15} /> {submitting ? "Submitting…" : "Submit request"}
         </button>
       </>
     );
-  } else if (detail && request) {
+  } else {
+    // Baseline: every variant gets at least a Close button (e.g. the search step).
     footer = (
       <button onClick={onClose} className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }}>
         Close
@@ -612,6 +572,9 @@ export function RequestModal({
     );
   }
 
+  // The result/decision panels are full-takeover with their own actions — no shell footer.
+  if ((review && decision) || (mode === "request" && submitted)) footer = null;
+
   const reviewSubMap: Partial<Record<string, string>> = {
     approved: "Already approved — processing in the download queue.",
     processing: "Already approved — processing in the download queue.",
@@ -619,12 +582,22 @@ export function RequestModal({
     declined: "This request was declined.",
     failed: "This request failed to process.",
   };
-  const title = review ? "Review request" : detail ? "Request details" : "Request media";
+  // Request-mode header follows the picked item's availability (item is null while searching).
+  const REQUEST_HEADER: Record<string, { title: string; sub: string }> = {
+    available: { title: "Available", sub: "Ready to watch." },
+    approved: { title: "Requested", sub: "In the queue — available soon." },
+    processing: { title: "Requested", sub: "In the queue — available soon." },
+    pending: { title: "Requested", sub: "Pending approval." },
+    declined: { title: "Request declined", sub: "This request was declined." },
+    failed: { title: "Request failed", sub: "This request failed to process." },
+  };
+  const reqHeader = (!review && !detail && pick?.state && REQUEST_HEADER[pick.state]) || null;
+  const title = review ? "Review request" : detail ? "Request details" : reqHeader?.title ?? "Request media";
   const sub = review
     ? (request && reviewSubMap[request.status]) ?? "Approve or decline — the member is notified."
     : detail
     ? (request && reviewSubMap[request.status]) ?? "Open it in a service, or watch when it's ready."
-    : "Search the catalog and send it to the request queue.";
+    : reqHeader?.sub ?? "Search the catalog and send it to the request queue.";
 
   return (
     <ModalShell open={open} onClose={onClose} accent={REQ_C} icon="playlist_add" title={title} sub={sub} footer={footer} width={review || detail ? 560 : 600}>
@@ -700,7 +673,7 @@ export function RequestModal({
         ) : pick && pick.state ? (
           <InfoStep pick={pick} serviceLinks={serviceLinksNode} />
         ) : pick ? (
-          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} serviceLinks={serviceLinksNode} />
+          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} serviceLinks={serviceLinksNode} fromSearch={fromSearch} />
         ) : (
           <DiscoverStep me={me} q={q} setQ={setQ} onPick={choosePick} />
         )

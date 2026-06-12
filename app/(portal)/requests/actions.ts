@@ -9,9 +9,9 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { getSessionUser } from "@/lib/session";
 import { getServiceSecret } from "@/lib/integrations/registry";
-import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, sonarrSeasonQuality, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
+import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, sonarrSeasonQuality, sonarrSeriesMeta, radarrMovieMeta, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
 import { QUALITY_PROFILES } from "@/lib/categories";
-import type { AppUser, DiscoverItem, QualityProfile, RequestStatus, SeasonQuality } from "@/lib/types";
+import type { AppUser, DiscoverItem, MediaArrDetail, MediaKind, QualityProfile, RequestStatus, SeasonQuality } from "@/lib/types";
 
 async function overseerrOn(): Promise<boolean> {
   return (await getServiceSecret("overseerr")) != null;
@@ -190,6 +190,33 @@ export async function editRequest(id: string, seasons: number[], quality?: strin
 export async function getSeasonQuality(seriesArrId: number): Promise<SeasonQuality[]> {
   if (!seriesArrId || !(await getServiceSecret("sonarr"))) return [];
   return sonarrSeasonQuality(seriesArrId).catch(() => []);
+}
+
+/**
+ * Live Sonarr/Radarr detail (monitored / downloaded / quality) for the detail modal,
+ * merged with Overseerr state client-side. Lazy-loaded on modal open.
+ *  - movie → Radarr by tmdbId (monitored/hasFile/fileInfo)
+ *  - series → Sonarr by arrId (monitored/hasFile + per-season quality); needs arrId
+ * Returns {} when the relevant *arr isn't configured or the id is missing.
+ */
+export async function getMediaDetail(input: { tmdbId?: number; kind: MediaKind; arrId?: number }): Promise<MediaArrDetail> {
+  try {
+    if (input.kind === "movie") {
+      if (!input.tmdbId || !(await getServiceSecret("radarr"))) return {};
+      return await radarrMovieMeta(input.tmdbId);
+    }
+    if (input.kind === "series") {
+      if (!input.arrId || !(await getServiceSecret("sonarr"))) return {};
+      const [meta, seasons] = await Promise.all([
+        sonarrSeriesMeta(input.arrId).catch(() => ({})),
+        sonarrSeasonQuality(input.arrId).catch(() => [] as SeasonQuality[]),
+      ]);
+      return { ...meta, seasons };
+    }
+    return {};
+  } catch {
+    return {};
+  }
 }
 
 /** Fetch the user's Plex watchlist for the request modal. */

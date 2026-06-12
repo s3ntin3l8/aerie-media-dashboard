@@ -251,6 +251,18 @@ export interface SeasonQuality {
   sizeBytes?: number;
 }
 
+/** Live Sonarr/Radarr detail for a media item, merged with Overseerr state in the modal. */
+export interface MediaArrDetail {
+  /** the *arr is tracking it for downloads */
+  monitored?: boolean;
+  /** at least one file is downloaded */
+  hasFile?: boolean;
+  /** movie file quality */
+  fileInfo?: FileInfo;
+  /** per-season downloaded quality (series) */
+  seasons?: SeasonQuality[];
+}
+
 export interface OverseerrQuota {
   /** null = unlimited (Overseerr stores 0) */
   limit: number | null;

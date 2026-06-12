@@ -1096,17 +1096,21 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
 }
 
 const MOVIE_FILE_INDEX_TTL = 30 * 60 * 1000;
-interface MovieIndexes { fileIndex: Map<number, FileInfo>; profileIndex: Map<number, number> }
+/** Radarr download/monitor state for a movie (by tmdbId). */
+interface MovieMeta { monitored?: boolean; hasFile?: boolean }
+interface MovieIndexes { fileIndex: Map<number, FileInfo>; profileIndex: Map<number, number>; metaIndex: Map<number, MovieMeta> }
 let movieIndexCache: { at: number } & MovieIndexes | null = null;
 
 async function arrMovieIndexes(): Promise<MovieIndexes> {
   if (movieIndexCache && Date.now() - movieIndexCache.at < MOVIE_FILE_INDEX_TTL) {
-    return { fileIndex: movieIndexCache.fileIndex, profileIndex: movieIndexCache.profileIndex };
+    return { fileIndex: movieIndexCache.fileIndex, profileIndex: movieIndexCache.profileIndex, metaIndex: movieIndexCache.metaIndex };
   }
   const { baseUrl, apiKey } = await creds("radarr");
   type RMovie = {
     tmdbId: number;
     qualityProfileId?: number;
+    monitored?: boolean;
+    hasFile?: boolean;
     movieFile?: {
       size?: number;
       quality?: { quality?: { resolution?: number; source?: string } };
@@ -1121,9 +1125,11 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
   const SOURCE: Record<string, string> = { bluray: "Blu-ray", webrip: "WEBRip", webdl: "WEB-DL", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
   const fileIndex = new Map<number, FileInfo>();
   const profileIndex = new Map<number, number>();
+  const metaIndex = new Map<number, MovieMeta>();
   for (const m of movies) {
     if (!m.tmdbId) continue;
     if (m.qualityProfileId != null) profileIndex.set(m.tmdbId, m.qualityProfileId);
+    metaIndex.set(m.tmdbId, { monitored: m.monitored, hasFile: m.hasFile });
     if (!m.movieFile) continue;
     const q = m.movieFile.quality?.quality;
     const res = q?.resolution ? `${q.resolution}p` : undefined;
@@ -1132,8 +1138,28 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
     const parts = [res, src, codec ? `· ${codec}` : undefined].filter(Boolean);
     fileIndex.set(m.tmdbId, { label: parts.join(" ") || "Unknown", sizeBytes: m.movieFile.size });
   }
-  movieIndexCache = { at: Date.now(), fileIndex, profileIndex };
-  return { fileIndex, profileIndex };
+  movieIndexCache = { at: Date.now(), fileIndex, profileIndex, metaIndex };
+  return { fileIndex, profileIndex, metaIndex };
+}
+
+/** Radarr monitor/download state for a single movie by tmdbId (uses the cached index). */
+export async function radarrMovieMeta(tmdbId: number): Promise<{ monitored?: boolean; hasFile?: boolean; fileInfo?: FileInfo }> {
+  const { fileIndex, metaIndex } = await arrMovieIndexes();
+  return { ...(metaIndex.get(tmdbId) ?? {}), fileInfo: fileIndex.get(tmdbId) };
+}
+
+/** Sonarr series monitor/download state by series id. */
+export async function sonarrSeriesMeta(seriesId: number): Promise<{ monitored?: boolean; hasFile?: boolean }> {
+  return cached(`sonarr:seriesmeta:${seriesId}`, 60_000, async () => {
+    const { baseUrl, apiKey } = await creds("sonarr");
+    type S = { monitored?: boolean; statistics?: { episodeFileCount?: number } };
+    const s = await fetchJson<S>(`${baseUrl}/api/v3/series/${seriesId}`, {
+      service: "sonarr",
+      headers: { "X-Api-Key": apiKey },
+      timeoutMs: 8000,
+    });
+    return { monitored: s.monitored, hasFile: (s.statistics?.episodeFileCount ?? 0) > 0 };
+  });
 }
 
 // Per-season downloaded quality for a Sonarr series (by Sonarr series id), for the

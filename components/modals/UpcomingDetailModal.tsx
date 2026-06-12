@@ -64,6 +64,11 @@ export function UpcomingDetailModal({
       title="Coming soon"
       sub={fmtFull(item.when)}
       width={620}
+      footer={
+        <button onClick={onClose} className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }}>
+          Close
+        </button>
+      }
     >
       <div style={{ padding: "18px 20px 22px" }}>
         <MediaDetailBody
