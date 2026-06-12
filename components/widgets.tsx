@@ -288,98 +288,71 @@ export function WizarrWidget({ fill }: { fill?: boolean } = {}) {
   );
 }
 
-// ── PROWLARR — indexer health + grab/query stats ───────────
-export function ProwlarrWidget({ fill }: { fill?: boolean } = {}) {
-  const { prowlarr } = useData();
+// ── INDEXERS — Prowlarr or NZBHydra2 (functional merge) ────
+// One "Indexers" widget; the data source is picked per-tile (Auto = Prowlarr,
+// then NZBHydra2). Each source keeps its own stat set.
+export function IndexersWidget({ fill, source, title }: { fill?: boolean; source?: string; title?: string } = {}) {
+  const { prowlarr, nzbhydra } = useData();
+  const resolved = source || (prowlarr ? "prowlarr" : nzbhydra ? "nzbhydra" : "");
+  const live = resolved === "prowlarr" ? !!prowlarr : resolved === "nzbhydra" ? !!nzbhydra : !!(prowlarr || nzbhydra);
+  const num = (n: number) => n.toLocaleString("en-US");
   return (
-    <PanelShell fill={fill} title="Indexers" icon="search" accent="var(--originator-third-party)" live={!!prowlarr}>
-      {!prowlarr ? (
-        <Empty icon="search" line="Prowlarr not connected" sub="Add Prowlarr and store its API key to see indexer stats." />
-      ) : (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Indexers"} icon="search" accent="var(--originator-third-party)" live={live}>
+      {resolved === "prowlarr" && prowlarr ? (
         <StatRow>
           <Metric label="Indexers" value={`${prowlarr.enabled}/${prowlarr.total}`} icon="dns" color="var(--primary)" />
-          <Metric label="Queries" value={prowlarr.queries.toLocaleString("en-US")} icon="travel_explore" color="var(--on-surface-variant)" />
-          <Metric label="Grabs" value={prowlarr.grabs.toLocaleString("en-US")} icon="download" color="var(--originator-own)" />
-          <Metric label="Failed grabs" value={prowlarr.failedGrabs.toLocaleString("en-US")} icon="error" color={prowlarr.failedGrabs > 0 ? "var(--error)" : "var(--on-surface-variant)"} />
+          <Metric label="Queries" value={num(prowlarr.queries)} icon="travel_explore" color="var(--on-surface-variant)" />
+          <Metric label="Grabs" value={num(prowlarr.grabs)} icon="download" color="var(--originator-own)" />
+          <Metric label="Failed grabs" value={num(prowlarr.failedGrabs)} icon="error" color={prowlarr.failedGrabs > 0 ? "var(--error)" : "var(--on-surface-variant)"} />
         </StatRow>
-      )}
-    </PanelShell>
-  );
-}
-
-// ── NZBHYDRA2 — usenet indexer health ──────────────────────
-export function Nzbhydra2Widget({ fill }: { fill?: boolean } = {}) {
-  const { nzbhydra } = useData();
-  return (
-    <PanelShell fill={fill} title="NZBHydra2" icon="manage_search" accent="var(--originator-third-party)" live={!!nzbhydra}>
-      {!nzbhydra ? (
-        <Empty icon="manage_search" line="NZBHydra2 not connected" sub="Add NZBHydra2 and store its API key to see indexer health." />
-      ) : (
+      ) : resolved === "nzbhydra" && nzbhydra ? (
         <StatRow>
           <Metric label="Indexers" value={`${nzbhydra.enabled}/${nzbhydra.total}`} icon="dns" color="var(--primary)" />
-          <Metric label="Disabled" value={nzbhydra.disabled.toLocaleString("en-US")} icon="block" color="var(--on-surface-variant)" />
-          <Metric label="Errored" value={nzbhydra.errored.toLocaleString("en-US")} icon="error" color={nzbhydra.errored > 0 ? "var(--error)" : "var(--on-surface-variant)"} />
+          <Metric label="Disabled" value={num(nzbhydra.disabled)} icon="block" color="var(--on-surface-variant)" />
+          <Metric label="Errored" value={num(nzbhydra.errored)} icon="error" color={nzbhydra.errored > 0 ? "var(--error)" : "var(--on-surface-variant)"} />
         </StatRow>
+      ) : (
+        <Empty icon="search" line="No indexer source connected" sub="Add Prowlarr or NZBHydra2 and store its API key to see indexer stats." />
       )}
     </PanelShell>
   );
 }
 
-// ── LAZYLIBRARIAN — book / audiobook pipeline stats ────────
-// Each metric is independently toggleable via widget settings (see widgetCatalog).
-export function LazyLibrarianWidget({
+// ── BOOKS — LazyLibrarian or Listenarr (functional merge) ──
+// One "Books" widget; the source is picked per-tile (Auto = LazyLibrarian, then
+// Listenarr). Toggles span both sources; each only applies to the matching one.
+export function BooksWidget({
   fill,
+  source,
+  title,
   showBooks = true,
   showAuthors = true,
   showWanted = true,
+  showMonitored = true,
   showSnatched = false,
-}: { fill?: boolean; showBooks?: boolean; showAuthors?: boolean; showWanted?: boolean; showSnatched?: boolean } = {}) {
-  const { lazylibrarian: ll } = useData();
+}: { fill?: boolean; source?: string; title?: string; showBooks?: boolean; showAuthors?: boolean; showWanted?: boolean; showMonitored?: boolean; showSnatched?: boolean } = {}) {
+  const { lazylibrarian: ll, listenarr: la } = useData();
+  const resolved = source || (ll ? "lazylibrarian" : la ? "listenarr" : "");
+  const live = resolved === "lazylibrarian" ? !!ll : resolved === "listenarr" ? !!la : !!(ll || la);
   const num = (n: number) => n.toLocaleString("en-US");
-  const anyOn = showBooks || showAuthors || showWanted || showSnatched;
   return (
-    <PanelShell fill={fill} title="LazyLibrarian" icon="menu_book" accent="var(--originator-third-party)" live={!!ll}>
-      {!ll ? (
-        <Empty icon="menu_book" line="LazyLibrarian not connected" sub="Add LazyLibrarian and store its API key to see book stats." />
-      ) : !anyOn ? (
-        <Empty icon="tune" line="No stats enabled" sub="Turn stats on in this widget's settings." />
-      ) : (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Books"} icon="menu_book" accent="var(--originator-third-party)" live={live}>
+      {resolved === "lazylibrarian" && ll ? (
         <StatRow>
           {showBooks && <Metric label="Books" value={num(ll.totalBooks)} icon="menu_book" color="var(--primary)" />}
           {showAuthors && <Metric label="Authors" value={num(ll.authors)} icon="person" color="var(--on-surface-variant)" />}
           {showWanted && <Metric label="Wanted" value={num(ll.wanted)} icon="bookmark" color={ll.wanted > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />}
           {showSnatched && <Metric label="Snatched" value={num(ll.snatched)} icon="downloading" color={ll.snatched > 0 ? "var(--primary)" : "var(--on-surface-variant)"} />}
         </StatRow>
-      )}
-    </PanelShell>
-  );
-}
-
-// ── LISTENARR — audiobook library stats ────────────────────
-// Each metric is independently toggleable via widget settings (see widgetCatalog).
-export function ListenarrWidget({
-  fill,
-  showBooks = true,
-  showAuthors = true,
-  showMonitored = true,
-  showWanted = true,
-}: { fill?: boolean; showBooks?: boolean; showAuthors?: boolean; showMonitored?: boolean; showWanted?: boolean } = {}) {
-  const { listenarr: la } = useData();
-  const num = (n: number) => n.toLocaleString("en-US");
-  const anyOn = showBooks || showAuthors || showMonitored || showWanted;
-  return (
-    <PanelShell fill={fill} title="Listenarr" icon="headphones" accent="var(--originator-third-party)" live={!!la}>
-      {!la ? (
-        <Empty icon="headphones" line="Listenarr not connected" sub="Add Listenarr and store its API key to see audiobook stats." />
-      ) : !anyOn ? (
-        <Empty icon="tune" line="No stats enabled" sub="Turn stats on in this widget's settings." />
-      ) : (
+      ) : resolved === "listenarr" && la ? (
         <StatRow>
           {showBooks && <Metric label="Audiobooks" value={num(la.audiobooks)} icon="headphones" color="var(--primary)" />}
           {showAuthors && <Metric label="Authors" value={num(la.authors)} icon="person" color="var(--on-surface-variant)" />}
           {showMonitored && <Metric label="Monitored" value={num(la.monitored)} icon="bookmark" color="var(--on-surface-variant)" />}
           {showWanted && <Metric label="Wanted" value={num(la.wanted)} icon="bookmark_add" color={la.wanted > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />}
         </StatRow>
+      ) : (
+        <Empty icon="menu_book" line="No books source connected" sub="Add LazyLibrarian or Listenarr and store its API key to see book stats." />
       )}
     </PanelShell>
   );
@@ -466,6 +439,101 @@ export function BazarrWidget({ fill }: { fill?: boolean } = {}) {
           <Metric label="Wanted movies" value={w.movies.toLocaleString("en-US")} icon="movie" color={w.movies > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />
           <Metric label="Total missing" value={(w.episodes + w.movies).toLocaleString("en-US")} icon="subtitles_off" color="var(--primary)" />
         </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
+function fmtUptime(sec: number | null): string {
+  if (sec == null) return "—";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  if (d > 0) return `${d}d ${h}h`;
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// ── HOST STATS — Prometheus or Beszel host metrics on the grid ──
+// Brings the host metric cards (previously Status-only) onto the home grid with a
+// per-tile source pick (Auto = the active metricsSource).
+export function HostStatsWidget({
+  fill,
+  source,
+  title,
+  showCpu = true,
+  showMemory = true,
+  showDisk = true,
+  showNet = true,
+  showLoad = true,
+  showUptime = true,
+}: { fill?: boolean; source?: string; title?: string; showCpu?: boolean; showMemory?: boolean; showDisk?: boolean; showNet?: boolean; showLoad?: boolean; showUptime?: boolean } = {}) {
+  const { metricsBySource, metrics, metricsSource } = useData();
+  const src = source || metricsSource;
+  const m = (src === "beszel" ? metricsBySource?.beszel : metricsBySource?.prometheus) ?? (source ? null : metrics);
+  const anyOn = showCpu || showMemory || showDisk || showNet || showLoad || showUptime;
+  return (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Host Stats"} icon="memory" accent="var(--primary)" live={!!m}>
+      {!m ? (
+        <Empty icon="memory" line="No host metrics" sub="Add Prometheus or Beszel to show CPU, memory, disk and network." />
+      ) : !anyOn ? (
+        <Empty icon="tune" line="No stats enabled" sub="Turn stats on in this widget's settings." />
+      ) : (
+        <StatRow>
+          {showCpu && <Metric label="CPU" value={m.cpuPct != null ? m.cpuPct.toFixed(0) : "—"} unit={m.cpuPct != null ? "%" : undefined} icon="memory" color="var(--primary)" />}
+          {showMemory && <Metric label="Memory" value={fmtBytes(m.memUsedBytes)} unit={` / ${fmtBytes(m.memTotalBytes)}`} icon="memory_alt" color="var(--originator-court)" />}
+          {showDisk && <Metric label="Disk" value={m.diskUsedBytes != null && m.diskTotalBytes ? String(Math.round((m.diskUsedBytes / m.diskTotalBytes) * 100)) : "—"} unit={m.diskTotalBytes ? "%" : undefined} icon="hard_drive" color="var(--amber)" />}
+          {showNet && <Metric label="Net out" value={m.netOutBps != null ? (m.netOutBps / 1e6).toFixed(1) : "—"} unit=" Mbps" icon="arrow_upward" color="var(--originator-third-party)" />}
+          {showNet && <Metric label="Net in" value={m.netInBps != null ? (m.netInBps / 1e6).toFixed(1) : "—"} unit=" Mbps" icon="arrow_downward" color="var(--originator-court)" />}
+          {showLoad && <Metric label="Load" value={m.sysLoad != null ? m.sysLoad.toFixed(2) : "—"} icon="speed" color="var(--originator-own)" />}
+          {showUptime && m.uptimeSec != null && <Metric label="Uptime" value={fmtUptime(m.uptimeSec)} icon="schedule" color="var(--primary)" />}
+        </StatRow>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── SERVICE WARNINGS — *arr health issues on the grid ──────
+export function HealthWidget({ fill, limit, title }: { fill?: boolean; limit?: number; title?: string } = {}) {
+  const { arrHealth } = useData();
+  const shown = limit != null ? arrHealth.slice(0, limit) : arrHealth;
+  return (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Service Warnings"} icon="warning" accent="var(--amber)" count={arrHealth.length ? `${arrHealth.length}` : undefined} live={arrHealth.length > 0}>
+      {arrHealth.length === 0 ? (
+        <Empty icon="check_circle" line="No warnings" sub="Sonarr / Radarr / Listenarr health issues will appear here." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {shown.map((h, i) => {
+            const isError = h.type.toLowerCase() === "error";
+            const c = isError ? "var(--error)" : "var(--amber)";
+            return (
+              <div key={`${h.svc}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                <Icon name={isError ? "error" : "warning"} size={15} color={c} />
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", color: c, flex: "0 0 56px" }}>{h.svc}</span>
+                <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1 }}>{h.message}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+// ── 24h ACTIVITY — Tautulli rolling play histogram ─────────
+export function ActivityWidget({ fill, title }: { fill?: boolean; title?: string } = {}) {
+  const { plays24h } = useData();
+  const total = plays24h.reduce((a, b) => a + b, 0);
+  return (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "24h Activity"} icon="show_chart" accent="var(--primary)" live={total > 0}>
+      {plays24h.length === 0 ? (
+        <Empty icon="show_chart" line="No activity data" sub="Connect Tautulli to chart plays over the last 24 hours." />
+      ) : (
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10, height: "100%", boxSizing: "border-box" }}>
+          <Metric label="Plays · last 24h" value={total.toLocaleString("en-US")} icon="play_arrow" color="var(--primary)" />
+          <div style={{ flex: 1, minHeight: 56, position: "relative" }}>
+            <FluidArea data={plays24h} color="var(--primary)" />
+          </div>
+        </div>
       )}
     </PanelShell>
   );

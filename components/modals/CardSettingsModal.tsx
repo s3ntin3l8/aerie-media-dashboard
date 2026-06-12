@@ -12,6 +12,7 @@ import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 import type { Tile } from "@/components/portal/gridLayout";
 import { Icon } from "@/components/primitives";
 import { useData } from "@/components/portal/DataProvider";
+import { sourceOptions, resolveBySource } from "@/lib/widgets/capabilities";
 
 interface CardSettingsModalProps {
   open: boolean;
@@ -24,7 +25,7 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
   const [draft, setDraft] = useState<Record<string, string>>({});
   // Drag-reorder state for the serviceIds control: index being dragged + index hovered over.
   const [dnd, setDnd] = useState<{ from: number; over: number } | null>(null);
-  const { services, library } = useData();
+  const { services, libraryAll } = useData();
 
   useEffect(() => {
     if (!tile || !open) return;
@@ -107,6 +108,24 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
                   onChange={(e) => setDraft((d) => ({ ...d, [spec.key]: e.target.value }))}
                 >
                   {spec.options.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            );
+          }
+
+          if (spec.type === "source") {
+            const options = sourceOptions(spec.capability, services);
+            return (
+              <Field key={spec.key} label={spec.label} hint={spec.hint}>
+                <select
+                  className="input"
+                  style={fieldInput}
+                  value={draft[spec.key] ?? ""}
+                  onChange={(e) => setDraft((d) => ({ ...d, [spec.key]: e.target.value }))}
+                >
+                  {options.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
@@ -276,6 +295,8 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
           }
 
           if (spec.type === "libraryIds") {
+            // Show the cards for the tile's chosen source (Auto resolves like the panel).
+            const library = resolveBySource(libraryAll, draft.source || "", ["tautulli", "jellyfin"]);
             const allIds = library.map((l) => l.id);
             const raw = draft[spec.key] || "";
             const selected = raw === "" ? new Set(allIds) : new Set(raw.split(",").filter(Boolean));

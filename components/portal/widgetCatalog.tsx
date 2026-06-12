@@ -11,6 +11,7 @@
 // ============================================================
 import React from "react";
 import type { Role, Service, DiscoverItem, UpcomingItem, MediaKind } from "@/lib/types";
+import type { Capability } from "@/lib/widgets/capabilities";
 import { compactAll, findSlot, type Tile, type WidgetMeta } from "@/components/portal/gridLayout";
 import {
   CentralServices,
@@ -25,8 +26,9 @@ import {
   QueuePanel,
   DownloadsPanel,
   DiscoverFeedPanel,
+  StoragePanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget, LazyLibrarianWidget, ListenarrWidget, QbittorrentWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, IndexersWidget, AgregarrWidget, BazarrWidget, BooksWidget, QbittorrentWidget, HostStatsWidget, HealthWidget, ActivityWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -43,6 +45,7 @@ export interface WidgetCtx {
 export type WidgetSettingSpec =
   | { key: string; label: string; type: "count"; hint?: string; default?: number; min?: number; max?: number }
   | { key: string; label: string; type: "select"; hint?: string; default?: string; options: { value: string; label: string }[] }
+  | { key: string; label: string; type: "source"; hint?: string; capability: Capability }
   | { key: string; label: string; type: "text"; hint?: string; default?: string }
   | { key: string; label: string; type: "toggle"; hint?: string; default?: boolean }
   | { key: string; label: string; type: "links"; hint?: string }
@@ -94,15 +97,19 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Movie, show and music counts with weekly deltas.",
     defaultW: 12, defaultH: 3, minW: 3, minH: 2, maxW: 12, maxH: 4,
     settings: [
+      { key: "source", label: "Data source", type: "source", capability: "library", hint: "Auto prefers Plex (Tautulli), then Jellyfin." },
       { key: "libraryIds", label: "Visible cards", type: "libraryIds", hint: "All on by default — toggle off to hide." },
     ],
-    render: (_c, s) => <LibraryStats fill visibleIds={s.libraryIds as string | undefined} />,
+    render: (_c, s) => <LibraryStats fill visibleIds={s.libraryIds as string | undefined} source={s.source as string | undefined} />,
   },
   nowPlaying: {
     type: "nowPlaying", name: "Now Playing", icon: "play_circle", accent: "var(--primary)", group: "Streaming",
     desc: "Live sessions — progress, device, codec and transcode state.",
     defaultW: 8, defaultH: 11, minW: 4, minH: 5, maxW: 12, maxH: 18,
-    render: (c, _s) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} onSelect={c.onSelectMedia} />,
+    settings: [
+      { key: "source", label: "Data source", type: "source", capability: "nowPlaying", hint: "Auto shows every media server." },
+    ],
+    render: (c, s) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} onSelect={c.onSelectMedia} source={s.source as string | undefined} />,
   },
   serviceTiles: {
     type: "serviceTiles", name: "Services", icon: "apps", accent: "var(--on-surface-variant)", group: "Services",
@@ -142,6 +149,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     snapH: (h) => posterSnapH(h, 5, 150),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "source", label: "Data source", type: "source", capability: "recent", hint: "Auto prefers Plex (Tautulli), then Jellyfin." },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 24, hint: "Auto = show all matching items" },
       { key: "mediaKind", label: "Filter by type", type: "select", options: [
         { value: "", label: "All types" },
@@ -150,7 +158,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "track", label: "Music" },
       ]},
     ],
-    render: (c, s) => <RecentlyAdded fill limit={s.limit != null ? Number(s.limit) : undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} onSelect={c.onSelectMedia} />,
+    render: (c, s) => <RecentlyAdded fill limit={s.limit != null ? Number(s.limit) : undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} source={s.source as string | undefined} onSelect={c.onSelectMedia} />,
   },
   upcoming: {
     type: "upcoming", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Streaming",
@@ -183,6 +191,51 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Live streaming throughput plus host network rates.",
     defaultW: 8, defaultH: 6, minW: 4, minH: 4, maxW: 12, maxH: 10,
     render: (_c, _s) => <BandwidthWidget fill />,
+  },
+  hostStats: {
+    type: "hostStats", name: "Host Stats", icon: "memory", accent: "var(--primary)", group: "Monitoring", adminOnly: true,
+    desc: "Host CPU, memory, disk, network and uptime from Prometheus or Beszel.",
+    defaultW: 8, defaultH: 4, minW: 4, minH: 3, maxW: 12, maxH: 8,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "source", label: "Data source", type: "source", capability: "metrics", hint: "Auto uses the active metrics source." },
+      { key: "showCpu", label: "CPU", type: "toggle", default: true },
+      { key: "showMemory", label: "Memory", type: "toggle", default: true },
+      { key: "showDisk", label: "Disk", type: "toggle", default: true },
+      { key: "showNet", label: "Network", type: "toggle", default: true },
+      { key: "showLoad", label: "System load", type: "toggle", default: true },
+      { key: "showUptime", label: "Uptime", type: "toggle", default: true },
+    ],
+    render: (_c, s) => <HostStatsWidget fill source={s.source as string | undefined} title={s.title as string | undefined} showCpu={s.showCpu as boolean} showMemory={s.showMemory as boolean} showDisk={s.showDisk as boolean} showNet={s.showNet as boolean} showLoad={s.showLoad as boolean} showUptime={s.showUptime as boolean} />,
+  },
+  storage: {
+    type: "storage", name: "Storage", icon: "hard_drive", accent: "var(--amber)", group: "Monitoring", adminOnly: true,
+    desc: "Per-mount disk usage from your *arr download clients.",
+    defaultW: 4, defaultH: 6, minW: 3, minH: 3, maxW: 8, maxH: 12,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Mounts to show", type: "count", min: 3, max: 20, hint: "Auto = show all mounts" },
+    ],
+    render: (_c, s) => <StoragePanel fill limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
+  },
+  serviceWarnings: {
+    type: "serviceWarnings", name: "Service Warnings", icon: "warning", accent: "var(--amber)", group: "Monitoring", adminOnly: true,
+    desc: "Health warnings and errors from Sonarr, Radarr and Listenarr.",
+    defaultW: 4, defaultH: 5, minW: 3, minH: 3, maxW: 12, maxH: 12,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "limit", label: "Warnings to show", type: "count", min: 3, max: 30, hint: "Auto = show all warnings" },
+    ],
+    render: (_c, s) => <HealthWidget fill limit={s.limit != null ? Number(s.limit) : undefined} title={s.title as string | undefined} />,
+  },
+  activity: {
+    type: "activity", name: "24h Activity", icon: "show_chart", accent: "var(--primary)", group: "Monitoring",
+    desc: "Plays over the last 24 hours (Tautulli).",
+    defaultW: 4, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 8,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+    ],
+    render: (_c, s) => <ActivityWidget fill title={s.title as string | undefined} />,
   },
   queue: {
     type: "queue", name: "Download Queue", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
@@ -227,11 +280,15 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
     render: (_c, _s) => <WizarrWidget fill />,
   },
-  prowlarr: {
-    type: "prowlarr", name: "Indexers", icon: "search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
-    desc: "Prowlarr indexer health plus total queries, grabs and failures.",
+  indexers: {
+    type: "indexers", name: "Indexers", icon: "search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
+    desc: "Indexer health and grab/query stats from Prowlarr or NZBHydra2.",
     defaultW: 3, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 6,
-    render: (_c, _s) => <ProwlarrWidget fill />,
+    settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "source", label: "Data source", type: "source", capability: "indexers", hint: "Auto prefers Prowlarr, then NZBHydra2." },
+    ],
+    render: (_c, s) => <IndexersWidget fill source={s.source as string | undefined} title={s.title as string | undefined} />,
   },
   agregarr: {
     type: "agregarr", name: "Collections", icon: "collections", accent: "var(--originator-court)", group: "Automation", adminOnly: true,
@@ -245,35 +302,20 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     defaultW: 3, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 6,
     render: (_c, _s) => <BazarrWidget fill />,
   },
-  nzbhydra: {
-    type: "nzbhydra", name: "NZBHydra2", icon: "manage_search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
-    desc: "NZBHydra2 usenet indexer health — enabled, disabled and errored indexers.",
-    defaultW: 3, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
-    render: (_c, _s) => <Nzbhydra2Widget fill />,
-  },
-  lazylibrarian: {
-    type: "lazylibrarian", name: "LazyLibrarian", icon: "menu_book", accent: "var(--originator-third-party)", group: "Automation",
-    desc: "Book & audiobook pipeline — total books, authors, wanted and snatched counts.",
+  books: {
+    type: "books", name: "Books", icon: "menu_book", accent: "var(--originator-third-party)", group: "Automation",
+    desc: "Book & audiobook pipeline stats from LazyLibrarian or Listenarr.",
     defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
     settings: [
-      { key: "showBooks", label: "Books total", type: "toggle", default: true },
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "source", label: "Data source", type: "source", capability: "books", hint: "Auto prefers LazyLibrarian, then Listenarr." },
+      { key: "showBooks", label: "Books / audiobooks total", type: "toggle", default: true },
       { key: "showAuthors", label: "Authors", type: "toggle", default: true },
       { key: "showWanted", label: "Wanted", type: "toggle", default: true },
-      { key: "showSnatched", label: "Snatched", type: "toggle", default: false },
+      { key: "showMonitored", label: "Monitored (Listenarr)", type: "toggle", default: true },
+      { key: "showSnatched", label: "Snatched (LazyLibrarian)", type: "toggle", default: false },
     ],
-    render: (_c, s) => <LazyLibrarianWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showWanted={s.showWanted as boolean} showSnatched={s.showSnatched as boolean} />,
-  },
-  listenarr: {
-    type: "listenarr", name: "Listenarr", icon: "headphones", accent: "var(--originator-third-party)", group: "Automation",
-    desc: "Audiobook library pipeline — audiobooks, authors, monitored and wanted counts.",
-    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
-    settings: [
-      { key: "showBooks", label: "Audiobooks total", type: "toggle", default: true },
-      { key: "showAuthors", label: "Authors", type: "toggle", default: true },
-      { key: "showMonitored", label: "Monitored", type: "toggle", default: true },
-      { key: "showWanted", label: "Wanted", type: "toggle", default: true },
-    ],
-    render: (_c, s) => <ListenarrWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showMonitored={s.showMonitored as boolean} showWanted={s.showWanted as boolean} />,
+    render: (_c, s) => <BooksWidget fill source={s.source as string | undefined} title={s.title as string | undefined} showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showWanted={s.showWanted as boolean} showMonitored={s.showMonitored as boolean} showSnatched={s.showSnatched as boolean} />,
   },
   qbittorrent: {
     type: "qbittorrent", name: "qBittorrent", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation",

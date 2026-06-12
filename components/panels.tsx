@@ -10,6 +10,7 @@ import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setQueueSource } from "@/app/(portal)/admin/actions";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { isVisible } from "@/lib/visibility";
+import { resolveBySource } from "@/lib/widgets/capabilities";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import {
   Icon,
@@ -334,13 +335,15 @@ function StreamRow({ s, i, big, role, allServices, users, onSelect }: { s: impor
   );
 }
 
-export function NowPlayingPanel({ role, big, onAll, fill, onSelect }: { role: Role; big?: boolean; onAll?: () => void; fill?: boolean; onSelect?: (h: SelectMediaHint) => void }) {
+export function NowPlayingPanel({ role, big, onAll, fill, source, onSelect }: { role: Role; big?: boolean; onAll?: () => void; fill?: boolean; source?: string; onSelect?: (h: SelectMediaHint) => void }) {
   const { nowPlaying, services: allServices, users } = useData();
   const { user } = usePortal();
+  // Per-widget source pick: filter by the media server tag (src) when set; Auto = all.
+  const sourced = source ? nowPlaying.filter((s) => s.src === source) : nowPlaying;
   // NOTE: NowPlaying uses Plex/Jellyfin identity, not portal ids — this filter is a
   // placeholder until that identity is linked (see plan "Out of scope"). Currently
   // matches nothing for non-admins, same as before.
-  const visible = role !== "admin" ? nowPlaying.filter((s) => s.user === user.id) : nowPlaying;
+  const visible = role !== "admin" ? sourced.filter((s) => s.user === user.id) : sourced;
   return (
     <PanelShell
       fill={fill}
@@ -1049,11 +1052,12 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
 }
 
 // ── LIBRARY STAT STRIP ─────────────────────────────────────
-export function LibraryStats({ fill, visibleIds }: { fill?: boolean; visibleIds?: string } = {}) {
-  const { library } = useData();
+export function LibraryStats({ fill, visibleIds, source }: { fill?: boolean; visibleIds?: string; source?: string } = {}) {
+  const { libraryAll } = useData();
+  const resolved = resolveBySource(libraryAll ?? [], source, ["tautulli", "jellyfin"]);
   const visible = visibleIds
-    ? (() => { const s = new Set(visibleIds.split(",").filter(Boolean)); return library.filter(l => s.has(l.id)); })()
-    : library;
+    ? (() => { const s = new Set(visibleIds.split(",").filter(Boolean)); return resolved.filter(l => s.has(l.id)); })()
+    : resolved;
   if (visible.length === 0)
     return fill ? (
       <PanelShell fill title="Library Stats" icon="video_library" accent="var(--primary)">
@@ -1063,7 +1067,7 @@ export function LibraryStats({ fill, visibleIds }: { fill?: boolean; visibleIds?
   return (
     <div className="aerie-lib-grid" style={fill ? { height: "100%", gridAutoRows: "1fr" } : undefined}>
       {visible.map((l) => (
-        <div key={l.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
+        <div key={`${l.source ?? ""}:${l.id}`} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Eyebrow>{l.label}</Eyebrow>
             <Icon name={l.icon} size={15} color="var(--primary)" />
@@ -1207,8 +1211,9 @@ function PosterStrip({ children }: { children: React.ReactNode }) {
 }
 
 // ── RECENTLY ADDED ─────────────────────────────────────────
-export function RecentlyAdded({ fill, limit, mediaKind, title, onSelect }: { fill?: boolean; limit?: number; mediaKind?: string; title?: string; onSelect?: (h: SelectMediaHint) => void } = {}) {
-  const { recent } = useData();
+export function RecentlyAdded({ fill, limit, mediaKind, title, source, onSelect }: { fill?: boolean; limit?: number; mediaKind?: string; title?: string; source?: string; onSelect?: (h: SelectMediaHint) => void } = {}) {
+  const { recentAll } = useData();
+  const recent = resolveBySource(recentAll ?? [], source, ["tautulli", "jellyfin"]);
   const filtered = mediaKind && mediaKind.length > 0 ? recent.filter((r) => r.kind === mediaKind) : recent;
   const displayItems = limit != null ? filtered.slice(0, limit) : filtered;
   return (
@@ -1221,7 +1226,7 @@ export function RecentlyAdded({ fill, limit, mediaKind, title, onSelect }: { fil
             const canOpen = !!onSelect && (r.kind === "movie" || r.kind === "series");
             return (
             <div
-              key={r.id}
+              key={`${r.source ?? ""}:${r.id}`}
               onClick={canOpen ? () => onSelect!({ kind: r.kind, tmdbId: r.tmdbId, grandparentRatingKey: r.grandparentRatingKey }) : undefined}
               style={{ width: 76, flexShrink: 0, cursor: canOpen ? "pointer" : "default" }}
             >
@@ -1348,13 +1353,20 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
 }
 
 // ── STORAGE (per-mount disk usage) ─────────────────────────
-export function StoragePanel() {
+export function StoragePanel({ fill, limit, title }: { fill?: boolean; limit?: number; title?: string } = {}) {
   const { storage } = useData();
-  if (storage.length === 0) return null;
+  const heading = title && title.length > 0 ? title : "Storage";
+  if (storage.length === 0)
+    return fill ? (
+      <PanelShell fill title={heading} icon="hard_drive" accent="var(--amber)">
+        <Empty icon="hard_drive" line="No storage data" sub="Add Sonarr or Radarr to show disk usage per mount." />
+      </PanelShell>
+    ) : null;
+  const shown = limit != null ? storage.slice(0, limit) : storage;
   return (
-    <PanelShell title="Storage" icon="hard_drive" accent="var(--amber)" count={`${storage.length} ${storage.length === 1 ? "mount" : "mounts"}`}>
+    <PanelShell fill={fill} title={heading} icon="hard_drive" accent="var(--amber)" count={`${storage.length} ${storage.length === 1 ? "mount" : "mounts"}`}>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {storage.map((m, i) => {
+        {shown.map((m, i) => {
           const used = m.totalBytes - m.freeBytes;
           const pct = m.totalBytes > 0 ? (used / m.totalBytes) * 100 : 0;
           const color = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";

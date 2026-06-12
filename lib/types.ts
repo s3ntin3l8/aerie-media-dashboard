@@ -304,6 +304,8 @@ export interface LibraryStat {
   count: string;
   icon: string;
   delta: string;
+  /** Provider that produced this card (tautulli | jellyfin | lazylibrarian | listenarr), for per-widget source selection. */
+  source?: string;
 }
 
 export interface RecentItem {
@@ -320,6 +322,8 @@ export interface RecentItem {
   ratingKey?: string;
   /** Plex rating key of the show (series), for resolving the show's TMDB id. */
   grandparentRatingKey?: string;
+  /** Provider that produced this item (tautulli | jellyfin), for per-widget source selection. */
+  source?: string;
 }
 
 export interface QueueItem {

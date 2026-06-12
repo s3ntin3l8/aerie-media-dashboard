@@ -52,7 +52,7 @@ describe("RecentlyAdded — onSelect", () => {
 
   it("opens the detail hint for a movie tile (carries tmdbId)", () => {
     vi.mocked(useData).mockReturnValue({
-      recent: [{ id: "ra-0", title: "Fight Club", kind: "movie", year: 1999, cat: "stream", tmdbId: 550 }],
+      recentAll: [{ id: "ra-0", title: "Fight Club", kind: "movie", year: 1999, cat: "stream", tmdbId: 550, source: "tautulli" }],
     } as never);
     const onSelect = vi.fn();
     render(<RecentlyAdded onSelect={onSelect} />);

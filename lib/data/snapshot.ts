@@ -67,14 +67,21 @@ import {
   type Nzbhydra2Stats,
 } from "@/lib/integrations/clients";
 import { env } from "@/lib/env";
+import { buildLibrary, buildRecent, buildMetricsBySource } from "@/lib/data/assemble";
 
 export interface Snapshot {
   services: Service[];
   nowPlaying: NowPlaying[];
   requests: MediaRequest[];
   users: User[];
+  /** Auto-resolved library cards (Tautulli/Plex wins for media; books appended). */
   library: LibraryStat[];
+  /** Every configured source's library cards, tagged with `source` (for per-widget source picking). */
+  libraryAll: LibraryStat[];
+  /** Auto-resolved recently-added (Tautulli/Plex wins, else Jellyfin). */
   recent: RecentItem[];
+  /** Every configured source's recently-added items, tagged with `source`. */
+  recentAll: RecentItem[];
   queue: QueueItem[];
   plays24h: number[];
   /** aggregate live streaming bandwidth (Mbps), or null when Tautulli is unconfigured */
@@ -108,6 +115,8 @@ export interface Snapshot {
   /** the group name that maps to the admin role (locked "always" in visibility) */
   adminGroup: string;
   metrics: NodeMetrics | null;
+  /** host metrics per source (Auto = the active metricsSource), for a per-tile Host Stats source pick */
+  metricsBySource: { prometheus: NodeMetrics | null; beszel: NodeMetrics | null };
   /** which source fills `metrics` (the active source; toggle when both are configured) */
   metricsSource: "prometheus" | "beszel";
   /** Prometheus service exists in config (drives the source toggle's visibility) */
@@ -279,7 +288,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers, absNow, llStats,
     listenarrQ, listenarrHist, listenarrHealthIssues, listenarrData,
-    qbitQ, qbStats,
+    qbitQ, qbStats, altMetricsResult,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -333,6 +342,11 @@ export async function getSnapshot(): Promise<Snapshot> {
     // qBittorrent: only the active queue source fires the torrent list; stats always fire when configured.
     queueSource === "qbittorrent" ? perf("live:qbittorrentQueue", safe(qbittorrentQueue)) : Promise.resolve(null),
     qbitOn ? perf("live:qbittorrentStats", safe(qbittorrentStats)) : Promise.resolve(null),
+    // Per-widget Host Stats source pick: fetch the OTHER configured metrics source too (the
+    // active one comes via metricsResult). Bounded to one extra call, only when both are set up.
+    (metricsSource === "beszel" ? promOn : beszelOn)
+      ? perf("live:metrics(alt)", safe(metricsSource === "beszel" ? prometheusMetrics : beszelMetrics))
+      : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -438,26 +452,19 @@ export async function getSnapshot(): Promise<Snapshot> {
   );
   if (PERF) console.log(`[perf] quota-wave (${members.length} members): ${Date.now() - tQuota}ms | getSnapshot TOTAL: ${Date.now() - tStart}ms`);
 
-  // ── library: Tautulli (Plex) sections win; fall back to Jellyfin so a Jellyfin-only
-  // deployment still gets library counts. 24h-plays row is Tautulli-only. ──
-  const baseLibs = ttLibs && ttLibs.length > 0 ? ttLibs : (jfLibs ?? []);
-  const mediaLibs: LibraryStat[] =
-    baseLibs.length > 0
-      ? ttLibs && ttLibs.length > 0
-        ? [...baseLibs, { id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }]
-        : baseLibs
-      : [];
-  // Append LazyLibrarian on-disk counts (audiobooks/ebooks) and Listenarr's library count so
-  // a books deployment still gets library cards; the headline totals / wanted / authors live
-  // in the dedicated LazyLibrarian / Listenarr widgets.
-  const library: LibraryStat[] = [
-    ...mediaLibs,
-    ...(llStats ? lazylibrarianLibraryStats(llStats) : []),
-    ...(listenarrData ? listenarrLibraryStats(listenarrData) : []),
-  ];
-
-  // recent: prefer Tautulli (Plex); fall back to Jellyfin when Plex has none.
-  const recent: RecentItem[] = ttRecent && ttRecent.length > 0 ? ttRecent : (jfRecent ?? []);
+  // ── library / recent: collect every configured source (tagged with `source` so a
+  // widget can pick one); `library`/`recent` are the Auto-resolved views (Tautulli/Plex
+  // wins for media, books/audiobooks always appended). See buildLibrary/buildRecent. ──
+  const { libraryAll, library } = buildLibrary({
+    tautulli: ttLibs,
+    jellyfin: jfLibs,
+    lazylibrarian: llStats ? lazylibrarianLibraryStats(llStats) : null,
+    listenarr: listenarrData ? listenarrLibraryStats(listenarrData) : null,
+    playsCard: ttLibs && ttLibs.length > 0
+      ? { id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }
+      : null,
+  });
+  const { recentAll, recent } = buildRecent(ttRecent, jfRecent);
 
   // Rolling 24h play activity, bucketed hourly by Tautulli history (empty until configured).
   const plays24h: number[] = ttPlays?.hourly ?? [];
@@ -495,10 +502,15 @@ export async function getSnapshot(): Promise<Snapshot> {
       }
     : null;
 
+  // Host metrics per source, so a Host Stats tile can pick Prometheus or Beszel
+  // (Auto = the active metricsSource). The active source is metricsResult; the
+  // other configured source (if any) is altMetricsResult.
+  const metricsBySource = buildMetricsBySource(metricsSource, metricsResult ?? null, altMetricsResult ?? null);
+
   const snapshot: Snapshot = {
-    services, nowPlaying, requests, users, library, recent, queue, plays24h, bandwidth,
+    services, nowPlaying, requests, users, library, libraryAll, recent, recentAll, queue, plays24h, bandwidth,
     storage, issues, arrHealth: arrHealthIssues, upcoming, downloads, topStats,
-    groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
+    groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null, metricsBySource,
     metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
     queueSource, arrQueueConfigured: arrQueueOn, nzbgetConfigured: nzbgetOn, nzbgetStatus: nzbgetStat ?? null,
     qbittorrentConfigured: qbitOn, qbittorrent: qbStats ?? null,

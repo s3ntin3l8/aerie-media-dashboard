@@ -22,6 +22,34 @@ export interface WidgetMeta {
 
 export const GRID = { cols: 12, rowH: 30, gap: 14, stackBelow: 720 } as const;
 
+// Deprecated widget `type`s that were merged into a functional widget, mapped to
+// their replacement + the source setting that reproduces the old single-provider
+// behaviour. Applied on load by migrateLayout so saved dashboards never render
+// "Unknown widget" after a consolidation.
+const DEPRECATED_TYPES: Record<string, { type: string; source: string }> = {
+  prowlarr: { type: "indexers", source: "prowlarr" },
+  nzbhydra: { type: "indexers", source: "nzbhydra" },
+  lazylibrarian: { type: "books", source: "lazylibrarian" },
+  listenarr: { type: "books", source: "listenarr" },
+};
+
+/**
+ * Rewrite any deprecated widget tiles to their merged replacement, seeding the
+ * `source` setting so the tile keeps showing the same provider. Returns the same
+ * array reference when nothing changed (so callers can skip a needless re-persist).
+ */
+export function migrateLayout(tiles: Tile[]): Tile[] {
+  let changed = false;
+  const out = tiles.map((t) => {
+    const m = DEPRECATED_TYPES[t.type];
+    if (!m) return t;
+    changed = true;
+    const source = (t.settings?.source as string | undefined) || m.source;
+    return { ...t, type: m.type, settings: { ...(t.settings ?? {}), source } };
+  });
+  return changed ? out : tiles;
+}
+
 const overlap = (a: Tile, b: Tile) => a.uid !== b.uid && a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 const collides = (arr: Tile[], it: Tile) => arr.some((o) => overlap(o, it));
