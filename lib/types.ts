@@ -221,6 +221,12 @@ export interface MediaRequest {
   mediaOverseerrId?: number;
   /** TMDB ID for the media item — used to construct Overseerr deep-links. */
   tmdbId?: number;
+  /** absolute Plex web URL (app.plex.tv) for an available item (from Overseerr). */
+  plexUrl?: string;
+  /** Jellyfin library item id for an available item → /web/#/details?id={id}. */
+  jellyfinItemId?: string;
+  /** absolute Sonarr/Radarr URL Overseerr resolved for a requested/processing item. */
+  serviceUrl?: string;
   /** ISO timestamp of last modification (status change etc.) — used for sort-by-modified. */
   modified?: string;
   /** Actual downloaded file quality from Radarr (movies only). */
@@ -332,6 +338,13 @@ export interface DiscoverItem {
   overview: string;
   /** proxied cover-art URL (/api/artwork?…), if available */
   art?: string;
+  // — watch/service deep-link ids, surfaced by Overseerr for synced items (all best-effort) —
+  /** absolute Plex web URL (app.plex.tv) for an available item */
+  plexUrl?: string;
+  /** Jellyfin library item id for an available item → /web/#/details?id={id} */
+  jellyfinItemId?: string;
+  /** absolute Sonarr/Radarr URL Overseerr resolved for a requested/processing item */
+  serviceUrl?: string;
 }
 
 /** A request quality profile option. */

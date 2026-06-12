@@ -8,10 +8,13 @@
 // Approve/decline reuse the optimistic path in the Requests view.
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, User } from "@/lib/types";
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
+import { MediaLinks } from "@/components/modals/MediaLinks";
+import { mediaLinks, linkCtxFromServices } from "@/lib/media/links";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { QUALITY_PROFILES } from "@/lib/categories";
@@ -133,7 +136,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
   );
 }
 
-function InfoStep({ pick }: { pick: DiscoverItem }) {
+function InfoStep({ pick, links }: { pick: DiscoverItem; links?: React.ReactNode }) {
   return (
     <div style={{ padding: "18px 20px 22px" }}>
       <MediaDetailBody
@@ -146,6 +149,7 @@ function InfoStep({ pick }: { pick: DiscoverItem }) {
         rating={pick.rating}
         badges={pick.state ? <StateBadge state={pick.state} /> : undefined}
         overview={pick.overview || undefined}
+        links={links}
       />
     </div>
   );
@@ -291,7 +295,7 @@ function ResultPanel({ icon, color, title, body, onClose, extra }: { icon: strin
   );
 }
 
-function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note: string; setNote: (v: string) => void; requester?: User }) {
+function ReviewBody({ req, note, setNote, requester, links }: { req: MediaRequest; note: string; setNote: (v: string) => void; requester?: User; links?: React.ReactNode }) {
   const u = requester;
   const fact = (label: string, value: React.ReactNode, mono?: boolean) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -301,16 +305,19 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
   );
   return (
     <div style={{ padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 18 }}>
-      <MediaDetailBody
-        title={req.title}
-        kind={req.kind}
-        art={req.art}
-        variant="full"
-        showTitle
-        titleRight={<Pill tone={RQ_TONE[req.status]}>{RQ_LABEL[req.status]}</Pill>}
-        meta={[req.kind === "series" ? "Series" : "Movie", String(req.year), req.id]}
-        overview={req.overview || undefined}
-      />
+      <div>
+        <MediaDetailBody
+          title={req.title}
+          kind={req.kind}
+          art={req.art}
+          variant="full"
+          showTitle
+          titleRight={<Pill tone={RQ_TONE[req.status]}>{RQ_LABEL[req.status]}</Pill>}
+          meta={[req.kind === "series" ? "Series" : "Movie", String(req.year), req.id]}
+          overview={req.overview || undefined}
+          links={links}
+        />
+      </div>
       {(u || req.requesterName) && (
         <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 14px", borderRadius: 12, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
           <Avatar name={u?.name ?? req.requesterName} src={u?.avatar ?? req.requesterAvatar} size={36} color={REQ_C} />
@@ -393,11 +400,17 @@ export function RequestModal({
 }) {
   const { users, services } = useData();
   const { user } = usePortal();
+  const router = useRouter();
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const review = mode === "review";
 
   const overseerrSvc = services.find((s) => s.id === "overseerr");
   const overseerrBase = overseerrSvc ? `${overseerrSvc.scheme}://${overseerrSvc.host}` : null;
+
+  // State-aware "open in" links (#27) — embed targets navigate the in-app embed.
+  const linkCtx = linkCtxFromServices(services);
+  const openServiceInApp = (svc: string, at?: string) =>
+    router.push(at ? `/s/${svc}?at=${encodeURIComponent(at)}` : `/s/${svc}`);
 
   const [q, setQ] = useState("");
   const [pick, setPick] = useState<DiscoverItem | null>(null);
@@ -563,7 +576,21 @@ export function RequestModal({
             onClose={onClose}
           />
         ) : (
-          <ReviewBody req={request} note={note} setNote={setNote} requester={requester} />
+          <ReviewBody
+            req={request}
+            note={note}
+            setNote={setNote}
+            requester={requester}
+            links={
+              <MediaLinks
+                links={mediaLinks(
+                  { kind: request.kind, state: request.status, tmdbId: request.tmdbId, plexUrl: request.plexUrl, jellyfinItemId: request.jellyfinItemId, serviceUrl: request.serviceUrl },
+                  linkCtx,
+                )}
+                onOpenService={openServiceInApp}
+              />
+            }
+          />
         )
       )}
       {open && !review && (
@@ -618,7 +645,18 @@ export function RequestModal({
             />
           )
         ) : pick && pick.state ? (
-          <InfoStep pick={pick} />
+          <InfoStep
+            pick={pick}
+            links={
+              <MediaLinks
+                links={mediaLinks(
+                  { kind: pick.kind, state: pick.state, tmdbId: Number(pick.id) || undefined, plexUrl: pick.plexUrl, jellyfinItemId: pick.jellyfinItemId, serviceUrl: pick.serviceUrl },
+                  linkCtx,
+                )}
+                onOpenService={openServiceInApp}
+              />
+            }
+          />
         ) : pick ? (
           <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} />
         ) : (

@@ -13,6 +13,8 @@ import { PageHeader, StatTile } from "@/components/views/shared";
 import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
 import { RequestModal } from "@/components/modals/RequestModal";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
+import { MediaLinks } from "@/components/modals/MediaLinks";
+import { mediaLinks, linkCtxFromServices } from "@/lib/media/links";
 import { Toast } from "@/components/modals/Toast";
 import { submitRequest, deleteRequest, editRequest } from "@/app/(portal)/requests/actions";
 
@@ -28,11 +30,18 @@ function RequestCard({
   onCancel: (r: MediaRequest) => void;
   onEdit: (r: MediaRequest) => void;
 }) {
-  const { users } = useData();
+  const { users, services } = useData();
+  const router = useRouter();
   const u = users.find((x) => x.id === r.portalUser);
   const isOwner = r.portalUser === portalUserId;
   const canCancel = (adminMode || isOwner) && (r.status === "pending" || r.status === "approved");
   const canEdit = (adminMode || isOwner) && r.status === "pending";
+  const links = mediaLinks(
+    { kind: r.kind, state: r.status, tmdbId: r.tmdbId, plexUrl: r.plexUrl, jellyfinItemId: r.jellyfinItemId, serviceUrl: r.serviceUrl },
+    linkCtxFromServices(services),
+  );
+  const openServiceInApp = (svc: string, at?: string) =>
+    router.push(at ? `/s/${svc}?at=${encodeURIComponent(at)}` : `/s/${svc}`);
   return (
     <div
       className={adminMode ? "req-card" : undefined}
@@ -45,6 +54,7 @@ function RequestCard({
         art={r.art}
         variant="compact"
         meta={[r.kind === "series" ? "Series" : "Movie", String(r.year)]}
+        links={<MediaLinks links={links} onOpenService={openServiceInApp} />}
         titleRight={
           <>
             {r.status === "available" && r.kind === "movie" && r.fileInfo && (() => {

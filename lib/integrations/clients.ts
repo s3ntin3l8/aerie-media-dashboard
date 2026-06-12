@@ -874,7 +874,18 @@ interface OverseerrRequest {
   id: number;
   type: "movie" | "tv";
   status: number; // 1 pending, 2 approved, 3 declined, 4 failed
-  media?: { id?: number; status?: number; tmdbId?: number; mediaType?: string };
+  // Overseerr enriches `media` with watch/service deep-links for synced items —
+  // free to read from the payload we already fetch (no extra upstream calls).
+  media?: {
+    id?: number;
+    status?: number;
+    tmdbId?: number;
+    mediaType?: string;
+    plexUrl?: string;
+    jellyfinMediaId?: string;
+    ratingKey?: string;
+    serviceUrl?: string;
+  };
   requestedBy?: { id: number; displayName?: string; plexUsername?: string; email?: string };
   createdAt?: string;
   updatedAt?: string;
@@ -1200,6 +1211,9 @@ async function fetchOverseerrRequests(): Promise<MediaRequest[]> {
       })(),
       mediaOverseerrId: r.media?.id,
       tmdbId: r.media?.tmdbId,
+      plexUrl: r.media?.plexUrl,
+      jellyfinItemId: r.media?.jellyfinMediaId,
+      serviceUrl: r.media?.serviceUrl,
       modified: r.updatedAt ?? r.createdAt,
       fileInfo: r.type === "movie" && r.media?.tmdbId ? fileIndex.get(r.media.tmdbId) : undefined,
     };
@@ -1217,7 +1231,7 @@ interface OverseerrSearchResult {
   voteAverage?: number;
   overview?: string;
   posterPath?: string;
-  mediaInfo?: { status?: number };
+  mediaInfo?: { status?: number; plexUrl?: string; jellyfinMediaId?: string; ratingKey?: string; serviceUrl?: string };
 }
 
 // Overseerr MediaStatus → our request state.
@@ -1239,6 +1253,9 @@ function mapDiscoverResult(r: OverseerrSearchResult): DiscoverItem {
     state: mediaStatusToState(r.mediaInfo?.status),
     overview: r.overview || "",
     art: r.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(r.posterPath)}` : undefined,
+    plexUrl: r.mediaInfo?.plexUrl,
+    jellyfinItemId: r.mediaInfo?.jellyfinMediaId,
+    serviceUrl: r.mediaInfo?.serviceUrl,
   };
 }
 

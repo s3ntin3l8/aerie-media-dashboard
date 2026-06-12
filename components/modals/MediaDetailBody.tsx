@@ -149,7 +149,7 @@ export function MediaDetailBody({
           )}
 
           {/* compact keeps everything inside the meta column so it stacks beside the poster, not below it */}
-          {compact && links && <div style={{ marginTop: 10 }}>{links}</div>}
+          {compact && links}
 
           {footer && <div style={{ marginTop: "auto", paddingTop: 12 }}>{footer}</div>}
         </div>
@@ -164,7 +164,7 @@ export function MediaDetailBody({
           <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 16, fontStyle: "italic" }}>{emptyOverview}</p>
         ) : null)}
 
-      {!compact && links && <div style={{ marginTop: 16 }}>{links}</div>}
+      {!compact && links}
     </>
   );
 }
