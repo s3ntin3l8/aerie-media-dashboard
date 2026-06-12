@@ -15,6 +15,7 @@ vi.mock("@/app/(portal)/requests/actions", () => Object.fromEntries(
   ["getQualityProfiles", "submitRequest", "reviewRequest", "deleteRequest", "editRequest",
     "getSeasonQuality", "getMediaDetail", "resolveDiscoverItem", "getWatchlist",
   ].map((n) => [n, vi.fn(async () => [])])));
+vi.mock("@/app/(portal)/actions", () => ({ signOutAction: vi.fn(), setFavoritesAction: vi.fn(), setDashboardsAction: vi.fn() }));
 
 const portal = { role: "admin", realRole: "admin", user: { id: "u1", name: "Ada", email: "a@x" }, favorites: [], toggleFavorite: vi.fn(), modalOpen: false, setModalOpen: vi.fn(), theme: "dark", oidc: true };
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
@@ -25,6 +26,7 @@ import { useData } from "@/components/portal/DataProvider";
 import { Status } from "@/components/views/Status";
 import { Admin } from "@/components/views/Admin";
 import { Streams } from "@/components/views/Streams";
+import { Home } from "@/components/views/Home";
 
 const metrics = {
   instance: "node1", cpuPct: 12, cpuHistory: [1, 2], memUsedBytes: 1e9, memTotalBytes: 4e9, memHistory: [1],
@@ -41,6 +43,11 @@ const SNAP = {
   metrics, metricsSource: "prometheus", prometheusConfigured: true, beszelConfigured: false, beszelSystemId: null,
   arrHealth: [{ svc: "sonarr", type: "warning", message: "Indexer slow" }],
   nowPlaying: [], bandwidth: { totalMbps: 0, wanMbps: 0 }, requests: [], requestCounts: null, issues: null,
+  library: [{ id: "movies", label: "Movies", count: "100", icon: "movie", delta: "" }], libraryAll: [], recent: [], recentAll: [],
+  upcoming: [], downloads: [], queue: [], storage: [], plays24h: [1, 2, 3], topStats: { users: [], media: [] },
+  discover: null, qbittorrent: null, nzbgetStatus: null, lazylibrarian: null, listenarr: null, wizarr: null, prowlarr: null,
+  agregarr: null, bazarrWanted: null, nzbhydra: null, metricsBySource: { prometheus: null, beszel: null },
+  queueSource: "arr", arrQueueConfigured: false, nzbgetConfigured: false, qbittorrentConfigured: false,
 };
 
 beforeEach(() => {
@@ -75,6 +82,11 @@ describe("view smoke renders", () => {
 
   it("Streams renders its scaffold", () => {
     const { container } = render(<Streams />);
+    expect(container.textContent).toBeTruthy();
+  });
+
+  it("Home renders the dashboard grid with default widgets", () => {
+    const { container } = render(<Home />);
     expect(container.textContent).toBeTruthy();
   });
 });
