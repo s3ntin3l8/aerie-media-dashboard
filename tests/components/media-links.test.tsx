@@ -4,8 +4,8 @@ import React from "react";
 import { MediaLinks } from "@/components/modals/MediaLinks";
 import type { MediaLink } from "@/lib/media/links";
 
-const embed: MediaLink = { svc: "radarr", label: "Open in Radarr", icon: "open_in_new", kind: "embed", deepPath: "/movie/dune" };
-const external: MediaLink = { svc: "plex", label: "Watch on Plex", icon: "play_arrow", kind: "external", href: "https://app.plex.tv/x" };
+const embed: MediaLink = { svc: "radarr", label: "Open in Radarr", icon: "open_in_new", role: "service", kind: "embed", deepPath: "/movie/dune" };
+const external: MediaLink = { svc: "plex", label: "Watch on Plex", icon: "play_arrow", role: "watch", kind: "external", href: "https://app.plex.tv/x" };
 
 describe("MediaLinks", () => {
   it("renders nothing when there are no links", () => {

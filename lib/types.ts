@@ -227,6 +227,8 @@ export interface MediaRequest {
   jellyfinItemId?: string;
   /** absolute Sonarr/Radarr URL Overseerr resolved for a requested/processing item. */
   serviceUrl?: string;
+  /** the *arr's internal id (Radarr movie id / Sonarr series id) — for live quality lookups. */
+  arrId?: number;
   /** ISO timestamp of last modification (status change etc.) — used for sort-by-modified. */
   modified?: string;
   /** Actual downloaded file quality from Radarr (movies only). */
@@ -236,6 +238,16 @@ export interface MediaRequest {
 export interface FileInfo {
   /** Human-readable label, e.g. "2160p Blu-ray · x265". */
   label: string;
+  sizeBytes?: number;
+}
+
+/** Downloaded quality for one season of a series (from Sonarr episode files). */
+export interface SeasonQuality {
+  season: number;
+  /** dominant quality label, e.g. "1080p Blu-ray" (empty if no files yet). */
+  label: string;
+  /** episodes with a downloaded file. */
+  episodeCount: number;
   sizeBytes?: number;
 }
 
@@ -345,6 +357,8 @@ export interface DiscoverItem {
   jellyfinItemId?: string;
   /** absolute Sonarr/Radarr URL Overseerr resolved for a requested/processing item */
   serviceUrl?: string;
+  /** the *arr's internal id (Radarr movie id / Sonarr series id) — for live quality lookups. */
+  arrId?: number;
 }
 
 /** A request quality profile option. */

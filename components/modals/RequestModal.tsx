@@ -9,7 +9,7 @@
 // ============================================================
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, User } from "@/lib/types";
+import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, SeasonQuality, User } from "@/lib/types";
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
@@ -18,7 +18,7 @@ import { mediaLinks, linkCtxFromServices } from "@/lib/media/links";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { QUALITY_PROFILES } from "@/lib/categories";
-import { getQualityProfiles, type SubmitResult } from "@/app/(portal)/requests/actions";
+import { getQualityProfiles, getSeasonQuality, type SubmitResult } from "@/app/(portal)/requests/actions";
 import { REQ_TONE as RQ_TONE, REQ_LABEL as RQ_LABEL } from "@/lib/display";
 
 const REQ_C = "var(--originator-court)";
@@ -136,7 +136,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
   );
 }
 
-function InfoStep({ pick, links }: { pick: DiscoverItem; links?: React.ReactNode }) {
+function InfoStep({ pick, serviceLinks }: { pick: DiscoverItem; serviceLinks?: React.ReactNode }) {
   return (
     <div style={{ padding: "18px 20px 22px" }}>
       <MediaDetailBody
@@ -145,11 +145,11 @@ function InfoStep({ pick, links }: { pick: DiscoverItem; links?: React.ReactNode
         art={pick.art}
         variant="full"
         showTitle
+        serviceLinks={serviceLinks}
         meta={[pick.kind === "series" ? "Series" : "Movie", String(pick.year)]}
         rating={pick.rating}
         badges={pick.state ? <StateBadge state={pick.state} /> : undefined}
         overview={pick.overview || undefined}
-        links={links}
       />
     </div>
   );
@@ -164,6 +164,7 @@ function ConfirmStep({
   onBack,
   onProfilesLoad,
   preloadedProfiles,
+  serviceLinks,
 }: {
   pick: DiscoverItem;
   quality: string;
@@ -173,6 +174,7 @@ function ConfirmStep({
   onBack: () => void;
   onProfilesLoad: (ps: QualityProfile[]) => void;
   preloadedProfiles: QualityProfile[];
+  serviceLinks?: React.ReactNode;
 }) {
   const selCount = Object.keys(seasons).filter((k) => seasons[Number(k)]).length;
   // Prepend the "Default" (no-override) option so requests don't carry an
@@ -199,6 +201,7 @@ function ConfirmStep({
           art={pick.art}
           variant="full"
           showTitle
+          serviceLinks={serviceLinks}
           meta={[pick.kind === "series" ? "Series" : "Movie", String(pick.year)]}
           rating={pick.rating}
           overview={pick.overview || undefined}
@@ -295,7 +298,65 @@ function ResultPanel({ icon, color, title, body, onClose, extra }: { icon: strin
   );
 }
 
-function ReviewBody({ req, note, setNote, requester, links }: { req: MediaRequest; note: string; setNote: (v: string) => void; requester?: User; links?: React.ReactNode }) {
+function fmtGB(bytes?: number): string | undefined {
+  return bytes == null ? undefined : `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+function QualityCard({ title, label, sub }: { title: string; label: string; sub?: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "8px 11px", borderRadius: 9, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>{title}</span>
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--originator-own)" }}>{label || "—"}</span>
+      {sub && <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>{sub}</span>}
+    </div>
+  );
+}
+
+// Section 4 (available media): movie file quality (from the snapshot) or a per-season
+// grid for series (lazily fetched from Sonarr via getSeasonQuality on open).
+function AvailableQuality({ req }: { req: MediaRequest }) {
+  const [seasons, setSeasons] = useState<SeasonQuality[] | null>(req.kind === "series" ? null : []);
+  useEffect(() => {
+    if (req.kind !== "series") return;
+    let live = true;
+    if (req.arrId) getSeasonQuality(req.arrId).then((s) => { if (live) setSeasons(s); }).catch(() => { if (live) setSeasons([]); });
+    else setSeasons([]);
+    return () => { live = false; };
+  }, [req.kind, req.arrId]);
+
+  if (req.kind === "movie") {
+    if (!req.fileInfo) return null;
+    return (
+      <section>
+        <SectionLabel>Available quality</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+          <QualityCard title="File" label={req.fileInfo.label} sub={fmtGB(req.fileInfo.sizeBytes)} />
+        </div>
+      </section>
+    );
+  }
+  if (seasons == null) {
+    return (
+      <section>
+        <SectionLabel>Available quality</SectionLabel>
+        <span style={{ fontSize: 12, color: "var(--on-surface-variant)" }}>Loading…</span>
+      </section>
+    );
+  }
+  if (seasons.length === 0) return null;
+  return (
+    <section>
+      <SectionLabel hint={`${seasons.length} season${seasons.length === 1 ? "" : "s"}`}>Available quality</SectionLabel>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+        {seasons.map((s) => (
+          <QualityCard key={s.season} title={`Season ${s.season}`} label={s.label} sub={`${s.episodeCount} ep${s.episodeCount === 1 ? "" : "s"}${s.sizeBytes ? ` · ${fmtGB(s.sizeBytes)}` : ""}`} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReviewBody({ req, note, setNote, requester, serviceLinks, readOnly }: { req: MediaRequest; note: string; setNote: (v: string) => void; requester?: User; serviceLinks?: React.ReactNode; readOnly?: boolean }) {
   const u = requester;
   const fact = (label: string, value: React.ReactNode, mono?: boolean) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -312,13 +373,13 @@ function ReviewBody({ req, note, setNote, requester, links }: { req: MediaReques
           art={req.art}
           variant="full"
           showTitle
+          serviceLinks={serviceLinks}
           titleRight={<Pill tone={RQ_TONE[req.status]}>{RQ_LABEL[req.status]}</Pill>}
           meta={[req.kind === "series" ? "Series" : "Movie", String(req.year), req.id]}
           overview={req.overview || undefined}
-          links={links}
         />
       </div>
-      {(u || req.requesterName) && (
+      {!readOnly && (u || req.requesterName) && (
         <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 14px", borderRadius: 12, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
           <Avatar name={u?.name ?? req.requesterName} src={u?.avatar ?? req.requesterAvatar} size={36} color={REQ_C} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -346,7 +407,7 @@ function ReviewBody({ req, note, setNote, requester, links }: { req: MediaReques
           })()}
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: req.fileInfo ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 14, padding: "13px 15px", borderRadius: 12, background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, padding: "13px 15px", borderRadius: 12, background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
         {fact("Requested", req.requested)}
         {fact("Quality", req.qualityProfile ?? "—", true)}
         {fact(
@@ -357,20 +418,13 @@ function ReviewBody({ req, note, setNote, requester, links }: { req: MediaReques
               : "All"
             : "Movie",
         )}
-        {req.fileInfo && fact("File", (
-          <span>
-            {req.fileInfo.label}
-            {req.fileInfo.sizeBytes != null && (
-              <span style={{ fontWeight: 400, color: "var(--on-surface-variant)", marginLeft: 4 }}>
-                ({(req.fileInfo.sizeBytes / 1e9).toFixed(1)} GB)
-              </span>
-            )}
-          </span>
-        ), true)}
       </div>
-      <Field label="Note to requester" hint="posted as an Overseerr comment">
-        <textarea className="input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a comment visible in Overseerr…" style={{ ...fieldInput, resize: "vertical", fontFamily: "var(--font-body)", lineHeight: 1.5 }} />
-      </Field>
+      {req.status === "available" && <AvailableQuality req={req} />}
+      {!readOnly && (
+        <Field label="Note to requester" hint="posted as an Overseerr comment">
+          <textarea className="input" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Add a comment visible in Overseerr…" style={{ ...fieldInput, resize: "vertical", fontFamily: "var(--font-body)", lineHeight: 1.5 }} />
+        </Field>
+      )}
     </div>
   );
 }
@@ -387,7 +441,7 @@ export function RequestModal({
   onAct,
 }: {
   open: boolean;
-  mode: "request" | "review";
+  mode: "request" | "review" | "detail";
   request?: MediaRequest | null;
   initialQuery?: string;
   /** When set, skip the DiscoverStep and open ConfirmStep with this item pre-selected. */
@@ -403,9 +457,7 @@ export function RequestModal({
   const router = useRouter();
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const review = mode === "review";
-
-  const overseerrSvc = services.find((s) => s.id === "overseerr");
-  const overseerrBase = overseerrSvc ? `${overseerrSvc.scheme}://${overseerrSvc.host}` : null;
+  const detail = mode === "detail";
 
   // State-aware "open in" links (#27) — embed targets navigate the in-app embed.
   const linkCtx = linkCtxFromServices(services);
@@ -424,15 +476,6 @@ export function RequestModal({
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [note, setNote] = useState("");
   const [decision, setDecision] = useState<"approved" | "declined" | null>(null);
-
-  const overseerrLink = (() => {
-    if (!overseerrBase) return null;
-    if (review && request?.tmdbId)
-      return `${overseerrBase}/${request.kind === "series" ? "tv" : "movie"}/${request.tmdbId}`;
-    if (!review && pick)
-      return `${overseerrBase}/${pick.kind === "series" ? "tv" : "movie"}/${pick.id}`;
-    return null;
-  })();
 
   const choosePick = (d: DiscoverItem, selectedSeasons?: number[]) => {
     setPick(d);
@@ -494,6 +537,18 @@ export function RequestModal({
 
   const canAct = request?.status === "pending";
 
+  // #27 — resolve links once. Service links (Overseerr/*arr) render in the body's
+  // top bar; watch links (Plex/Jellyfin) render in the footer actions.
+  const linkItem =
+    (review || detail) && request
+      ? { kind: request.kind, state: request.status, tmdbId: request.tmdbId, plexUrl: request.plexUrl, jellyfinItemId: request.jellyfinItemId, serviceUrl: request.serviceUrl }
+      : pick
+      ? { kind: pick.kind, state: pick.state, tmdbId: Number(pick.id) || undefined, plexUrl: pick.plexUrl, jellyfinItemId: pick.jellyfinItemId, serviceUrl: pick.serviceUrl }
+      : null;
+  const allLinks = linkItem ? mediaLinks(linkItem, linkCtx) : [];
+  const serviceLinksNode = <MediaLinks links={allLinks.filter((l) => l.role === "service")} onOpenService={openServiceInApp} />;
+  const watchLinks = allLinks.filter((l) => l.role === "watch");
+
   let footer: React.ReactNode = null;
   if (review && request && !decision && canAct) {
     footer = (
@@ -539,6 +594,22 @@ export function RequestModal({
         </button>
       </>
     );
+  } else if (detail && request) {
+    footer = (
+      <button onClick={onClose} className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }}>
+        Close
+      </button>
+    );
+  }
+
+  // Watch actions (Plex/Jellyfin) sit on the left of the footer wherever the item is watchable.
+  if (watchLinks.length > 0) {
+    footer = (
+      <>
+        <MediaLinks links={watchLinks} onOpenService={openServiceInApp} />
+        {footer}
+      </>
+    );
   }
 
   const reviewSubMap: Partial<Record<string, string>> = {
@@ -548,21 +619,17 @@ export function RequestModal({
     declined: "This request was declined.",
     failed: "This request failed to process.",
   };
-  const title = review ? "Review request" : "Request media";
+  const title = review ? "Review request" : detail ? "Request details" : "Request media";
   const sub = review
     ? (request && reviewSubMap[request.status]) ?? "Approve or decline — the member is notified."
+    : detail
+    ? (request && reviewSubMap[request.status]) ?? "Open it in a service, or watch when it's ready."
     : "Search the catalog and send it to the request queue.";
 
   return (
-    <ModalShell open={open} onClose={onClose} accent={REQ_C} icon="playlist_add" title={title} sub={sub} footer={footer} width={review ? 560 : 600}
-      headerActions={overseerrLink ? (
-        <a href={overseerrLink} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm" style={{ padding: 7, marginTop: -2 }} title="Open in Overseerr">
-          <Icon name="open_in_new" size={18} />
-        </a>
-      ) : undefined}
-    >
-      {open && review && request && (
-        decision ? (
+    <ModalShell open={open} onClose={onClose} accent={REQ_C} icon="playlist_add" title={title} sub={sub} footer={footer} width={review || detail ? 560 : 600}>
+      {open && (review || detail) && request && (
+        review && decision ? (
           <ResultPanel
             icon={decision === "approved" ? "check" : "block"}
             color={decision === "approved" ? "var(--originator-own)" : "var(--error)"}
@@ -576,24 +643,10 @@ export function RequestModal({
             onClose={onClose}
           />
         ) : (
-          <ReviewBody
-            req={request}
-            note={note}
-            setNote={setNote}
-            requester={requester}
-            links={
-              <MediaLinks
-                links={mediaLinks(
-                  { kind: request.kind, state: request.status, tmdbId: request.tmdbId, plexUrl: request.plexUrl, jellyfinItemId: request.jellyfinItemId, serviceUrl: request.serviceUrl },
-                  linkCtx,
-                )}
-                onOpenService={openServiceInApp}
-              />
-            }
-          />
+          <ReviewBody req={request} note={note} setNote={setNote} requester={requester} readOnly={detail} serviceLinks={serviceLinksNode} />
         )
       )}
-      {open && !review && (
+      {open && mode === "request" && (
         submitted && pick ? (
           result && !result.ok ? (
             <ResultPanel
@@ -645,20 +698,9 @@ export function RequestModal({
             />
           )
         ) : pick && pick.state ? (
-          <InfoStep
-            pick={pick}
-            links={
-              <MediaLinks
-                links={mediaLinks(
-                  { kind: pick.kind, state: pick.state, tmdbId: Number(pick.id) || undefined, plexUrl: pick.plexUrl, jellyfinItemId: pick.jellyfinItemId, serviceUrl: pick.serviceUrl },
-                  linkCtx,
-                )}
-                onOpenService={openServiceInApp}
-              />
-            }
-          />
+          <InfoStep pick={pick} serviceLinks={serviceLinksNode} />
         ) : pick ? (
-          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} />
+          <ConfirmStep pick={pick} quality={quality} setQuality={setQuality} seasons={seasons} setSeasons={setSeasons} onBack={() => setPick(null)} onProfilesLoad={setQualityProfiles} preloadedProfiles={pick.kind === "series" ? tvProfiles : movieProfiles} serviceLinks={serviceLinksNode} />
         ) : (
           <DiscoverStep me={me} q={q} setQ={setQ} onPick={choosePick} />
         )

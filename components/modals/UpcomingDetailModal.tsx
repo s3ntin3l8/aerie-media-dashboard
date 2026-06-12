@@ -7,9 +7,11 @@
 // ============================================================
 import React from "react";
 import type { UpcomingItem } from "@/lib/types";
-import { Icon, Pill } from "@/components/primitives";
+import { Pill } from "@/components/primitives";
 import { ModalShell } from "@/components/modals/ModalShell";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
+import { MediaLinks } from "@/components/modals/MediaLinks";
+import type { MediaLink } from "@/lib/media/links";
 
 const ACCENT = "var(--originator-court)";
 
@@ -48,20 +50,20 @@ export function UpcomingDetailModal({
 
   const hasReleaseRows = !isSeries && (item.inCinemas || item.digitalRelease || item.physicalRelease);
 
+  // Section 2: backend "open in" link to the *arr that's tracking this release.
+  const serviceLinks: MediaLink[] = [
+    { svc: item.svc, label: `Open in ${svcLabel}`, icon: "open_in_new", role: "service", kind: "embed", deepPath: item.deepPath },
+  ];
+
   return (
     <ModalShell
       open
       onClose={onClose}
       icon="event_upcoming"
       accent={ACCENT}
-      title={item.title}
+      title="Coming soon"
       sub={fmtFull(item.when)}
       width={620}
-      footer={
-        <button className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }} onClick={() => onOpenService(item.svc, item.deepPath)}>
-          <Icon name="open_in_new" size={15} /> Open in {svcLabel}
-        </button>
-      }
     >
       <div style={{ padding: "18px 20px 22px" }}>
         <MediaDetailBody
@@ -69,7 +71,8 @@ export function UpcomingDetailModal({
           kind={item.kind}
           art={item.art}
           variant="full"
-          showTitle={false}
+          showTitle
+          serviceLinks={<MediaLinks links={serviceLinks} onOpenService={onOpenService} />}
           meta={meta}
           rating={item.rating}
           ep={item.ep}

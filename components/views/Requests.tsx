@@ -13,8 +13,6 @@ import { PageHeader, StatTile } from "@/components/views/shared";
 import { Empty, REQ_TONE, REQ_LABEL } from "@/components/panels";
 import { RequestModal } from "@/components/modals/RequestModal";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
-import { MediaLinks } from "@/components/modals/MediaLinks";
-import { mediaLinks, linkCtxFromServices } from "@/lib/media/links";
 import { Toast } from "@/components/modals/Toast";
 import { submitRequest, deleteRequest, editRequest } from "@/app/(portal)/requests/actions";
 
@@ -22,31 +20,24 @@ type RequestStatusFilter = "all" | "pending" | "approved" | "available" | "proce
 type SortOrder = "added" | "modified";
 
 function RequestCard({
-  r, adminMode, portalUserId, onAct, onReview, onCancel, onEdit,
+  r, adminMode, portalUserId, onAct, onOpen, onCancel, onEdit,
 }: {
   r: MediaRequest; adminMode: boolean; portalUserId: string;
   onAct: (id: string, action: "approve" | "decline") => void;
-  onReview: (r: MediaRequest) => void;
+  onOpen: (r: MediaRequest) => void;
   onCancel: (r: MediaRequest) => void;
   onEdit: (r: MediaRequest) => void;
 }) {
-  const { users, services } = useData();
-  const router = useRouter();
+  const { users } = useData();
   const u = users.find((x) => x.id === r.portalUser);
   const isOwner = r.portalUser === portalUserId;
   const canCancel = (adminMode || isOwner) && (r.status === "pending" || r.status === "approved");
   const canEdit = (adminMode || isOwner) && r.status === "pending";
-  const links = mediaLinks(
-    { kind: r.kind, state: r.status, tmdbId: r.tmdbId, plexUrl: r.plexUrl, jellyfinItemId: r.jellyfinItemId, serviceUrl: r.serviceUrl },
-    linkCtxFromServices(services),
-  );
-  const openServiceInApp = (svc: string, at?: string) =>
-    router.push(at ? `/s/${svc}?at=${encodeURIComponent(at)}` : `/s/${svc}`);
   return (
     <div
-      className={adminMode ? "req-card" : undefined}
-      onClick={adminMode ? () => onReview(r) : undefined}
-      style={{ display: "flex", padding: 14, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", cursor: adminMode ? "pointer" : "default", transition: "border-color .15s, background .15s" }}
+      className="req-card"
+      onClick={() => onOpen(r)}
+      style={{ display: "flex", padding: 14, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", cursor: "pointer", transition: "border-color .15s, background .15s" }}
     >
       <MediaDetailBody
         title={r.title}
@@ -54,7 +45,6 @@ function RequestCard({
         art={r.art}
         variant="compact"
         meta={[r.kind === "series" ? "Series" : "Movie", String(r.year)]}
-        links={<MediaLinks links={links} onOpenService={openServiceInApp} />}
         titleRight={
           <>
             {r.status === "available" && r.kind === "movie" && r.fileInfo && (() => {
@@ -113,7 +103,7 @@ export function Requests() {
   const [filter, setFilter] = useState<RequestStatusFilter>("all");
   const [sort, setSort] = useState<SortOrder>("added");
   const [requesterFilter, setRequesterFilter] = useState<string | null>(null);
-  const [reqModal, setReqModal] = useState<{ mode: "request" | "review" | "edit"; request?: MediaRequest } | null>(null);
+  const [reqModal, setReqModal] = useState<{ mode: "request" | "review" | "edit" | "detail"; request?: MediaRequest } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const { acted, onAct, applyActed } = useRequestReview();
   const refresh = useRefresh();
@@ -283,7 +273,7 @@ export function Requests() {
                   <RequestCard
                     key={r.id} r={r} adminMode={adminMode} portalUserId={user.id}
                     onAct={onAct}
-                    onReview={(req) => setReqModal({ mode: "review", request: req })}
+                    onOpen={(req) => setReqModal({ mode: adminMode ? "review" : "detail", request: req })}
                     onCancel={handleCancel}
                     onEdit={(req) => setReqModal({ mode: "edit", request: req })}
                   />
@@ -303,7 +293,7 @@ export function Requests() {
         <RequestModal
           open
           mode={reqModal.mode === "edit" ? "request" : reqModal.mode}
-          request={reqModal.mode === "review" ? reqModal.request : undefined}
+          request={reqModal.mode === "review" || reqModal.mode === "detail" ? reqModal.request : undefined}
           initialPick={reqModal.mode === "edit" && reqModal.request ? {
             id: reqModal.request.id.replace(/^os-/, ""),
             title: reqModal.request.title,

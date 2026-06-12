@@ -20,7 +20,7 @@ export function MediaLinks({
   if (links.length === 0) return null;
   const cls = "btn btn-secondary btn-sm";
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {links.map((l) =>
         l.kind === "embed" ? (
           <button

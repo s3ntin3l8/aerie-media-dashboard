@@ -109,6 +109,32 @@ describe("mediaLinks — graceful gating", () => {
   });
 });
 
+describe("mediaLinks — roles & decoupled watch", () => {
+  it("tags Overseerr/*arr as service and Plex/Jellyfin as watch", () => {
+    const l = mediaLinks(
+      { kind: "movie", state: "available", tmdbId: 1, arrDeepPath: "/movie/x", plexUrl: "https://app.plex.tv/x", jellyfinItemId: "abc" },
+      fullCtx,
+    );
+    expect(l.find((x) => x.svc === "radarr")?.role).toBe("service");
+    expect(l.find((x) => x.svc === "plex")?.role).toBe("watch");
+    expect(l.find((x) => x.svc === "jellyfin")?.role).toBe("watch");
+  });
+
+  it("emits the watch link even when the item isn't 'available' (e.g. partially available → processing)", () => {
+    const l = mediaLinks(
+      { kind: "series", state: "processing", tmdbId: 1, arrDeepPath: "/series/x", plexUrl: "https://app.plex.tv/x" },
+      fullCtx,
+    );
+    expect(svcs(l)).toEqual(["overseerr", "sonarr", "plex"]);
+    expect(l.find((x) => x.svc === "plex")?.role).toBe("watch");
+  });
+
+  it("does not emit a watch link when no media-server id is present", () => {
+    const l = mediaLinks({ kind: "movie", state: "available", tmdbId: 1, arrDeepPath: "/movie/x" }, fullCtx);
+    expect(svcs(l)).toEqual(["radarr"]);
+  });
+});
+
 describe("linkCtxFromServices", () => {
   it("builds active/embeddable sets and overseerr/jellyfin bases from the services list", () => {
     const ctx = linkCtxFromServices([

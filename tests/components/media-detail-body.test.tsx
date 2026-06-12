@@ -51,20 +51,23 @@ describe("MediaDetailBody — full variant", () => {
     expect(screen.getByText("No synopsis available.")).toBeInTheDocument();
   });
 
-  it("renders the badges, releaseRows and links slots", () => {
+  it("renders the serviceLinks bar, badges, releaseRows and section-4 children", () => {
     render(
       <MediaDetailBody
         title="X"
         kind="movie"
         meta={["Movie"]}
+        serviceLinks={<a href="/svc">Open in Radarr</a>}
         badges={<span>Downloaded</span>}
         releaseRows={<div>In cinemas</div>}
-        links={<a href="/x">Open</a>}
-      />,
+      >
+        <div>Quality section</div>
+      </MediaDetailBody>,
     );
+    expect(screen.getByRole("link", { name: "Open in Radarr" })).toBeInTheDocument();
     expect(screen.getByText("Downloaded")).toBeInTheDocument();
     expect(screen.getByText("In cinemas")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open" })).toBeInTheDocument();
+    expect(screen.getByText("Quality section")).toBeInTheDocument();
   });
 });
 
@@ -79,14 +82,12 @@ describe("MediaDetailBody — compact variant", () => {
         titleRight={<span>PENDING</span>}
         overview="Should not show in compact"
         footer={<button>Cancel</button>}
-        links={<a href="/watch">Watch</a>}
       />,
     );
     expect(screen.getByText("The Bear")).toBeInTheDocument();
     expect(screen.getByText("Series · 2023")).toBeInTheDocument();
     expect(screen.getByText("PENDING")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Watch" })).toBeInTheDocument();
     // overview is a full-variant concept and must not render in the compact card
     expect(screen.queryByText("Should not show in compact")).not.toBeInTheDocument();
   });

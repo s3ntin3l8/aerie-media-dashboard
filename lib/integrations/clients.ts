@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -876,15 +876,19 @@ interface OverseerrRequest {
   status: number; // 1 pending, 2 approved, 3 declined, 4 failed
   // Overseerr enriches `media` with watch/service deep-links for synced items —
   // free to read from the payload we already fetch (no extra upstream calls).
+  // NB: the Plex web link is `mediaUrl` (app.plex.tv/...); `plexUrl` is not present.
   media?: {
     id?: number;
     status?: number;
     tmdbId?: number;
     mediaType?: string;
+    mediaUrl?: string;
     plexUrl?: string;
     jellyfinMediaId?: string;
     ratingKey?: string;
     serviceUrl?: string;
+    /** the *arr's internal id (Radarr movie id / Sonarr series id). */
+    externalServiceId?: number;
   };
   requestedBy?: { id: number; displayName?: string; plexUsername?: string; email?: string };
   createdAt?: string;
@@ -1132,6 +1136,50 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
   return { fileIndex, profileIndex };
 }
 
+// Per-season downloaded quality for a Sonarr series (by Sonarr series id), for the
+// "available qualities" section of the detail modal. Cached briefly per series.
+export async function sonarrSeasonQuality(seriesId: number): Promise<SeasonQuality[]> {
+  return cached(`sonarr:seasonq:${seriesId}`, 60_000, async () => {
+    const { baseUrl, apiKey } = await creds("sonarr");
+    type Ep = {
+      seasonNumber?: number;
+      hasFile?: boolean;
+      episodeFile?: { size?: number; quality?: { quality?: { resolution?: number; source?: string } } };
+    };
+    const eps = await fetchJson<Ep[]>(`${baseUrl}/api/v3/episode?seriesId=${seriesId}&includeEpisodeFile=true`, {
+      service: "sonarr",
+      headers: { "X-Api-Key": apiKey },
+      timeoutMs: 10000,
+    });
+    // Sonarr reports the web source as "web" (Radarr uses "webdl"/"webrip").
+    const SOURCE: Record<string, string> = { bluray: "Blu-ray", web: "WEB-DL", webdl: "WEB-DL", webrip: "WEBRip", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
+    const bySeason = new Map<number, { count: number; size: number; labels: Map<string, number> }>();
+    for (const e of eps) {
+      if (e.seasonNumber == null) continue;
+      let s = bySeason.get(e.seasonNumber);
+      if (!s) { s = { count: 0, size: 0, labels: new Map() }; bySeason.set(e.seasonNumber, s); }
+      if (e.hasFile && e.episodeFile) {
+        s.count++;
+        s.size += e.episodeFile.size ?? 0;
+        const q = e.episodeFile.quality?.quality;
+        const res = q?.resolution ? `${q.resolution}p` : undefined;
+        const src = q?.source ? (SOURCE[q.source] ?? q.source) : undefined;
+        const label = [res, src].filter(Boolean).join(" ");
+        if (label) s.labels.set(label, (s.labels.get(label) ?? 0) + 1);
+      }
+    }
+    return [...bySeason.entries()]
+      .filter(([season, s]) => season > 0 && s.count > 0) // skip specials + seasons with no downloads
+      .sort((a, b) => a[0] - b[0])
+      .map(([season, s]) => ({
+        season,
+        label: [...s.labels.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "",
+        episodeCount: s.count,
+        sizeBytes: s.size || undefined,
+      }));
+  });
+}
+
 /** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
 export async function overseerrMovieProfiles(): Promise<QualityProfile[]> {
   if (movieProfilesCache && Date.now() - movieProfilesCache.at < QUALITY_PROFILES_TTL) return movieProfilesCache.profiles;
@@ -1211,9 +1259,10 @@ async function fetchOverseerrRequests(): Promise<MediaRequest[]> {
       })(),
       mediaOverseerrId: r.media?.id,
       tmdbId: r.media?.tmdbId,
-      plexUrl: r.media?.plexUrl,
+      plexUrl: r.media?.mediaUrl ?? r.media?.plexUrl,
       jellyfinItemId: r.media?.jellyfinMediaId,
       serviceUrl: r.media?.serviceUrl,
+      arrId: r.media?.externalServiceId,
       modified: r.updatedAt ?? r.createdAt,
       fileInfo: r.type === "movie" && r.media?.tmdbId ? fileIndex.get(r.media.tmdbId) : undefined,
     };
@@ -1231,7 +1280,7 @@ interface OverseerrSearchResult {
   voteAverage?: number;
   overview?: string;
   posterPath?: string;
-  mediaInfo?: { status?: number; plexUrl?: string; jellyfinMediaId?: string; ratingKey?: string; serviceUrl?: string };
+  mediaInfo?: { status?: number; mediaUrl?: string; plexUrl?: string; jellyfinMediaId?: string; ratingKey?: string; serviceUrl?: string; externalServiceId?: number };
 }
 
 // Overseerr MediaStatus → our request state.
@@ -1253,9 +1302,10 @@ function mapDiscoverResult(r: OverseerrSearchResult): DiscoverItem {
     state: mediaStatusToState(r.mediaInfo?.status),
     overview: r.overview || "",
     art: r.posterPath ? `/api/artwork?svc=overseerr&ref=${encodeURIComponent(r.posterPath)}` : undefined,
-    plexUrl: r.mediaInfo?.plexUrl,
+    plexUrl: r.mediaInfo?.mediaUrl ?? r.mediaInfo?.plexUrl,
     jellyfinItemId: r.mediaInfo?.jellyfinMediaId,
     serviceUrl: r.mediaInfo?.serviceUrl,
+    arrId: r.mediaInfo?.externalServiceId,
   };
 }
 

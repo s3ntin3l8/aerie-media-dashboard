@@ -4,8 +4,10 @@
 // One presentational body for every media-detail surface (Coming Soon modal,
 // the request flow's info/confirm/review steps, and the Requests-list card),
 // so poster size, meta row, badges, genre chips and overview stay consistent.
+// Section order (full): serviceLinks bar → poster + details → release rows →
+// overview → children (optional, e.g. quality selector / available qualities).
 // Pure presentational: callers pass a normalized shape + optional slots
-// (badges/links/releaseRows/footer); no upstream/data concerns here.
+// (serviceLinks/badges/releaseRows/children/footer); no upstream/data concerns here.
 // ============================================================
 import React from "react";
 import type { MediaKind } from "@/lib/types";
@@ -15,8 +17,10 @@ export interface MediaDetailBodyProps {
   title: string;
   kind: MediaKind;
   art?: string;
-  /** "full" = modals (poster 96, 18px title, overview/genres); "compact" = Requests-list card (poster 58, 14px title). */
+  /** "full" = modals (poster 120, 18px title, overview/genres); "compact" = Requests-list card (poster 58, 14px title). */
   variant?: "full" | "compact";
+  /** Backend "open in" links bar (Overseerr / Radarr / Sonarr), rendered at the very top (full variant). */
+  serviceLinks?: React.ReactNode;
   /** Render the title inside the body. Off when the title already lives in the ModalShell header (Coming Soon). */
   showTitle?: boolean;
   /** Ordered meta parts joined with " · " after the kind icon, e.g. ["Movie","2024","166 min"]. */
@@ -37,8 +41,8 @@ export interface MediaDetailBodyProps {
   emptyOverview?: string;
   /** Extra rows under the poster block, full width (e.g. release-date rows). */
   releaseRows?: React.ReactNode;
-  /** State-aware "open in" links row (rendered at the bottom of the body). */
-  links?: React.ReactNode;
+  /** Section-4 content under the overview (e.g. quality selector / available qualities). */
+  children?: React.ReactNode;
   /** Compact-only: node pinned to the bottom of the meta column (e.g. the card's action row). */
   footer?: React.ReactNode;
 }
@@ -48,6 +52,7 @@ export function MediaDetailBody({
   kind,
   art,
   variant = "full",
+  serviceLinks,
   showTitle = variant === "compact",
   meta,
   rating,
@@ -58,12 +63,12 @@ export function MediaDetailBody({
   overview,
   emptyOverview,
   releaseRows,
-  links,
+  children,
   footer,
 }: MediaDetailBodyProps) {
   const compact = variant === "compact";
   const isSeries = kind === "series";
-  const posterW = compact ? 58 : 96;
+  const posterW = compact ? 58 : 120;
 
   const metaRow = (
     <div
@@ -124,6 +129,8 @@ export function MediaDetailBody({
 
   return (
     <>
+      {!compact && serviceLinks && <div style={{ marginBottom: 16 }}>{serviceLinks}</div>}
+
       <div style={{ display: "flex", gap: compact ? 13 : 16, alignItems: "flex-start" }}>
         <PosterTile title={title} kind={kind} cat="request" w={posterW} art={art} />
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -148,9 +155,6 @@ export function MediaDetailBody({
             </div>
           )}
 
-          {/* compact keeps everything inside the meta column so it stacks beside the poster, not below it */}
-          {compact && links}
-
           {footer && <div style={{ marginTop: "auto", paddingTop: 12 }}>{footer}</div>}
         </div>
       </div>
@@ -164,7 +168,7 @@ export function MediaDetailBody({
           <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 16, fontStyle: "italic" }}>{emptyOverview}</p>
         ) : null)}
 
-      {!compact && links}
+      {!compact && children}
     </>
   );
 }

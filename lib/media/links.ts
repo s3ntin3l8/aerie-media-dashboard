@@ -9,12 +9,19 @@
 import type { MediaKind, RequestStatus } from "@/lib/types";
 import { sanitizeEmbedPath } from "@/lib/embed/deepLink";
 
+/**
+ * Where a link belongs in the UI:
+ *  - "service" → backend "open in" links (Overseerr / Radarr / Sonarr), shown in the top links bar
+ *  - "watch"   → media-server links (Plex / Jellyfin), shown in the footer actions
+ */
+export type MediaLinkRole = "service" | "watch";
+
 /** What a single resolved link points at. */
 export type MediaLink =
   // opened inside the portal embed: router.push(`/s/${svc}?at=${deepPath}`) — no deepPath = service root
-  | { svc: string; label: string; icon: string; kind: "embed"; deepPath?: string }
+  | { svc: string; label: string; icon: string; role: MediaLinkRole; kind: "embed"; deepPath?: string }
   // opened in a new tab at an absolute URL
-  | { svc: string; label: string; icon: string; kind: "external"; href: string };
+  | { svc: string; label: string; icon: string; role: MediaLinkRole; kind: "external"; href: string };
 
 export interface MediaLinkItem {
   kind: MediaKind;
@@ -80,13 +87,19 @@ function pathFromUrl(url?: string): string | undefined {
 }
 
 /**
- * Resolve the ordered "open in" links for a media item, by state:
- *   null                          → Overseerr (request page)
+ * Resolve the ordered "open in" links for a media item.
+ *
+ * **Service links** (role "service") follow the request state:
+ *   null/declined/failed          → Overseerr (request / status page)
  *   pending/approved/processing   → Overseerr + Sonarr/Radarr
- *   available                     → Sonarr/Radarr + Plex and/or Jellyfin (watch)
- *   declined/failed               → Overseerr (status)
+ *   available                     → Sonarr/Radarr
+ *
+ * **Watch links** (role "watch") are emitted whenever a media-server id is present
+ * (`plexUrl` / `jellyfinItemId`) — independent of the coarse state mapping, so an
+ * item Overseerr reports as "partially available" still gets its watch link.
+ *
  * Only links whose service is active (and whose id is available) are emitted;
- * everything degrades to the service root / is dropped when ids are missing.
+ * *arr links degrade to the service root when no deep path is available.
  */
 export function mediaLinks(item: MediaLinkItem, ctx: MediaLinkCtx): MediaLink[] {
   const arrSvc = item.kind === "series" ? "sonarr" : "radarr";
@@ -95,52 +108,55 @@ export function mediaLinks(item: MediaLinkItem, ctx: MediaLinkCtx): MediaLink[] 
   const overseerr = (): MediaLink | null => {
     if (!ctx.active.has("overseerr") || !ctx.overseerrBase || item.tmdbId == null) return null;
     const path = `/${item.kind === "series" ? "tv" : "movie"}/${item.tmdbId}`;
-    return { svc: "overseerr", label: "Open in Overseerr", icon: "open_in_new", kind: "external", href: ctx.overseerrBase + path };
+    return { svc: "overseerr", label: "Open in Overseerr", icon: "open_in_new", role: "service", kind: "external", href: ctx.overseerrBase + path };
   };
 
   const arr = (): MediaLink | null => {
     if (!ctx.active.has(arrSvc)) return null;
     // Prefer the explicit *arr slug path; else extract a path from Overseerr's serviceUrl; else root.
     const deepPath = sanitizeEmbedPath(item.arrDeepPath) ?? pathFromUrl(item.serviceUrl);
-    return { svc: arrSvc, label: `Open in ${arrLabel}`, icon: "open_in_new", kind: "embed", deepPath };
+    return { svc: arrSvc, label: `Open in ${arrLabel}`, icon: "open_in_new", role: "service", kind: "embed", deepPath };
   };
 
   // Plex's deep-link from Overseerr is a self-contained absolute URL (app.plex.tv),
   // so its presence is the signal Plex is the configured server — open it externally.
   const plex = (): MediaLink | null => {
     if (!item.plexUrl) return null;
-    return { svc: "plex", label: "Watch on Plex", icon: "play_arrow", kind: "external", href: item.plexUrl };
+    return { svc: "plex", label: "Watch on Plex", icon: "play_arrow", role: "watch", kind: "external", href: item.plexUrl };
   };
 
   const jellyfin = (): MediaLink | null => {
     if (!item.jellyfinItemId || !ctx.active.has("jellyfin")) return null;
     const path = `/web/#/details?id=${encodeURIComponent(item.jellyfinItemId)}`;
     if (ctx.embeddable.has("jellyfin")) {
-      return { svc: "jellyfin", label: "Watch on Jellyfin", icon: "play_arrow", kind: "embed", deepPath: path };
+      return { svc: "jellyfin", label: "Watch on Jellyfin", icon: "play_arrow", role: "watch", kind: "embed", deepPath: path };
     }
     if (ctx.jellyfinBase) {
-      return { svc: "jellyfin", label: "Watch on Jellyfin", icon: "play_arrow", kind: "external", href: ctx.jellyfinBase + path };
+      return { svc: "jellyfin", label: "Watch on Jellyfin", icon: "play_arrow", role: "watch", kind: "external", href: ctx.jellyfinBase + path };
     }
     return null;
   };
 
-  let candidates: Array<MediaLink | null>;
+  // Service links by state.
+  let service: Array<MediaLink | null>;
   switch (item.state) {
     case "pending":
     case "approved":
     case "processing":
-      candidates = [overseerr(), arr()];
+      service = [overseerr(), arr()];
       break;
     case "available":
-      candidates = [arr(), plex(), jellyfin()];
+      service = [arr()];
       break;
     case "declined":
     case "failed":
     case null:
-      candidates = [overseerr()];
+      service = [overseerr()];
       break;
     default:
-      candidates = [];
+      service = [];
   }
-  return candidates.filter((l): l is MediaLink => l != null);
+  // Watch links whenever a media-server target is present, regardless of state.
+  const watch = [plex(), jellyfin()];
+  return [...service, ...watch].filter((l): l is MediaLink => l != null);
 }

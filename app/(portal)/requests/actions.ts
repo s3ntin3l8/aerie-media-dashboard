@@ -9,9 +9,9 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { getSessionUser } from "@/lib/session";
 import { getServiceSecret } from "@/lib/integrations/registry";
-import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
+import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, sonarrSeasonQuality, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
 import { QUALITY_PROFILES } from "@/lib/categories";
-import type { AppUser, DiscoverItem, QualityProfile, RequestStatus } from "@/lib/types";
+import type { AppUser, DiscoverItem, QualityProfile, RequestStatus, SeasonQuality } from "@/lib/types";
 
 async function overseerrOn(): Promise<boolean> {
   return (await getServiceSecret("overseerr")) != null;
@@ -181,6 +181,15 @@ export async function editRequest(id: string, seasons: number[], quality?: strin
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Could not update" };
   }
+}
+
+/**
+ * Per-season downloaded quality for an available series, by its Sonarr id
+ * (MediaRequest.arrId). Lazy-loaded by the detail modal; empty on missing config.
+ */
+export async function getSeasonQuality(seriesArrId: number): Promise<SeasonQuality[]> {
+  if (!seriesArrId || !(await getServiceSecret("sonarr"))) return [];
+  return sonarrSeasonQuality(seriesArrId).catch(() => []);
 }
 
 /** Fetch the user's Plex watchlist for the request modal. */
