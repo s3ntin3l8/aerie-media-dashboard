@@ -2,7 +2,7 @@
 // ============================================================
 // AERIE — left nav rail (56px) + brand badge
 // ============================================================
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Icon, Avatar, RailTip } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
@@ -181,10 +181,114 @@ function RailCtrl({ icon, label, onClick, kbd, active }: { icon: string; label: 
   );
 }
 
+// The account icon (name + photo) doubles as the trigger for a small popover menu
+// holding the Sign-out action — instead of a standalone rail button. Closes on
+// outside-click / Escape, and suppresses portal keyboard shortcuts while open.
+function RailAccountMenu({ name, email, avatar }: { name: string; email?: string; avatar?: string }) {
+  const { signOut, setModalOpen } = usePortal();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => setOpen(false), []);
+
+  useEffect(() => {
+    setModalOpen(open);
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, close, setModalOpen]);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", display: "flex", marginTop: 2 }}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Account: ${name}${email ? ` (${email})` : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", display: "flex" }}
+      >
+        <Avatar name={name} src={avatar} size={32} you />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: "absolute",
+            left: 50,
+            bottom: 0,
+            minWidth: 200,
+            padding: 6,
+            background: "var(--surface-container-highest)",
+            color: "var(--on-surface)",
+            border: "1px solid var(--outline-variant)",
+            borderRadius: "var(--radius-md)",
+            boxShadow: "var(--shadow-lg)",
+            zIndex: 250,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px" }}>
+            <Avatar name={name} src={avatar} size={32} you />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+              {email && (
+                <div style={{ fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {email}
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ height: 1, background: "var(--outline-variant)", margin: "4px 0" }} />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              close();
+              signOut();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              width: "100%",
+              padding: "8px 10px",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              background: "transparent",
+              color: "var(--on-surface)",
+              fontSize: 13,
+              cursor: "pointer",
+              transition: "background .15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--surface-container-high) 70%, transparent)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            <Icon name="logout" size={18} />
+            <span>Sign out</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Rail() {
   const router = useRouter();
   const pathname = usePathname();
-  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, signOut, favorites, lastOpened } = usePortal();
+  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, favorites, lastOpened } = usePortal();
   const { services, requests, visibility, users } = useData();
 
   const me = user;
@@ -268,12 +372,7 @@ export function Rail() {
           />
         )}
         <RailCtrl icon={theme === "dark" ? "light_mode" : "dark_mode"} label="Toggle theme" onClick={toggleTheme} kbd="⌘D" />
-        <RailCtrl icon="logout" label="Sign out" onClick={signOut} />
-        <RailTip label={`${me.name}${me.email ? ` · ${me.email}` : ""}`}>
-          <div style={{ marginTop: 2, cursor: "pointer" }}>
-            <Avatar name={me.name} src={myAvatar} size={32} you />
-          </div>
-        </RailTip>
+        <RailAccountMenu name={me.name} email={me.email} avatar={myAvatar} />
       </div>
     </aside>
   );
