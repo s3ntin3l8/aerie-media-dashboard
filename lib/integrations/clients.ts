@@ -55,6 +55,12 @@ export function bustCache(key: string): void {
 export function clearCache(): void {
   ttlCache.clear();
   ttlInflight.clear();
+  // Module-level singletons (not in ttlCache) — reset for deterministic tests.
+  enrichCache.clear();
+  qualityProfilesCache = null;
+  movieProfilesCache = null;
+  tvProfilesCache = null;
+  movieIndexCache = null;
 }
 
 // ── Gatus — per-service health + heartbeat ─────────────────

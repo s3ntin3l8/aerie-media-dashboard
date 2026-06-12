@@ -72,7 +72,11 @@ describe("crypto", () => {
 
     it("rejects tampered ciphertext", () => {
       const enc = encrypt("secret");
-      const tampered: Encrypted = { ...enc, ciphertext: enc.ciphertext.replace(/^./, "Z") };
+      // Flip the first base64 char to a guaranteed-different one (the random IV means
+      // it could already be any char, so don't hard-code the replacement — else the
+      // "tampered" value occasionally equals the original and the test flakes).
+      const repl = enc.ciphertext[0] === "Z" ? "Y" : "Z";
+      const tampered: Encrypted = { ...enc, ciphertext: repl + enc.ciphertext.slice(1) };
       expect(() => decrypt(tampered)).toThrow();
     });
 
