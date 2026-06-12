@@ -75,6 +75,26 @@ export function capabilitySources(capability: Capability): string[] {
 }
 
 /**
+ * Resolve a source-tagged item list for a chosen source.
+ * - A specific `source` → only that source's items.
+ * - `Auto` (empty/undefined) with `mediaPriority` → the first priority source
+ *   present wins for those "media" tags; any item whose tag is NOT in
+ *   `mediaPriority` (e.g. books/audiobooks) is always kept. This reproduces the
+ *   server cascade (Tautulli/Plex wins; books appended) for `library`/`recent`.
+ * - `Auto` with no `mediaPriority` → every item (a true merge, e.g. now-playing).
+ */
+export function resolveBySource<T extends { source?: string }>(
+  items: T[],
+  source: string | undefined,
+  mediaPriority: string[] = [],
+): T[] {
+  if (source) return items.filter((i) => i.source === source);
+  if (mediaPriority.length === 0) return items;
+  const winner = mediaPriority.find((m) => items.some((i) => i.source === m));
+  return items.filter((i) => i.source === winner || !mediaPriority.includes(i.source ?? ""));
+}
+
+/**
  * Options for a widget's source `<select>`: an "Auto" entry plus every source
  * whose backing service is present in `services` (the configured/active set).
  * If nothing is configured, only "Auto" is returned.

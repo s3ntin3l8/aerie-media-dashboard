@@ -96,15 +96,19 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     desc: "Movie, show and music counts with weekly deltas.",
     defaultW: 12, defaultH: 3, minW: 3, minH: 2, maxW: 12, maxH: 4,
     settings: [
+      { key: "source", label: "Data source", type: "source", capability: "library", hint: "Auto prefers Plex (Tautulli), then Jellyfin." },
       { key: "libraryIds", label: "Visible cards", type: "libraryIds", hint: "All on by default — toggle off to hide." },
     ],
-    render: (_c, s) => <LibraryStats fill visibleIds={s.libraryIds as string | undefined} />,
+    render: (_c, s) => <LibraryStats fill visibleIds={s.libraryIds as string | undefined} source={s.source as string | undefined} />,
   },
   nowPlaying: {
     type: "nowPlaying", name: "Now Playing", icon: "play_circle", accent: "var(--primary)", group: "Streaming",
     desc: "Live sessions — progress, device, codec and transcode state.",
     defaultW: 8, defaultH: 11, minW: 4, minH: 5, maxW: 12, maxH: 18,
-    render: (c, _s) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} onSelect={c.onSelectMedia} />,
+    settings: [
+      { key: "source", label: "Data source", type: "source", capability: "nowPlaying", hint: "Auto shows every media server." },
+    ],
+    render: (c, s) => <NowPlayingPanel fill role={c.role} onAll={() => c.onNavigate("/streams")} onSelect={c.onSelectMedia} source={s.source as string | undefined} />,
   },
   serviceTiles: {
     type: "serviceTiles", name: "Services", icon: "apps", accent: "var(--on-surface-variant)", group: "Services",
@@ -144,6 +148,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     snapH: (h) => posterSnapH(h, 5, 150),
     settings: [
       { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "source", label: "Data source", type: "source", capability: "recent", hint: "Auto prefers Plex (Tautulli), then Jellyfin." },
       { key: "limit", label: "Items to show", type: "count", min: 3, max: 24, hint: "Auto = show all matching items" },
       { key: "mediaKind", label: "Filter by type", type: "select", options: [
         { value: "", label: "All types" },
@@ -152,7 +157,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
         { value: "track", label: "Music" },
       ]},
     ],
-    render: (c, s) => <RecentlyAdded fill limit={s.limit != null ? Number(s.limit) : undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} onSelect={c.onSelectMedia} />,
+    render: (c, s) => <RecentlyAdded fill limit={s.limit != null ? Number(s.limit) : undefined} mediaKind={s.mediaKind as string | undefined} title={s.title as string | undefined} source={s.source as string | undefined} onSelect={c.onSelectMedia} />,
   },
   upcoming: {
     type: "upcoming", name: "Coming Soon", icon: "event_upcoming", accent: "var(--originator-court)", group: "Streaming",

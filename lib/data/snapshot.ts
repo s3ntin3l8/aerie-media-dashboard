@@ -67,14 +67,21 @@ import {
   type Nzbhydra2Stats,
 } from "@/lib/integrations/clients";
 import { env } from "@/lib/env";
+import { resolveBySource } from "@/lib/widgets/capabilities";
 
 export interface Snapshot {
   services: Service[];
   nowPlaying: NowPlaying[];
   requests: MediaRequest[];
   users: User[];
+  /** Auto-resolved library cards (Tautulli/Plex wins for media; books appended). */
   library: LibraryStat[];
+  /** Every configured source's library cards, tagged with `source` (for per-widget source picking). */
+  libraryAll: LibraryStat[];
+  /** Auto-resolved recently-added (Tautulli/Plex wins, else Jellyfin). */
   recent: RecentItem[];
+  /** Every configured source's recently-added items, tagged with `source`. */
+  recentAll: RecentItem[];
   queue: QueueItem[];
   plays24h: number[];
   /** aggregate live streaming bandwidth (Mbps), or null when Tautulli is unconfigured */
@@ -438,26 +445,27 @@ export async function getSnapshot(): Promise<Snapshot> {
   );
   if (PERF) console.log(`[perf] quota-wave (${members.length} members): ${Date.now() - tQuota}ms | getSnapshot TOTAL: ${Date.now() - tStart}ms`);
 
-  // ── library: Tautulli (Plex) sections win; fall back to Jellyfin so a Jellyfin-only
-  // deployment still gets library counts. 24h-plays row is Tautulli-only. ──
-  const baseLibs = ttLibs && ttLibs.length > 0 ? ttLibs : (jfLibs ?? []);
-  const mediaLibs: LibraryStat[] =
-    baseLibs.length > 0
-      ? ttLibs && ttLibs.length > 0
-        ? [...baseLibs, { id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now` }]
-        : baseLibs
-      : [];
-  // Append LazyLibrarian on-disk counts (audiobooks/ebooks) and Listenarr's library count so
-  // a books deployment still gets library cards; the headline totals / wanted / authors live
-  // in the dedicated LazyLibrarian / Listenarr widgets.
-  const library: LibraryStat[] = [
-    ...mediaLibs,
-    ...(llStats ? lazylibrarianLibraryStats(llStats) : []),
-    ...(listenarrData ? listenarrLibraryStats(listenarrData) : []),
+  // ── library: collect every configured source, tagged with `source` so a widget
+  // can pick one. `library` is the Auto-resolved view (Tautulli/Plex wins for media;
+  // Jellyfin only when Plex has none; books/audiobooks always appended) for naive
+  // consumers; `libraryAll` keeps every source. 24h-plays row is Tautulli-only. ──
+  const libraryAll: LibraryStat[] = [
+    ...(ttLibs ?? []).map((c) => ({ ...c, source: "tautulli" })),
+    ...(ttLibs && ttLibs.length > 0
+      ? [{ id: "plays", label: "Plays 24h", count: (ttPlays?.total ?? 0).toLocaleString("en-US"), icon: "play_arrow", delta: `${nowPlaying.length} active now`, source: "tautulli" }]
+      : []),
+    ...(jfLibs ?? []).map((c) => ({ ...c, source: "jellyfin" })),
+    ...(llStats ? lazylibrarianLibraryStats(llStats).map((c) => ({ ...c, source: "lazylibrarian" })) : []),
+    ...(listenarrData ? listenarrLibraryStats(listenarrData).map((c) => ({ ...c, source: "listenarr" })) : []),
   ];
+  const library: LibraryStat[] = resolveBySource(libraryAll, "", ["tautulli", "jellyfin"]);
 
-  // recent: prefer Tautulli (Plex); fall back to Jellyfin when Plex has none.
-  const recent: RecentItem[] = ttRecent && ttRecent.length > 0 ? ttRecent : (jfRecent ?? []);
+  // recent: collect Tautulli + Jellyfin tagged; `recent` is the Auto winner (Plex, else Jellyfin).
+  const recentAll: RecentItem[] = [
+    ...(ttRecent ?? []).map((r) => ({ ...r, source: "tautulli" })),
+    ...(jfRecent ?? []).map((r) => ({ ...r, source: "jellyfin" })),
+  ];
+  const recent: RecentItem[] = resolveBySource(recentAll, "", ["tautulli", "jellyfin"]);
 
   // Rolling 24h play activity, bucketed hourly by Tautulli history (empty until configured).
   const plays24h: number[] = ttPlays?.hourly ?? [];
@@ -496,7 +504,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     : null;
 
   const snapshot: Snapshot = {
-    services, nowPlaying, requests, users, library, recent, queue, plays24h, bandwidth,
+    services, nowPlaying, requests, users, library, libraryAll, recent, recentAll, queue, plays24h, bandwidth,
     storage, issues, arrHealth: arrHealthIssues, upcoming, downloads, topStats,
     groups, visibility, adminGroup: env.adminGroup, metrics: metricsResult ?? null,
     metricsSource, prometheusConfigured: promOn, beszelConfigured: beszelOn, beszelSystemId,
