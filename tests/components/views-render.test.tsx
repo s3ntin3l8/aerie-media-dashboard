@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
 // Integration smoke: render the big authenticated views with a realistic snapshot so their
@@ -35,7 +35,7 @@ const metrics = {
 const service = { id: "sonarr", name: "Sonarr", cat: "automation", icon: "dns", host: "sonarr.test", scheme: "https", status: "up", uptime: 99.9, ms: 12, beats: new Array(30).fill(1), msHistory: [10, 12], active: true, embeddable: false, keepAlive: false };
 
 const SNAP = {
-  services: [service], allServices: [service], users: [{ id: "u1", name: "Ada", email: "a@x", role: "admin", linked: true }],
+  services: [service], allServices: [service], users: [{ id: "u1", name: "Ada", email: "a@x", role: "admin", linked: true, groups: ["admins"] }],
   groups: [{ name: "admins", label: "Admins" }, { name: "friends", label: "Friends" }],
   visibility: [], adminGroup: "admins",
   metrics, metricsSource: "prometheus", prometheusConfigured: true, beszelConfigured: false, beszelSystemId: null,
@@ -61,6 +61,15 @@ describe("view smoke renders", () => {
   it("Admin renders without crashing and shows the managed service", () => {
     const { container } = render(<Admin />);
     expect(container.textContent).toBeTruthy();
+    expect(screen.getAllByText(/Sonarr/i).length).toBeGreaterThan(0);
+  });
+
+  it("Admin renders each tab (services → members → visibility)", () => {
+    render(<Admin />);
+    fireEvent.click(screen.getByText("Members"));
+    expect(screen.getByText("Ada")).toBeInTheDocument(); // member row
+    fireEvent.click(screen.getByText("Visibility"));
+    // visibility matrix lists the service + a group column
     expect(screen.getAllByText(/Sonarr/i).length).toBeGreaterThan(0);
   });
 
