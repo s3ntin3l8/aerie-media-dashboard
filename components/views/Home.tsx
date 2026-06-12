@@ -17,7 +17,7 @@ import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
 import { CardSettingsModal } from "@/components/modals/CardSettingsModal";
 import { RequestModal } from "@/components/modals/RequestModal";
 import { UpcomingDetailModal } from "@/components/modals/UpcomingDetailModal";
-import { compactAll, type Tile } from "@/components/portal/gridLayout";
+import { compactAll, migrateLayout, type Tile } from "@/components/portal/gridLayout";
 import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, resolveSettings, type WidgetCtx } from "@/components/portal/widgetCatalog";
 import { setDashboardsAction } from "@/app/(portal)/actions";
 import { submitRequest, resolveDiscoverItem } from "@/app/(portal)/requests/actions";
@@ -164,8 +164,8 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   // Both role layouts live in one store; setLayout persists the whole store so a
   // member's arrangement survives while an admin edits theirs (and vice-versa).
   const [store, setStore] = useState<Record<Role, Tile[]>>(() => ({
-    admin: initialDashboards?.admin?.length ? initialDashboards.admin : defaultLayout("admin"),
-    user: initialDashboards?.user?.length ? initialDashboards.user : defaultLayout("user"),
+    admin: migrateLayout(initialDashboards?.admin?.length ? initialDashboards.admin : defaultLayout("admin")),
+    user: migrateLayout(initialDashboards?.user?.length ? initialDashboards.user : defaultLayout("user")),
   }));
   const layout = store[role] || [];
 

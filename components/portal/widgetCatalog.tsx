@@ -27,7 +27,7 @@ import {
   DownloadsPanel,
   DiscoverFeedPanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, ProwlarrWidget, AgregarrWidget, BazarrWidget, Nzbhydra2Widget, LazyLibrarianWidget, ListenarrWidget, QbittorrentWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, IndexersWidget, AgregarrWidget, BazarrWidget, BooksWidget, QbittorrentWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -234,11 +234,14 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
     render: (_c, _s) => <WizarrWidget fill />,
   },
-  prowlarr: {
-    type: "prowlarr", name: "Indexers", icon: "search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
-    desc: "Prowlarr indexer health plus total queries, grabs and failures.",
+  indexers: {
+    type: "indexers", name: "Indexers", icon: "search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
+    desc: "Indexer health and grab/query stats from Prowlarr or NZBHydra2.",
     defaultW: 3, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 6,
-    render: (_c, _s) => <ProwlarrWidget fill />,
+    settings: [
+      { key: "source", label: "Data source", type: "source", capability: "indexers", hint: "Auto prefers Prowlarr, then NZBHydra2." },
+    ],
+    render: (_c, s) => <IndexersWidget fill source={s.source as string | undefined} />,
   },
   agregarr: {
     type: "agregarr", name: "Collections", icon: "collections", accent: "var(--originator-court)", group: "Automation", adminOnly: true,
@@ -252,35 +255,19 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     defaultW: 3, defaultH: 5, minW: 3, minH: 3, maxW: 8, maxH: 6,
     render: (_c, _s) => <BazarrWidget fill />,
   },
-  nzbhydra: {
-    type: "nzbhydra", name: "NZBHydra2", icon: "manage_search", accent: "var(--originator-third-party)", group: "Automation", adminOnly: true,
-    desc: "NZBHydra2 usenet indexer health — enabled, disabled and errored indexers.",
-    defaultW: 3, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
-    render: (_c, _s) => <Nzbhydra2Widget fill />,
-  },
-  lazylibrarian: {
-    type: "lazylibrarian", name: "LazyLibrarian", icon: "menu_book", accent: "var(--originator-third-party)", group: "Automation",
-    desc: "Book & audiobook pipeline — total books, authors, wanted and snatched counts.",
+  books: {
+    type: "books", name: "Books", icon: "menu_book", accent: "var(--originator-third-party)", group: "Automation",
+    desc: "Book & audiobook pipeline stats from LazyLibrarian or Listenarr.",
     defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
     settings: [
-      { key: "showBooks", label: "Books total", type: "toggle", default: true },
+      { key: "source", label: "Data source", type: "source", capability: "books", hint: "Auto prefers LazyLibrarian, then Listenarr." },
+      { key: "showBooks", label: "Books / audiobooks total", type: "toggle", default: true },
       { key: "showAuthors", label: "Authors", type: "toggle", default: true },
       { key: "showWanted", label: "Wanted", type: "toggle", default: true },
-      { key: "showSnatched", label: "Snatched", type: "toggle", default: false },
+      { key: "showMonitored", label: "Monitored (Listenarr)", type: "toggle", default: true },
+      { key: "showSnatched", label: "Snatched (LazyLibrarian)", type: "toggle", default: false },
     ],
-    render: (_c, s) => <LazyLibrarianWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showWanted={s.showWanted as boolean} showSnatched={s.showSnatched as boolean} />,
-  },
-  listenarr: {
-    type: "listenarr", name: "Listenarr", icon: "headphones", accent: "var(--originator-third-party)", group: "Automation",
-    desc: "Audiobook library pipeline — audiobooks, authors, monitored and wanted counts.",
-    defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
-    settings: [
-      { key: "showBooks", label: "Audiobooks total", type: "toggle", default: true },
-      { key: "showAuthors", label: "Authors", type: "toggle", default: true },
-      { key: "showMonitored", label: "Monitored", type: "toggle", default: true },
-      { key: "showWanted", label: "Wanted", type: "toggle", default: true },
-    ],
-    render: (_c, s) => <ListenarrWidget fill showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showMonitored={s.showMonitored as boolean} showWanted={s.showWanted as boolean} />,
+    render: (_c, s) => <BooksWidget fill source={s.source as string | undefined} showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showWanted={s.showWanted as boolean} showMonitored={s.showMonitored as boolean} showSnatched={s.showSnatched as boolean} />,
   },
   qbittorrent: {
     type: "qbittorrent", name: "qBittorrent", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation",
