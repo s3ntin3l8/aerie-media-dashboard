@@ -27,11 +27,21 @@ AERIE **always requires authentication**. There are two modes:
 ### 2. Emit a groups claim (for the admin role)
 
 Role is derived from group membership. Configure your IdP to emit a `groups` claim (the claim
-name is configurable via `OIDC_GROUPS_CLAIM`). Members of `AERIE_ADMIN_GROUP` (default `admins`)
-get the `admin` role; everyone else is `user`.
+name is configurable via `OIDC_GROUPS_CLAIM`). Members of `AERIE_ADMIN_GROUP` get the `admin`
+role; everyone else is `user`.
+
+`AERIE_ADMIN_GROUP` can be **any existing group name in your IdP** — you don't have to create a
+dedicated `admins` group. To gate admin on, say, your existing `Plex admins` group, just set
+`AERIE_ADMIN_GROUP=Plex admins`.
+
+> **Matching caveats.** The group name is matched **exactly and case-sensitively** — `plex admins`
+> will *not* match a group named `Plex admins`. Group names containing spaces only work when the
+> claim is emitted as a **list/array** (the Authentik mapping below returns `list(...)`, so it is);
+> a scope mapping that returns a single delimited *string* gets split on whitespace/commas, which
+> would break a multi-word name like `Plex admins`.
 
 If your IdP can't emit groups (e.g. Google), use `AERIE_ADMIN_EMAILS` instead — a comma-separated
-allow-list of emails that get admin.
+allow-list of emails that get admin (matched case-insensitively).
 
 > **Authentik example.** The `groups` claim isn't emitted by default. Create a **Scope Mapping**
 > (Customisation → Property Mappings) named `groups`, scope name `groups`, expression:
@@ -49,7 +59,7 @@ OIDC_CLIENT_SECRET=<client secret>
 OIDC_PROVIDER_NAME=Authentik          # login button: "Continue with Authentik"
 OIDC_PROVIDER_ID=oidc                 # callback path segment
 AUTH_SECRET=$(openssl rand -base64 32)
-AERIE_ADMIN_GROUP=admins
+AERIE_ADMIN_GROUP=admins              # any IdP group name, e.g. "Plex admins" (exact, case-sensitive)
 # AERIE_ADMIN_EMAILS=you@example.com  # alternative to groups
 # AUTH_SESSION_MAX_AGE=86400          # Aerie session lifetime (s); default 24h
 ```
