@@ -11,7 +11,7 @@ vi.mock("@/components/portal/PortalProvider", () => ({
 }));
 
 import { useData } from "@/components/portal/DataProvider";
-import { UpcomingPanel } from "@/components/panels";
+import { UpcomingPanel, RecentlyAdded } from "@/components/panels";
 import { UpcomingDetailModal } from "@/components/modals/UpcomingDetailModal";
 
 const movie: UpcomingItem = {
@@ -47,6 +47,20 @@ describe("UpcomingPanel — onSelect", () => {
   });
 });
 
+describe("RecentlyAdded — onSelect", () => {
+  beforeEach(() => vi.mocked(useData).mockReset());
+
+  it("opens the detail hint for a movie tile (carries tmdbId)", () => {
+    vi.mocked(useData).mockReturnValue({
+      recent: [{ id: "ra-0", title: "Fight Club", kind: "movie", year: 1999, cat: "stream", tmdbId: 550 }],
+    } as never);
+    const onSelect = vi.fn();
+    render(<RecentlyAdded onSelect={onSelect} />);
+    fireEvent.click(screen.getByText("Fight Club"));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ kind: "movie", tmdbId: 550 }));
+  });
+});
+
 describe("UpcomingDetailModal", () => {
   it("renders the rich detail fields", () => {
     render(<UpcomingDetailModal item={movie} onClose={vi.fn()} onOpenService={vi.fn()} />);
@@ -69,5 +83,31 @@ describe("UpcomingDetailModal", () => {
     render(<UpcomingDetailModal item={noSlug} onClose={vi.fn()} onOpenService={onOpenService} />);
     fireEvent.click(screen.getByRole("button", { name: /Open in Radarr/i }));
     expect(onOpenService).toHaveBeenCalledWith("radarr", undefined);
+  });
+
+  it("renders release-date rows, studio and download/monitor badges for a movie", () => {
+    const rich: UpcomingItem = {
+      ...movie,
+      studio: "Legendary",
+      monitored: true,
+      hasFile: true,
+      inCinemas: "2024-03-01T00:00:00Z",
+      digitalRelease: "2024-04-16T00:00:00Z",
+      physicalRelease: "2024-05-14T00:00:00Z",
+    };
+    render(<UpcomingDetailModal item={rich} onClose={vi.fn()} onOpenService={vi.fn()} />);
+    expect(screen.getByText("In cinemas")).toBeInTheDocument();
+    expect(screen.getByText("Digital")).toBeInTheDocument();
+    expect(screen.getByText("Physical")).toBeInTheDocument();
+    expect(screen.getByText("Legendary")).toBeInTheDocument();
+    expect(screen.getByText("Downloaded")).toBeInTheDocument();
+    expect(screen.getByText("Monitored")).toBeInTheDocument();
+  });
+
+  it("shows the empty-state synopsis and a Close footer when no overview", () => {
+    const bare: UpcomingItem = { ...movie, overview: undefined };
+    render(<UpcomingDetailModal item={bare} onClose={vi.fn()} onOpenService={vi.fn()} />);
+    expect(screen.getByText("No synopsis available.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });

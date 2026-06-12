@@ -135,6 +135,22 @@ describe("mediaLinks — roles & decoupled watch", () => {
   });
 });
 
+describe("mediaLinks — *arr path extraction edge cases", () => {
+  it("drops an unparseable serviceUrl (embed opens the service root)", () => {
+    const l = mediaLinks({ kind: "movie", state: "approved", tmdbId: 1, serviceUrl: "not a url" }, fullCtx);
+    const arr = l.find((x) => x.svc === "radarr");
+    expect(arr).toMatchObject({ kind: "embed" });
+    expect((arr as { deepPath?: string }).deepPath).toBeUndefined();
+  });
+
+  it("strips an unsafe path out of serviceUrl", () => {
+    // a serviceUrl whose path contains a colon is rejected by sanitizeEmbedPath
+    const l = mediaLinks({ kind: "series", state: "processing", tmdbId: 1, serviceUrl: "http://sonarr/series/a:b" }, fullCtx);
+    const arr = l.find((x) => x.svc === "sonarr");
+    expect((arr as { deepPath?: string }).deepPath).toBeUndefined();
+  });
+});
+
 describe("linkCtxFromServices", () => {
   it("builds active/embeddable sets and overseerr/jellyfin bases from the services list", () => {
     const ctx = linkCtxFromServices([

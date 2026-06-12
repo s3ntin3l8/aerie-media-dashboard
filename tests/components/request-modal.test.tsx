@@ -17,6 +17,7 @@ vi.mock("@/app/(portal)/requests/actions", () => ({
 }));
 
 import { RequestModal } from "@/components/modals/RequestModal";
+import type { MediaRequest } from "@/lib/types";
 
 const movie = (state: DiscoverItem["state"]): DiscoverItem => ({
   id: "603",
@@ -26,6 +27,18 @@ const movie = (state: DiscoverItem["state"]): DiscoverItem => ({
   rating: 8,
   state,
   overview: "Spice.",
+});
+
+const request = (over: Partial<MediaRequest> = {}): MediaRequest => ({
+  id: "os-1",
+  title: "Dune",
+  kind: "movie",
+  year: 2021,
+  user: "u1",
+  status: "pending",
+  requested: "1 Jan",
+  overview: "Spice.",
+  ...over,
 });
 
 const noop = vi.fn();
@@ -51,5 +64,33 @@ describe("RequestModal — header + footer behaviour", () => {
     expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
     // a baseline Close still lets the user dismiss it
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+});
+
+describe("RequestModal — review & detail modes", () => {
+  it("review mode shows Approve/Decline for a pending request", async () => {
+    render(<RequestModal open mode="review" request={request({ status: "pending" })} onClose={noop} onSubmit={noop} onAct={noop} />);
+    expect(await screen.findByRole("heading", { name: "Review request" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Decline/ })).toBeInTheDocument();
+  });
+
+  it("review mode shows only Close for a non-actionable (available) request", async () => {
+    render(<RequestModal open mode="review" request={request({ status: "available" })} onClose={noop} onSubmit={noop} onAct={noop} />);
+    await screen.findByRole("heading", { name: "Review request" });
+    expect(screen.queryByRole("button", { name: /Approve/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("detail mode is read-only (no note field, Close footer)", async () => {
+    render(<RequestModal open mode="detail" request={request({ status: "available" })} onClose={noop} onSubmit={noop} onAct={noop} />);
+    expect(await screen.findByRole("heading", { name: "Request details" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Overseerr/)).not.toBeInTheDocument();
+  });
+
+  it("renders a 'Watch on Plex' action when the request has a Plex url", async () => {
+    render(<RequestModal open mode="detail" request={request({ status: "available", plexUrl: "https://app.plex.tv/x" })} onClose={noop} onSubmit={noop} onAct={noop} />);
+    expect(await screen.findByRole("link", { name: /Watch on Plex/ })).toBeInTheDocument();
   });
 });
