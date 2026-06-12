@@ -11,6 +11,7 @@
 // ============================================================
 import React from "react";
 import type { Role, Service, DiscoverItem, UpcomingItem, MediaKind } from "@/lib/types";
+import type { Capability } from "@/lib/widgets/capabilities";
 import { compactAll, findSlot, type Tile, type WidgetMeta } from "@/components/portal/gridLayout";
 import {
   CentralServices,
@@ -43,6 +44,7 @@ export interface WidgetCtx {
 export type WidgetSettingSpec =
   | { key: string; label: string; type: "count"; hint?: string; default?: number; min?: number; max?: number }
   | { key: string; label: string; type: "select"; hint?: string; default?: string; options: { value: string; label: string }[] }
+  | { key: string; label: string; type: "source"; hint?: string; capability: Capability }
   | { key: string; label: string; type: "text"; hint?: string; default?: string }
   | { key: string; label: string; type: "toggle"; hint?: string; default?: boolean }
   | { key: string; label: string; type: "links"; hint?: string }

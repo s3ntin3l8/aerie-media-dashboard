@@ -12,6 +12,7 @@ import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 import type { Tile } from "@/components/portal/gridLayout";
 import { Icon } from "@/components/primitives";
 import { useData } from "@/components/portal/DataProvider";
+import { sourceOptions } from "@/lib/widgets/capabilities";
 
 interface CardSettingsModalProps {
   open: boolean;
@@ -107,6 +108,24 @@ export function CardSettingsModal({ open, onClose, tile, onSave }: CardSettingsM
                   onChange={(e) => setDraft((d) => ({ ...d, [spec.key]: e.target.value }))}
                 >
                   {spec.options.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            );
+          }
+
+          if (spec.type === "source") {
+            const options = sourceOptions(spec.capability, services);
+            return (
+              <Field key={spec.key} label={spec.label} hint={spec.hint}>
+                <select
+                  className="input"
+                  style={fieldInput}
+                  value={draft[spec.key] ?? ""}
+                  onChange={(e) => setDraft((d) => ({ ...d, [spec.key]: e.target.value }))}
+                >
+                  {options.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
