@@ -45,6 +45,16 @@ describe("Requests view", () => {
     expect(screen.getByText("2160p")).toBeInTheDocument();
   });
 
+  it("groups the status + quality badges in their own row (not the title row)", () => {
+    render(<Requests />);
+    const quality = screen.getByText("2160p");
+    const badgeRow = quality.parentElement!;
+    // The status Pill sits in the same dedicated badges row as the quality badge…
+    expect(badgeRow.textContent).toContain("Available");
+    // …which is not the title element's container, so a long title can't clip them.
+    expect(screen.getByText("Dune").parentElement).not.toBe(badgeRow);
+  });
+
   it("opens the read-only detail modal when a member clicks their card", async () => {
     render(<Requests />);
     fireEvent.click(screen.getByText("Dune"));
