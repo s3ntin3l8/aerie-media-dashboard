@@ -54,6 +54,7 @@ import {
   matchOverseerrUserId,
   bustCache,
   clearCache,
+  tmdbFromGuids,
   type OverseerrUser,
 } from "@/lib/integrations/clients";
 
@@ -110,6 +111,17 @@ function makeTautulliSession(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("tmdbFromGuids", () => {
+  it("extracts the TMDB id from a Plex guids array", () => {
+    expect(tmdbFromGuids(["imdb://tt41021125", "tmdb://7041216", "tvdb://11780710"])).toBe(7041216);
+  });
+  it("returns undefined when absent or malformed", () => {
+    expect(tmdbFromGuids(["imdb://tt1", "tvdb://2"])).toBeUndefined();
+    expect(tmdbFromGuids([])).toBeUndefined();
+    expect(tmdbFromGuids(undefined)).toBeUndefined();
+  });
+});
 
 describe("clients — private helpers via exported functions", () => {
   beforeEach(() => {

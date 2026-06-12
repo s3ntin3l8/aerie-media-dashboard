@@ -54,6 +54,12 @@ export interface NowPlaying {
   kind: MediaKind;
   year?: number;
   ep?: string;
+  /** TMDB id (movies); for series resolve the show via grandparentRatingKey. */
+  tmdbId?: number;
+  /** Plex rating key of the playing item. */
+  ratingKey?: string;
+  /** Plex rating key of the show (series), for resolving the show's TMDB id. */
+  grandparentRatingKey?: string;
   user: string;
   src: string;
   device: string;
@@ -304,6 +310,12 @@ export interface RecentItem {
   cat: Category;
   /** proxied cover-art URL (/api/artwork?…), if available */
   art?: string;
+  /** TMDB id (movies); for series resolve the show via grandparentRatingKey. */
+  tmdbId?: number;
+  /** Plex rating key of the added item. */
+  ratingKey?: string;
+  /** Plex rating key of the show (series), for resolving the show's TMDB id. */
+  grandparentRatingKey?: string;
 }
 
 export interface QueueItem {

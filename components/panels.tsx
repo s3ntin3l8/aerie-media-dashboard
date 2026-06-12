@@ -251,7 +251,10 @@ const SeeAll = ({ onClick }: { onClick?: () => void }) => (
 // ── NOW PLAYING ───────────────────────────────────────────
 
 // Inner row extracted so the hook can be called once per stream item.
-function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/types").NowPlaying; i: number; big?: boolean; role: Role; allServices: Service[]; users: import("@/lib/types").User[] }) {
+/** Hint for opening a library item's detail modal (Now Playing / Recently Added). */
+type SelectMediaHint = { kind: import("@/lib/types").MediaKind; tmdbId?: number; grandparentRatingKey?: string };
+
+function StreamRow({ s, i, big, role, allServices, users, onSelect }: { s: import("@/lib/types").NowPlaying; i: number; big?: boolean; role: Role; allServices: Service[]; users: import("@/lib/types").User[]; onSelect?: (h: SelectMediaHint) => void }) {
   const { cur, pct } = useStreamProgress(s);
   const svc = allServices.find((x) => x.id === s.src);
   const c = catColor("stream");
@@ -260,8 +263,12 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
   // "0" bitrate / "—" codec mean the source doesn't report them (e.g. Audiobookshelf):
   // show only what's real, falling back to the audio codec for audio-only sessions.
   const rateCodec = [s.bitrate !== "0" ? `${s.bitrate} Mbps` : null, s.codec !== "—" ? s.codec : s.audioCodec].filter(Boolean).join(" · ");
+  const canOpen = !!onSelect && (s.kind === "movie" || s.kind === "series");
   return (
-    <div style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none" }}>
+    <div
+      onClick={canOpen ? () => onSelect!({ kind: s.kind, tmdbId: s.tmdbId, grandparentRatingKey: s.grandparentRatingKey }) : undefined}
+      style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none", cursor: canOpen ? "pointer" : "default" }}
+    >
       <span style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 9999, background: accent }} />
       {/* audio covers (ABS books, albums) are square; video posters 2:3 */}
       <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} ratio={s.kind === "track" ? 1 : 1.5} art={s.art} />
@@ -327,7 +334,7 @@ function StreamRow({ s, i, big, role, allServices, users }: { s: import("@/lib/t
   );
 }
 
-export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: boolean; onAll?: () => void; fill?: boolean }) {
+export function NowPlayingPanel({ role, big, onAll, fill, onSelect }: { role: Role; big?: boolean; onAll?: () => void; fill?: boolean; onSelect?: (h: SelectMediaHint) => void }) {
   const { nowPlaying, services: allServices, users } = useData();
   const { user } = usePortal();
   // NOTE: NowPlaying uses Plex/Jellyfin identity, not portal ids — this filter is a
@@ -349,7 +356,7 @@ export function NowPlayingPanel({ role, big, onAll, fill }: { role: Role; big?: 
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {visible.map((s, i) => (
-            <StreamRow key={s.id} s={s} i={i} big={big} role={role} allServices={allServices} users={users} />
+            <StreamRow key={s.id} s={s} i={i} big={big} role={role} allServices={allServices} users={users} onSelect={onSelect} />
           ))}
         </div>
       )}
@@ -1200,7 +1207,7 @@ function PosterStrip({ children }: { children: React.ReactNode }) {
 }
 
 // ── RECENTLY ADDED ─────────────────────────────────────────
-export function RecentlyAdded({ fill, limit, mediaKind, title }: { fill?: boolean; limit?: number; mediaKind?: string; title?: string } = {}) {
+export function RecentlyAdded({ fill, limit, mediaKind, title, onSelect }: { fill?: boolean; limit?: number; mediaKind?: string; title?: string; onSelect?: (h: SelectMediaHint) => void } = {}) {
   const { recent } = useData();
   const filtered = mediaKind && mediaKind.length > 0 ? recent.filter((r) => r.kind === mediaKind) : recent;
   const displayItems = limit != null ? filtered.slice(0, limit) : filtered;
@@ -1210,13 +1217,20 @@ export function RecentlyAdded({ fill, limit, mediaKind, title }: { fill?: boolea
         <Empty icon="new_releases" line="Nothing added yet" sub="Recently added media will appear here." />
       ) : (
         (() => {
-          const renderItem = (r: (typeof displayItems)[number]) => (
-            <div key={r.id} style={{ width: 76, flexShrink: 0 }}>
+          const renderItem = (r: (typeof displayItems)[number]) => {
+            const canOpen = !!onSelect && (r.kind === "movie" || r.kind === "series");
+            return (
+            <div
+              key={r.id}
+              onClick={canOpen ? () => onSelect!({ kind: r.kind, tmdbId: r.tmdbId, grandparentRatingKey: r.grandparentRatingKey }) : undefined}
+              style={{ width: 76, flexShrink: 0, cursor: canOpen ? "pointer" : "default" }}
+            >
               <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} art={r.art} />
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{r.year}</div>
             </div>
-          );
+            );
+          };
           return fill ? <FlowGrid items={displayItems} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
         })()
       )}

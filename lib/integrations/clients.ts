@@ -118,6 +118,9 @@ interface TautulliSession {
   title: string;
   media_type: string;
   year?: string;
+  rating_key?: string | number;
+  grandparent_rating_key?: string | number;
+  guids?: string[];
   parent_title?: string;
   grandparent_title?: string;
   user: string;
@@ -184,6 +187,16 @@ interface TautulliSession {
 
 /** Tautulli encodes booleans as "1"/"0" (sometimes numeric). */
 const ttBool = (v: string | number | undefined): boolean => v === "1" || v === 1;
+
+/** Extract a TMDB id from a Plex/Tautulli guids array, e.g. ["tmdb://1234", …]. */
+export function tmdbFromGuids(guids?: string[]): number | undefined {
+  if (!Array.isArray(guids)) return undefined;
+  for (const g of guids) {
+    const m = /tmdb:\/\/(\d+)/.exec(String(g));
+    if (m) return Number(m[1]);
+  }
+  return undefined;
+}
 /** Strip channel-layout qualifiers, e.g. "5.1(side)" → "5.1". */
 const cleanLayout = (v: string | undefined): string | undefined => v?.replace(/\s*\([^)]*\)\s*/g, "").trim() || undefined;
 
@@ -201,6 +214,11 @@ function mapTautulliSession(s: TautulliSession): NowPlaying {
     kind,
     year: s.year ? Number(s.year) : undefined,
     ep: kind === "series" ? s.title : undefined,
+    // Movie guids carry the movie's TMDB id; an episode's are the episode's, so for
+    // series we resolve the show TMDB lazily from the grandparent rating key.
+    tmdbId: kind === "series" ? undefined : tmdbFromGuids(s.guids),
+    ratingKey: s.rating_key != null ? String(s.rating_key) : undefined,
+    grandparentRatingKey: s.grandparent_rating_key != null ? String(s.grandparent_rating_key) : undefined,
     user: s.user,
     src: "plex",
     device: s.player,
@@ -507,6 +525,9 @@ interface TautulliRecent {
   thumb?: string;
   parent_thumb?: string;
   grandparent_thumb?: string;
+  rating_key?: string | number;
+  grandparent_rating_key?: string | number;
+  guids?: string[];
 }
 
 export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
@@ -528,9 +549,24 @@ export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
         year: it.year ? Number(it.year) : 0,
         cat: "stream" as const,
         art: thumb ? `/api/artwork?svc=tautulli&ref=${encodeURIComponent(thumb)}` : undefined,
+        // Movie guids carry the movie's TMDB id; for a recently-added episode the
+        // grandparent rating key resolves the show TMDB lazily on click.
+        tmdbId: kind === "series" ? undefined : tmdbFromGuids(it.guids),
+        ratingKey: it.rating_key != null ? String(it.rating_key) : undefined,
+        grandparentRatingKey: it.grandparent_rating_key != null ? String(it.grandparent_rating_key) : undefined,
       };
     });
   });
+}
+
+/** Resolve a show/movie TMDB id from a Plex rating key (via Tautulli get_metadata guids). */
+export async function tautulliShowTmdb(ratingKey: number | string): Promise<number | undefined> {
+  const { baseUrl, apiKey } = await creds("tautulli");
+  const data = await fetchJson<{ response?: { data?: { guids?: string[] } } }>(
+    `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_metadata&rating_key=${ratingKey}`,
+    { service: "tautulli", timeoutMs: 8000 },
+  );
+  return tmdbFromGuids(data.response?.data?.guids);
 }
 
 // ── Tautulli — weekly leaderboard (cached) ─────────────────
@@ -1333,6 +1369,23 @@ function mapDiscoverResult(r: OverseerrSearchResult): DiscoverItem {
     serviceUrl: r.mediaInfo?.serviceUrl,
     arrId: r.mediaInfo?.externalServiceId,
   };
+}
+
+/**
+ * Resolve a single DiscoverItem from Overseerr by TMDB id (used when opening the
+ * detail modal from a library widget that only knows the TMDB id). Carries the same
+ * mediaInfo enrichment (state, watch links, arrId) as search results.
+ */
+export async function overseerrMediaByTmdb(tmdbId: number, kind: MediaKind): Promise<DiscoverItem | null> {
+  const { baseUrl, apiKey } = await creds("overseerr");
+  const path = kind === "series" ? "tv" : "movie";
+  const r = await fetchJson<OverseerrSearchResult & { numberOfSeasons?: number }>(
+    `${baseUrl}/api/v1/${path}/${tmdbId}`,
+    { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
+  );
+  const item = mapDiscoverResult({ ...r, id: tmdbId, mediaType: kind === "series" ? "tv" : "movie" });
+  if (kind === "series" && r.numberOfSeasons) item.seasons = r.numberOfSeasons;
+  return item;
 }
 
 export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {

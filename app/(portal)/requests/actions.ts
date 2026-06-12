@@ -9,7 +9,7 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { getSessionUser } from "@/lib/session";
 import { getServiceSecret } from "@/lib/integrations/registry";
-import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, sonarrSeasonQuality, sonarrSeriesMeta, radarrMovieMeta, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
+import { overseerrCreateRequest, overseerrDeleteRequest, overseerrEditRequest, overseerrRequestDetails, overseerrReview, overseerrComment, overseerrUsers, overseerrUserQuota, overseerrMovieProfiles, overseerrTvProfiles, overseerrWatchlist, overseerrMediaByTmdb, sonarrSeasonQuality, sonarrSeriesMeta, radarrMovieMeta, tautulliShowTmdb, matchOverseerrUserId, bustCache } from "@/lib/integrations/clients";
 import { QUALITY_PROFILES } from "@/lib/categories";
 import type { AppUser, DiscoverItem, MediaArrDetail, MediaKind, QualityProfile, RequestStatus, SeasonQuality } from "@/lib/types";
 
@@ -216,6 +216,26 @@ export async function getMediaDetail(input: { tmdbId?: number; kind: MediaKind; 
     return {};
   } catch {
     return {};
+  }
+}
+
+/**
+ * Resolve a library item (Now Playing / Recently Added — which carry only a TMDB id
+ * or a Plex rating key) into a full DiscoverItem so the detail modal can open. For
+ * series without a direct TMDB id, resolve the show's TMDB from the grandparent
+ * rating key via Tautulli. Returns null when Overseerr is off or nothing resolves.
+ */
+export async function resolveDiscoverItem(hint: { kind: MediaKind; tmdbId?: number; grandparentRatingKey?: string }): Promise<DiscoverItem | null> {
+  if (!(await overseerrOn())) return null;
+  try {
+    let tmdbId = hint.tmdbId;
+    if (!tmdbId && hint.kind === "series" && hint.grandparentRatingKey && (await getServiceSecret("tautulli"))) {
+      tmdbId = await tautulliShowTmdb(hint.grandparentRatingKey).catch(() => undefined);
+    }
+    if (!tmdbId) return null;
+    return await overseerrMediaByTmdb(tmdbId, hint.kind);
+  } catch {
+    return null;
   }
 }
 
