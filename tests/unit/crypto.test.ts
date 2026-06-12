@@ -66,7 +66,10 @@ describe("crypto", () => {
   describe("tamper detection", () => {
     it("rejects a tampered authTag", () => {
       const enc = encrypt("secret");
-      const tampered: Encrypted = { ...enc, authTag: enc.authTag.replace(/^./, "Z") };
+      // base64 first char could already be "Z"; flip to a guaranteed-different one
+      // so the "tampered" value is never accidentally equal to the original (flake).
+      const repl = enc.authTag[0] === "Z" ? "Y" : "Z";
+      const tampered: Encrypted = { ...enc, authTag: repl + enc.authTag.slice(1) };
       expect(() => decrypt(tampered)).toThrow();
     });
 
@@ -82,7 +85,8 @@ describe("crypto", () => {
 
     it("rejects a tampered IV", () => {
       const enc = encrypt("secret");
-      const tampered: Encrypted = { ...enc, iv: enc.iv.replace(/^./, "Z") };
+      const repl = enc.iv[0] === "Z" ? "Y" : "Z";
+      const tampered: Encrypted = { ...enc, iv: repl + enc.iv.slice(1) };
       expect(() => decrypt(tampered)).toThrow();
     });
   });
