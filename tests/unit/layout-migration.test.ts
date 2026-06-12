@@ -20,6 +20,12 @@ describe("migrateLayout — deprecated widget types", () => {
     expect(out[1].settings?.source).toBe("listenarr");
   });
 
+  it("rewrites qbittorrent to downloadClient, preserving its toggles", () => {
+    const out = migrateLayout([tile("qbittorrent", { showSeeding: false })]);
+    expect(out[0].type).toBe("downloadClient");
+    expect(out[0].settings).toMatchObject({ source: "qbittorrent", showSeeding: false });
+  });
+
   it("preserves existing settings and an explicit source override", () => {
     const out = migrateLayout([tile("lazylibrarian", { showWanted: false, source: "listenarr" })]);
     expect(out[0].settings).toMatchObject({ showWanted: false, source: "listenarr" });

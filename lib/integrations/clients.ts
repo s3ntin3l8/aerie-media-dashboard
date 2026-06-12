@@ -1760,6 +1760,10 @@ interface NzbgetStatusResponse {
   RemainingSizeMB?: number;
   DownloadPaused?: boolean;
   ServerStandBy?: boolean;
+  DownloadedSizeMB?: number;
+  PostJobCount?: number;
+  FreeDiskSpaceMB?: number;
+  UpTimeSec?: number;
 }
 
 export async function nzbgetStatus(): Promise<NzbgetStatus> {
@@ -1769,6 +1773,10 @@ export async function nzbgetStatus(): Promise<NzbgetStatus> {
     remainingMB: s.RemainingSizeMB ?? 0,
     paused: s.DownloadPaused ?? false,
     standby: s.ServerStandBy ?? true,
+    downloadedMB: s.DownloadedSizeMB ?? 0,
+    postJobs: s.PostJobCount ?? 0,
+    freeDiskMB: s.FreeDiskSpaceMB ?? 0,
+    uptimeSec: s.UpTimeSec ?? 0,
   };
 }
 

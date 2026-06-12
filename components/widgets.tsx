@@ -358,32 +358,51 @@ export function BooksWidget({
   );
 }
 
-// ── QBITTORRENT — download client global stats ─────────────
-// Each metric is independently toggleable via widget settings (see widgetCatalog).
-export function QbittorrentWidget({
+// ── DOWNLOAD CLIENT — qBittorrent or NZBGet (functional merge) ──
+// One "Download Client" widget; the source is picked per-tile (Auto = qBittorrent,
+// then NZBGet). Each client shows its own stat set; toggles only apply to the
+// matching source (usenet has no upload/seeding, torrents have no post-queue).
+export function DownloadClientWidget({
   fill,
+  source,
+  title,
   showDown = true,
   showUp = true,
   showActive = true,
   showSeeding = true,
   showTotal = true,
-}: { fill?: boolean; showDown?: boolean; showUp?: boolean; showActive?: boolean; showSeeding?: boolean; showTotal?: boolean } = {}) {
-  const { qbittorrent: qb } = useData();
-  const anyOn = showDown || showUp || showActive || showSeeding || showTotal;
+  showRemaining = true,
+  showDownloaded = true,
+  showPostJobs = true,
+}: {
+  fill?: boolean; source?: string; title?: string;
+  showDown?: boolean; showUp?: boolean; showActive?: boolean; showSeeding?: boolean; showTotal?: boolean;
+  showRemaining?: boolean; showDownloaded?: boolean; showPostJobs?: boolean;
+} = {}) {
+  const { qbittorrent: qb, nzbgetStatus: nz } = useData();
+  const resolved = source || (qb ? "qbittorrent" : nz ? "nzbget" : "");
+  const live = resolved === "qbittorrent" ? !!qb : resolved === "nzbget" ? !!nz : !!(qb || nz);
+  const num = (n: number) => n.toLocaleString("en-US");
   return (
-    <PanelShell fill={fill} title="qBittorrent" icon="downloading" accent="var(--originator-third-party)" live={!!qb}>
-      {!qb ? (
-        <Empty icon="downloading" line="qBittorrent not connected" sub="Add qBittorrent and store its username:password to see transfer stats." />
-      ) : !anyOn ? (
-        <Empty icon="tune" line="No stats enabled" sub="Turn stats on in this widget's settings." />
-      ) : (
+    <PanelShell fill={fill} title={title && title.length > 0 ? title : "Download Client"} icon="downloading" accent="var(--originator-third-party)" live={live}>
+      {resolved === "qbittorrent" && qb ? (
         <StatRow>
           {showDown && <Metric label="Download" value={fmtBytes(qb.dlSpeed)} unit="/s" icon="arrow_downward" color="var(--primary)" />}
           {showUp && <Metric label="Upload" value={fmtBytes(qb.upSpeed)} unit="/s" icon="arrow_upward" color="var(--on-surface-variant)" />}
-          {showActive && <Metric label="Active" value={qb.downloading.toLocaleString("en-US")} icon="downloading" color="var(--primary)" />}
-          {showSeeding && <Metric label="Seeding" value={qb.seeding.toLocaleString("en-US")} icon="upload" color="var(--on-surface-variant)" />}
-          {showTotal && <Metric label="Total" value={qb.torrents.toLocaleString("en-US")} icon="folder" color="var(--on-surface-variant)" />}
+          {showActive && <Metric label="Active" value={num(qb.downloading)} icon="downloading" color="var(--primary)" />}
+          {showSeeding && <Metric label="Seeding" value={num(qb.seeding)} icon="upload" color="var(--on-surface-variant)" />}
+          {showTotal && <Metric label="Total" value={num(qb.torrents)} icon="folder" color="var(--on-surface-variant)" />}
         </StatRow>
+      ) : resolved === "nzbget" && nz ? (
+        <StatRow>
+          {showDown && <Metric label="Download" value={fmtBytes(nz.downloadRate)} unit="/s" icon="arrow_downward" color="var(--primary)" />}
+          {showRemaining && <Metric label="Remaining" value={fmtBytes(nz.remainingMB * 1e6)} icon="hourglass_top" color={nz.remainingMB > 0 ? "var(--primary)" : "var(--on-surface-variant)"} />}
+          {showDownloaded && <Metric label="Downloaded" value={fmtBytes(nz.downloadedMB * 1e6)} icon="download_done" color="var(--on-surface-variant)" />}
+          {showPostJobs && <Metric label="Post-processing" value={num(nz.postJobs)} icon="build" color={nz.postJobs > 0 ? "var(--amber)" : "var(--on-surface-variant)"} />}
+          <Metric label="Status" value={nz.paused ? "Paused" : nz.standby ? "Idle" : "Downloading"} icon={nz.paused ? "pause_circle" : nz.standby ? "schedule" : "downloading"} color={nz.paused ? "var(--amber)" : nz.standby ? "var(--on-surface-variant)" : "var(--originator-own)"} />
+        </StatRow>
+      ) : (
+        <Empty icon="downloading" line="No download client connected" sub="Add qBittorrent or NZBGet and store its credentials to see transfer stats." />
       )}
     </PanelShell>
   );

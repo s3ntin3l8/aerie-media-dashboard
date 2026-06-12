@@ -28,7 +28,7 @@ import {
   DiscoverFeedPanel,
   StoragePanel,
 } from "@/components/panels";
-import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, IndexersWidget, AgregarrWidget, BazarrWidget, BooksWidget, QbittorrentWidget, HostStatsWidget, HealthWidget, ActivityWidget } from "@/components/widgets";
+import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, IndexersWidget, AgregarrWidget, BazarrWidget, BooksWidget, DownloadClientWidget, HostStatsWidget, HealthWidget, ActivityWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.
 export interface WidgetCtx {
@@ -317,18 +317,23 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     ],
     render: (_c, s) => <BooksWidget fill source={s.source as string | undefined} title={s.title as string | undefined} showBooks={s.showBooks as boolean} showAuthors={s.showAuthors as boolean} showWanted={s.showWanted as boolean} showMonitored={s.showMonitored as boolean} showSnatched={s.showSnatched as boolean} />,
   },
-  qbittorrent: {
-    type: "qbittorrent", name: "qBittorrent", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation",
-    desc: "qBittorrent download client — global download/upload speeds, active, seeding and total torrent counts.",
+  downloadClient: {
+    type: "downloadClient", name: "Download Client", icon: "downloading", accent: "var(--originator-third-party)", group: "Automation",
+    desc: "Global download stats from qBittorrent or NZBGet — speeds, counts and status.",
     defaultW: 4, defaultH: 4, minW: 3, minH: 3, maxW: 8, maxH: 6,
     settings: [
+      { key: "title", label: "Card title", type: "text", hint: "Leave blank to use the default title" },
+      { key: "source", label: "Data source", type: "source", capability: "downloadClient", hint: "Auto prefers qBittorrent, then NZBGet." },
       { key: "showDown", label: "Download speed", type: "toggle", default: true },
-      { key: "showUp", label: "Upload speed", type: "toggle", default: true },
-      { key: "showActive", label: "Active torrents", type: "toggle", default: true },
-      { key: "showSeeding", label: "Seeding", type: "toggle", default: true },
-      { key: "showTotal", label: "Total torrents", type: "toggle", default: true },
+      { key: "showUp", label: "Upload speed (qBittorrent)", type: "toggle", default: true },
+      { key: "showActive", label: "Active torrents (qBittorrent)", type: "toggle", default: true },
+      { key: "showSeeding", label: "Seeding (qBittorrent)", type: "toggle", default: true },
+      { key: "showTotal", label: "Total torrents (qBittorrent)", type: "toggle", default: true },
+      { key: "showRemaining", label: "Remaining (NZBGet)", type: "toggle", default: true },
+      { key: "showDownloaded", label: "Downloaded (NZBGet)", type: "toggle", default: true },
+      { key: "showPostJobs", label: "Post-processing (NZBGet)", type: "toggle", default: true },
     ],
-    render: (_c, s) => <QbittorrentWidget fill showDown={s.showDown as boolean} showUp={s.showUp as boolean} showActive={s.showActive as boolean} showSeeding={s.showSeeding as boolean} showTotal={s.showTotal as boolean} />,
+    render: (_c, s) => <DownloadClientWidget fill source={s.source as string | undefined} title={s.title as string | undefined} showDown={s.showDown as boolean} showUp={s.showUp as boolean} showActive={s.showActive as boolean} showSeeding={s.showSeeding as boolean} showTotal={s.showTotal as boolean} showRemaining={s.showRemaining as boolean} showDownloaded={s.showDownloaded as boolean} showPostJobs={s.showPostJobs as boolean} />,
   },
   clock: {
     type: "clock", name: "Clock & Uptime", icon: "schedule", accent: "var(--primary)", group: "Overview",

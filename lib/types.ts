@@ -345,6 +345,14 @@ export interface NzbgetStatus {
   paused: boolean;
   /** idle — nothing downloading */
   standby: boolean;
+  /** MB downloaded this session */
+  downloadedMB: number;
+  /** items waiting in the post-processing queue */
+  postJobs: number;
+  /** free space on the destination disk, MB */
+  freeDiskMB: number;
+  /** server uptime, seconds */
+  uptimeSec: number;
 }
 
 /** Which download client feeds the shared Download Queue panel. */
