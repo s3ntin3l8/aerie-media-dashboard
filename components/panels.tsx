@@ -1353,18 +1353,20 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
 }
 
 // ── STORAGE (per-mount disk usage) ─────────────────────────
-export function StoragePanel({ fill }: { fill?: boolean } = {}) {
+export function StoragePanel({ fill, limit, title }: { fill?: boolean; limit?: number; title?: string } = {}) {
   const { storage } = useData();
+  const heading = title && title.length > 0 ? title : "Storage";
   if (storage.length === 0)
     return fill ? (
-      <PanelShell fill title="Storage" icon="hard_drive" accent="var(--amber)">
+      <PanelShell fill title={heading} icon="hard_drive" accent="var(--amber)">
         <Empty icon="hard_drive" line="No storage data" sub="Add Sonarr or Radarr to show disk usage per mount." />
       </PanelShell>
     ) : null;
+  const shown = limit != null ? storage.slice(0, limit) : storage;
   return (
-    <PanelShell fill={fill} title="Storage" icon="hard_drive" accent="var(--amber)" count={`${storage.length} ${storage.length === 1 ? "mount" : "mounts"}`}>
+    <PanelShell fill={fill} title={heading} icon="hard_drive" accent="var(--amber)" count={`${storage.length} ${storage.length === 1 ? "mount" : "mounts"}`}>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {storage.map((m, i) => {
+        {shown.map((m, i) => {
           const used = m.totalBytes - m.freeBytes;
           const pct = m.totalBytes > 0 ? (used / m.totalBytes) * 100 : 0;
           const color = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
