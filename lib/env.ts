@@ -31,6 +31,13 @@ export const env = {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
+  /**
+   * Auth.js session lifetime, in seconds. Defaults to 24h to roughly track a typical upstream
+   * SSO (Authentik) session, so Aerie's own JWT doesn't stay valid long after the forward-auth
+   * session behind embedded services has expired. Note: the JWT is sliding, so this bounds idle
+   * lifetime, not active use.
+   */
+  sessionMaxAge: Number(trim(process.env.AUTH_SESSION_MAX_AGE)) || 60 * 60 * 24,
 
   // ── Persistence ──
   databaseUrl: trim(process.env.DATABASE_URL) || "file:./data/aerie.db",

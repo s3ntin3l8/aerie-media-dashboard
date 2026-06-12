@@ -51,7 +51,14 @@ OIDC_PROVIDER_ID=oidc                 # callback path segment
 AUTH_SECRET=$(openssl rand -base64 32)
 AERIE_ADMIN_GROUP=admins
 # AERIE_ADMIN_EMAILS=you@example.com  # alternative to groups
+# AUTH_SESSION_MAX_AGE=86400          # Aerie session lifetime (s); default 24h
 ```
+
+> **Session lifetime.** `AUTH_SESSION_MAX_AGE` (seconds, default 24h) bounds Aerie's own JWT
+> session. Keep it near your IdP's session duration so Aerie doesn't stay signed in long after the
+> **forward-auth** session behind embedded services has expired — otherwise reopening a service
+> embed redirects the iframe to a login page that refuses framing (see `docs/EMBEDDING.md`). The
+> JWT is *sliding* (refreshed on activity), so this bounds **idle** lifetime, not active use.
 
 > **The redirect URI must match exactly.** The callback path is
 > `…/api/auth/callback/<OIDC_PROVIDER_ID>` — with the default `OIDC_PROVIDER_ID=oidc` it ends in

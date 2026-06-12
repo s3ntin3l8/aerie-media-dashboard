@@ -74,7 +74,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: env.authSecret ?? "aerie-dev-only-insecure-secret-change-me",
   providers,
   pages: { signIn: "/login" },
-  session: { strategy: "jwt" },
+  // maxAge bounds Aerie's own session so it doesn't outlive the upstream SSO session that gates
+  // embedded services (tunable via AUTH_SESSION_MAX_AGE; default 24h). See docs/AUTH.md.
+  session: { strategy: "jwt", maxAge: env.sessionMaxAge },
   callbacks: {
     async jwt({ token, profile, user }) {
       // OIDC sign-in: derive from the profile claim.

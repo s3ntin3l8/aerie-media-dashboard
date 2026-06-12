@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
 import { Icon } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { LaunchScreen } from "@/components/views/Launcher";
@@ -9,11 +9,27 @@ import { catColor } from "@/lib/categories";
 import type { Service } from "@/lib/types";
 
 export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => void }) {
-  const { embedState, badge, onLoad, onError } = useEmbedProbe(s);
+  const { embedState, badge, onLoad, onError, reload, reloadKey } = useEmbedProbe(s);
   const { paletteOpen, modalOpen } = usePortal();
   const loaded = embedState === "ok";
   const c = catColor(s.cat);
   const url = `${s.scheme}://${s.host}`;
+
+  // Self-heal: a failed embed (likely an expired SSO session redirected to a non-framable login)
+  // reloads when the tab regains focus, after the user re-authenticates top-level. Only subscribe
+  // while failed so a healthy embed is never reloaded on a tab switch.
+  useEffect(() => {
+    if (!s.embeddable || embedState !== "unverified") return;
+    const onReturn = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [s.embeddable, embedState, reload]);
 
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 90, background: "var(--background)", display: "flex", flexDirection: "column" }}>
@@ -71,20 +87,27 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>Loading embedded session…</span>
               </div>
             )}
-            {/* Unverified state */}
+            {/* Unverified state — most often an expired upstream SSO session redirected the frame
+                to a login page that refuses framing. Re-authenticate top-level; returning reloads it. */}
             {embedState === "unverified" && !loaded && (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, zIndex: 1, padding: 24, textAlign: "center" }}>
-                <Icon name="help" size={30} color={badge.color} />
-                <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 15, color: "var(--on-surface)" }}>Couldn&apos;t confirm the embed</div>
+                <Icon name="lock_reset" size={30} color={badge.color} />
+                <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 15, color: "var(--on-surface)" }}>Session may have expired</div>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface-variant)", maxWidth: 280 }}>
-                  The page didn&apos;t load in time — it may be slow or block framing.
+                  Your sign-on session for this service has likely expired. Re-authenticate in a new tab, then come back — the embed reloads itself.
                 </div>
-                <a href={url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ marginTop: 4 }}>
-                  <Icon name="open_in_new" size={15} /> Open in new tab
-                </a>
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <a href={url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ color: "var(--primary)" }}>
+                    <Icon name="open_in_new" size={15} /> Re-authenticate
+                  </a>
+                  <button type="button" onClick={reload} className="btn btn-secondary btn-sm">
+                    <Icon name="refresh" size={15} /> Retry
+                  </button>
+                </div>
               </div>
             )}
             <iframe
+              key={reloadKey}
               src={url}
               title={`${s.name} (embedded)`}
               onLoad={onLoad}
