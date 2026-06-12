@@ -7,8 +7,9 @@
 // ============================================================
 import React from "react";
 import type { UpcomingItem } from "@/lib/types";
-import { Icon, Pill, Chip, PosterTile } from "@/components/primitives";
+import { Icon, Pill } from "@/components/primitives";
 import { ModalShell } from "@/components/modals/ModalShell";
+import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
 
 const ACCENT = "var(--originator-court)";
 
@@ -63,61 +64,41 @@ export function UpcomingDetailModal({
       }
     >
       <div style={{ padding: "18px 20px 22px" }}>
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-          <PosterTile title={item.title} kind={item.kind} cat="request" w={96} art={item.art} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
-              <Icon name={isSeries ? "live_tv" : "movie"} size={13} />
-              {meta.join(" · ")}
-              {item.rating != null && (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--amber)" }}>
-                  <Icon name="star" size={13} fill />
-                  {item.rating}
-                </span>
-              )}
-            </div>
-
-            {item.ep && (
-              <div style={{ marginTop: 7, fontSize: 12.5, fontWeight: 600, color: "var(--on-surface)" }}>{item.ep}</div>
-            )}
-
-            {(item.studio || item.monitored != null || item.hasFile) && (
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9, flexWrap: "wrap" }}>
+        <MediaDetailBody
+          title={item.title}
+          kind={item.kind}
+          art={item.art}
+          variant="full"
+          showTitle={false}
+          meta={meta}
+          rating={item.rating}
+          ep={item.ep}
+          badges={
+            (item.studio || item.monitored != null || item.hasFile) ? (
+              <>
                 {item.hasFile && <Pill tone="originator-own">Downloaded</Pill>}
                 {item.monitored != null && (
                   <Pill rawColor={item.monitored ? ACCENT : "var(--on-surface-variant)"}>
                     {item.monitored ? "Monitored" : "Unmonitored"}
                   </Pill>
                 )}
-                {item.studio && (
-                  <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>{item.studio}</span>
-                )}
+                {item.studio && <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)" }}>{item.studio}</span>}
+              </>
+            ) : undefined
+          }
+          genres={item.genres}
+          overview={item.overview}
+          emptyOverview="No synopsis available."
+          releaseRows={
+            hasReleaseRows ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 16 }}>
+                <ReleaseRow label="In cinemas" iso={item.inCinemas} />
+                <ReleaseRow label="Digital" iso={item.digitalRelease} />
+                <ReleaseRow label="Physical" iso={item.physicalRelease} />
               </div>
-            )}
-
-            {item.genres && item.genres.length > 0 && (
-              <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                {item.genres.slice(0, 5).map((g) => (
-                  <Chip key={g}>{g}</Chip>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {hasReleaseRows && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 16 }}>
-            <ReleaseRow label="In cinemas" iso={item.inCinemas} />
-            <ReleaseRow label="Digital" iso={item.digitalRelease} />
-            <ReleaseRow label="Physical" iso={item.physicalRelease} />
-          </div>
-        )}
-
-        {item.overview ? (
-          <p style={{ fontSize: 13, color: "var(--on-surface-variant)", marginTop: 16, lineHeight: 1.55 }}>{item.overview}</p>
-        ) : (
-          <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 16, fontStyle: "italic" }}>No synopsis available.</p>
-        )}
+            ) : undefined
+          }
+        />
       </div>
     </ModalShell>
   );

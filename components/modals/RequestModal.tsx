@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, User } from "@/lib/types";
 import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
+import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { QUALITY_PROFILES } from "@/lib/categories";
@@ -135,26 +136,17 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
 function InfoStep({ pick }: { pick: DiscoverItem }) {
   return (
     <div style={{ padding: "18px 20px 22px" }}>
-      <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
-        <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
-            <Icon name={pick.kind === "series" ? "live_tv" : "movie"} size={13} />
-            {pick.kind === "series" ? "Series" : "Movie"} · {pick.year}
-            {pick.rating > 0 && (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--amber)" }}>
-                <Icon name="star" size={13} fill />
-                {pick.rating}
-              </span>
-            )}
-            {pick.state && <StateBadge state={pick.state} />}
-          </div>
-          {pick.overview && (
-            <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 9, lineHeight: 1.5 }}>{pick.overview}</p>
-          )}
-        </div>
-      </div>
+      <MediaDetailBody
+        title={pick.title}
+        kind={pick.kind}
+        art={pick.art}
+        variant="full"
+        showTitle
+        meta={[pick.kind === "series" ? "Series" : "Movie", String(pick.year)]}
+        rating={pick.rating}
+        badges={pick.state ? <StateBadge state={pick.state} /> : undefined}
+        overview={pick.overview || undefined}
+      />
     </div>
   );
 }
@@ -197,21 +189,16 @@ function ConfirmStep({
         <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ paddingLeft: 7, marginBottom: 12 }}>
           <Icon name="arrow_back" size={15} /> Back to results
         </button>
-        <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
-          <PosterTile title={pick.title} kind={pick.kind} cat="request" w={72} art={pick.art} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{pick.title}</h3>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>
-              <Icon name={pick.kind === "series" ? "live_tv" : "movie"} size={13} />
-              {pick.kind === "series" ? "Series" : "Movie"} · {pick.year}
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "var(--amber)" }}>
-                <Icon name="star" size={13} fill />
-                {pick.rating}
-              </span>
-            </div>
-            <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 9, lineHeight: 1.5 }}>{pick.overview}</p>
-          </div>
-        </div>
+        <MediaDetailBody
+          title={pick.title}
+          kind={pick.kind}
+          art={pick.art}
+          variant="full"
+          showTitle
+          meta={[pick.kind === "series" ? "Series" : "Movie", String(pick.year)]}
+          rating={pick.rating}
+          overview={pick.overview || undefined}
+        />
       </div>
       <div style={{ padding: "14px 20px 22px", display: "flex", flexDirection: "column", gap: 18 }}>
         <Divider />
@@ -314,26 +301,16 @@ function ReviewBody({ req, note, setNote, requester }: { req: MediaRequest; note
   );
   return (
     <div style={{ padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 18 }}>
-      <div style={{ display: "flex", gap: 15, alignItems: "flex-start" }}>
-        <PosterTile title={req.title} kind={req.kind} cat="request" w={68} art={req.art} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-            <h3 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", lineHeight: 1.15 }}>{req.title}</h3>
-            <span style={{ marginLeft: "auto" }}>
-              <Pill tone={RQ_TONE[req.status]}>{RQ_LABEL[req.status]}</Pill>
-            </span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface-variant)" }}>
-            <Icon name={req.kind === "series" ? "live_tv" : "movie"} size={13} />
-            {req.kind === "series" ? "Series" : "Movie"} · {req.year}
-            <span style={{ opacity: 0.6 }}>·</span>
-            {req.id}
-          </div>
-          {req.overview && (
-            <p style={{ fontSize: 12.5, color: "var(--on-surface-variant)", lineHeight: 1.5, marginTop: 9, marginBottom: 0 }}>{req.overview}</p>
-          )}
-        </div>
-      </div>
+      <MediaDetailBody
+        title={req.title}
+        kind={req.kind}
+        art={req.art}
+        variant="full"
+        showTitle
+        titleRight={<Pill tone={RQ_TONE[req.status]}>{RQ_LABEL[req.status]}</Pill>}
+        meta={[req.kind === "series" ? "Series" : "Movie", String(req.year), req.id]}
+        overview={req.overview || undefined}
+      />
       {(u || req.requesterName) && (
         <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 14px", borderRadius: 12, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
           <Avatar name={u?.name ?? req.requesterName} src={u?.avatar ?? req.requesterAvatar} size={36} color={REQ_C} />
