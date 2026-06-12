@@ -27,6 +27,12 @@ describe("widget capabilities — sourceOptions", () => {
     expect(capabilitySources("metrics")).toEqual(["prometheus", "beszel"]);
   });
 
+  it("offers configured download clients (qBittorrent + NZBGet)", () => {
+    expect(sourceOptions("downloadClient", []).map((o) => o.value)).toEqual([""]);
+    const opts = sourceOptions("downloadClient", [{ id: "nzbget" }, { id: "qbittorrent" }]);
+    expect(opts.map((o) => o.value)).toEqual(["", "qbittorrent", "nzbget"]);
+  });
+
   it("every capability has at least one source def", () => {
     for (const defs of Object.values(CAPABILITY_SOURCES)) {
       expect(defs.length).toBeGreaterThan(0);

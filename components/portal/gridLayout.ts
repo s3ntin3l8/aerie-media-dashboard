@@ -31,6 +31,7 @@ const DEPRECATED_TYPES: Record<string, { type: string; source: string }> = {
   nzbhydra: { type: "indexers", source: "nzbhydra" },
   lazylibrarian: { type: "books", source: "lazylibrarian" },
   listenarr: { type: "books", source: "listenarr" },
+  qbittorrent: { type: "downloadClient", source: "qbittorrent" },
 };
 
 /**

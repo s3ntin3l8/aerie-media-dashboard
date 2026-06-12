@@ -17,7 +17,8 @@ export type Capability =
   | "queue"
   | "metrics"
   | "indexers"
-  | "books";
+  | "books"
+  | "downloadClient";
 
 export interface SourceDef {
   /** The tag stored on each item / the value persisted in widget settings. */
@@ -66,6 +67,10 @@ export const CAPABILITY_SOURCES: Record<Capability, SourceDef[]> = {
   books: [
     { value: "lazylibrarian", label: "LazyLibrarian", services: ["lazylibrarian"] },
     { value: "listenarr", label: "Listenarr", services: ["listenarr"] },
+  ],
+  downloadClient: [
+    { value: "qbittorrent", label: "qBittorrent", services: ["qbittorrent"] },
+    { value: "nzbget", label: "NZBGet", services: ["nzbget"] },
   ],
 };
 

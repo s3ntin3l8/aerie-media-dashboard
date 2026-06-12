@@ -9,7 +9,7 @@ vi.mock("@/components/portal/PortalProvider", () => ({
 }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn() }));
 import { useData } from "@/components/portal/DataProvider";
-import { IndexersWidget, BooksWidget, HostStatsWidget, HealthWidget, ActivityWidget } from "@/components/widgets";
+import { IndexersWidget, BooksWidget, HostStatsWidget, HealthWidget, ActivityWidget, DownloadClientWidget } from "@/components/widgets";
 
 const data = (over: Record<string, unknown>) => vi.mocked(useData).mockReturnValue(over as never);
 
@@ -48,6 +48,31 @@ describe("BooksWidget (LazyLibrarian + Listenarr merge)", () => {
     data({ lazylibrarian: { totalBooks: 10, authors: 3, wanted: 2, snatched: 1 }, listenarr: { audiobooks: 4, authors: 2, monitored: 4, wanted: 0 } });
     render(<BooksWidget source="listenarr" />);
     expect(screen.getByText("Audiobooks")).toBeInTheDocument();
+  });
+});
+
+describe("DownloadClientWidget (qBittorrent + NZBGet merge)", () => {
+  const qb = { dlSpeed: 1e6, upSpeed: 2e5, downloading: 2, seeding: 5, torrents: 7 };
+  const nz = { downloadRate: 5e6, remainingMB: 1024, paused: false, standby: false, downloadedMB: 2048, postJobs: 1, freeDiskMB: 1e5, uptimeSec: 3600 };
+
+  it("auto-prefers qBittorrent and shows torrent stats", () => {
+    data({ qbittorrent: qb, nzbgetStatus: nz });
+    render(<DownloadClientWidget />);
+    expect(screen.getByText("Seeding")).toBeInTheDocument(); // qBittorrent-only metric
+  });
+
+  it("shows NZBGet stats (remaining + status) when picked", () => {
+    data({ qbittorrent: qb, nzbgetStatus: nz });
+    render(<DownloadClientWidget source="nzbget" />);
+    expect(screen.getByText("Post-processing")).toBeInTheDocument(); // NZBGet-only metric
+    expect(screen.getByText("Downloading")).toBeInTheDocument(); // status (not paused/idle)
+    expect(screen.queryByText("Seeding")).toBeNull();
+  });
+
+  it("empty-states when neither client is connected", () => {
+    data({ qbittorrent: null, nzbgetStatus: null });
+    render(<DownloadClientWidget />);
+    expect(screen.getByText(/no download client connected/i)).toBeInTheDocument();
   });
 });
 

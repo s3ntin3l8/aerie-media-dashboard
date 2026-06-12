@@ -299,7 +299,9 @@ export async function getSnapshot(): Promise<Snapshot> {
     queueSource === "arr" && sonarrOn ? perf("live:arrQueue(sonarr)", safe(() => arrQueue("sonarr"))) : Promise.resolve(null),
     queueSource === "arr" && radarrOn ? perf("live:arrQueue(radarr)", safe(() => arrQueue("radarr"))) : Promise.resolve(null),
     queueSource === "nzbget" ? perf("live:nzbgetQueue", safe(nzbgetQueue)) : Promise.resolve(null),
-    queueSource === "nzbget" ? perf("live:nzbgetStatus", safe(nzbgetStatus)) : Promise.resolve(null),
+    // Status fires whenever NZBGet is configured (not just when it's the active queue source) so the
+    // Download Client widget can show NZBGet stats regardless of the queue source — like qbittorrentStats.
+    nzbgetOn ? perf("live:nzbgetStatus", safe(nzbgetStatus)) : Promise.resolve(null),
     ttOn ? safe(tautulliLibraries) : Promise.resolve(null),
     ttOn ? safe(tautulliRecentlyAdded) : Promise.resolve(null),
     ttOn ? safe(tautulliPlays24h) : Promise.resolve(null),
