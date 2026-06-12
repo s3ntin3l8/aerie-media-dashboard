@@ -206,10 +206,27 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
   }, [deepPath, s.scheme, s.host]);
   const monitored = s.status !== "unknown";
 
-  const { embedState, badge, onLoad, onError } = useEmbedProbe(s);
+  const { embedState, badge, onLoad, onError, reload, reloadKey } = useEmbedProbe(s);
   const loaded = embedState === "ok";
   const embedFailed = embedState === "unverified";
   const who = user.name || user.email || "session";
+
+  // Self-heal: when a failed embed (likely an expired upstream SSO session that redirected the
+  // frame to a login page that refuses framing) regains focus, reload it. The user re-authenticates
+  // top-level in another tab; returning here issues a fresh navigation with the now-valid cookie.
+  // We only subscribe while failed, so healthy/keep-alive embeds are never reloaded on a tab switch.
+  useEffect(() => {
+    if (!s.embeddable || embedState !== "unverified") return;
+    const onReturn = () => {
+      if (document.visibilityState === "visible") reload();
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [s.embeddable, embedState, reload]);
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
@@ -262,24 +279,30 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface-variant)" }}>Loading embedded session…</span>
               </div>
             )}
-            {/* The iframe never loaded in time. Surface an actionable empty state
-                instead of an indefinite spinner — the service may block framing
-                (or just be slow). */}
+            {/* The iframe never loaded in time. Most often the upstream SSO session expired and
+                the frame got redirected to a login page that refuses framing (e.g. Google OAuth).
+                Re-authenticate top-level in a new tab; returning here auto-reloads the embed. */}
             {!loaded && embedFailed && (
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, zIndex: 1, padding: 32, textAlign: "center" }}>
-                <Icon name="help" size={30} color={badge.color} />
-                <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 15, color: "var(--on-surface)" }}>Couldn’t confirm the embed</div>
+                <Icon name="lock_reset" size={30} color={badge.color} />
+                <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 15, color: "var(--on-surface)" }}>Session may have expired</div>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface-variant)", maxWidth: 380 }}>
-                  The page didn’t finish loading in the frame — it may be slow, or it may not allow framing. Try opening it in a new tab.
+                  The embedded view couldn’t load — your single sign-on session for this service has likely expired (or it may just be slow, or not allow framing). Re-authenticate in a new tab, then come back; the embed reloads itself. Or retry now.
                 </div>
-                <a href={url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ marginTop: 4 }}>
-                  <Icon name="open_in_new" size={15} /> Open in new tab
-                </a>
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <a href={url} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ color: "var(--primary)" }}>
+                    <Icon name="open_in_new" size={15} /> Re-authenticate
+                  </a>
+                  <button type="button" onClick={reload} className="btn btn-secondary btn-sm">
+                    <Icon name="refresh" size={15} /> Retry
+                  </button>
+                </div>
               </div>
             )}
             {/* Real embed. Traefik must serve this host with a frame-ancestors
                 CSP allowing the portal origin + forward-auth (see docs/EMBEDDING.md). */}
             <iframe
+              key={reloadKey}
               src={frameSrc}
               title={`${s.name} (embedded)`}
               onLoad={onLoad}

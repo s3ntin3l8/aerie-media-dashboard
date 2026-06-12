@@ -21,7 +21,7 @@ vi.mock("@/components/portal/PortalProvider", () => ({
 vi.mock("@/app/(portal)/admin/actions", () => ({ setQueueSource: vi.fn() }));
 // The probe runs timers/fetch; pin it to a stable "checking" state.
 vi.mock("@/components/hooks/useEmbedProbe", () => ({
-  useEmbedProbe: () => ({ embedState: "checking", badge: { label: "checking", color: "#888" }, onLoad: vi.fn(), onError: vi.fn() }),
+  useEmbedProbe: () => ({ embedState: "checking", badge: { label: "checking", color: "#888" }, onLoad: vi.fn(), onError: vi.fn(), reload: vi.fn(), reloadKey: 0 }),
 }));
 
 import { ServiceView } from "@/components/views/Launcher";

@@ -53,6 +53,31 @@ contexts even for same-site subdomains. Chrome is generally fine post-3PC-rollba
 - **Launch-only** (`embeddable: false`): external domain (Plex) or fails the spike
   → opens in a new tab; the user stays signed in via the service's own auth.
 
+## Keeping the SSO session alive (avoiding the in-frame re-login)
+
+Forward-auth gates each embed on the **Authentik session**. When that session expires (default
+~24h), reopening a service embed redirects the iframe `service → Authentik → IdP login` — and an
+external IdP login page (e.g. Google OAuth) **refuses to render in an iframe**, so the embed fails.
+Re-authenticating has to happen **top-level**, not in the frame. Aerie already handles the failure
+gracefully — a "Session may have expired" panel offers *Re-authenticate* (opens the service in a
+new tab) and *Retry*, and the embed **auto-reloads** when you return to the Aerie tab. But you can
+make this case rare with two pieces of config:
+
+1. **Domain-level forward-auth.** Instead of a per-application Proxy Provider (the worked example
+   below uses one), configure a single Authentik **forward-auth domain-level** provider for the
+   parent domain (e.g. `*.example.com`). Its proxy session cookie is scoped to the parent domain,
+   so one Authentik session covers **every** subdomain. Aerie's own snapshot polling (every ~12s,
+   through the same forward-auth) then keeps that shared session warm, so services stop expiring
+   independently while the portal is open.
+
+2. **Lengthen / slide the session.** Raise the Authentik **Brand/Flow → Session duration** and the
+   Proxy Provider **token validity** past 24h. Pair this with Aerie's `AUTH_SESSION_MAX_AGE`
+   (default 24h, see `docs/AUTH.md`) so Aerie's own JWT doesn't stay valid long after the upstream
+   session has gone — that mismatch is exactly what hides the expiry until you click into an embed.
+
+Together: config (above) makes the expired-in-frame case **rare**; the self-healing UI makes the
+rare hit **painless**.
+
 ## Worked example: Tautulli (an app with no native SSO)
 
 Tautulli has **no OIDC/SAML** — only a local login (its "sign in with Plex" is an optional

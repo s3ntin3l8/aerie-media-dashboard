@@ -16,7 +16,7 @@
 // • Non-embeddable services immediately stay "checking" (unused,
 //   but callers won't render the iframe anyway).
 // ============================================================
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Service } from "@/lib/types";
 
 export type EmbedState = "checking" | "ok" | "unverified";
@@ -37,11 +37,18 @@ export interface EmbedProbe {
   onLoad: () => void;
   /** Pass to `<iframe onError>`. */
   onError: () => void;
+  /** Reset the probe and force a fresh load attempt (restarts the timeout). */
+  reload: () => void;
+  /** Monotonic nonce — use as the iframe React `key` so `reload()` remounts the frame. */
+  reloadKey: number;
 }
 
 export function useEmbedProbe(s: Pick<Service, "id" | "embeddable">): EmbedProbe {
   const [loaded, setLoaded] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  // Bumped by reload(); used both to re-run the timeout effect and (by callers) as the
+  // iframe `key`. Re-assigning the same src doesn't reload a frame — only a remount does.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     setLoaded(false);
@@ -55,7 +62,13 @@ export function useEmbedProbe(s: Pick<Service, "id" | "embeddable">): EmbedProbe
       alive = false;
       clearTimeout(t);
     };
-  }, [s.id, s.embeddable]);
+  }, [s.id, s.embeddable, reloadKey]);
+
+  const reload = useCallback(() => {
+    setLoaded(false);
+    setTimedOut(false);
+    setReloadKey((k) => k + 1);
+  }, []);
 
   const embedState: EmbedState = loaded ? "ok" : timedOut ? "unverified" : "checking";
   return {
@@ -63,5 +76,7 @@ export function useEmbedProbe(s: Pick<Service, "id" | "embeddable">): EmbedProbe
     badge: EMBED_BADGE[embedState],
     onLoad: () => setLoaded(true),
     onError: () => setTimedOut(true),
+    reload,
+    reloadKey,
   };
 }
