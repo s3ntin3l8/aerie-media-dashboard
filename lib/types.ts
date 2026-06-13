@@ -92,6 +92,9 @@ export interface AuthentikAccess {
 export interface TraefikRoute {
   /** the AERIE service id this router maps to (host match) */
   serviceId: string;
+  /** the AERIE Traefik-instance service id this router was discovered through (multi-instance
+   *  attribution; e.g. "traefik-unraid"). Set when aggregating across >1 Traefik. */
+  via?: string;
   /** Traefik router name, e.g. "sonarr@docker" */
   router: string;
   /** raw routing rule, e.g. Host(`sonarr.example.com`) */

@@ -89,7 +89,9 @@ export function matchPreset(nameOrId: string): ServicePreset | null {
 
 /** True when a service's type is expected to have a stored key/credential.
  *  Services flagged `optional` (no-auth / optional auth) return false; unknown/custom
- *  services default to true (assume a key is wanted). */
-export function serviceRequiresKey(nameOrId: string): boolean {
-  return matchPreset(nameOrId)?.secret?.optional !== true;
+ *  services default to true (assume a key is wanted). A `logoSlug` fallback lets renamed
+ *  instances (e.g. `traefik-dockerhost`, logoSlug "traefik") still resolve to their preset. */
+export function serviceRequiresKey(nameOrId: string, logoSlug?: string | null): boolean {
+  const preset = matchPreset(nameOrId) ?? (logoSlug ? matchPreset(logoSlug) : null);
+  return preset?.secret?.optional !== true;
 }

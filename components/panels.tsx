@@ -12,6 +12,7 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { isVisible } from "@/lib/visibility";
 import { resolveBySource } from "@/lib/widgets/capabilities";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
+import { fmtTime } from "@/lib/time";
 import {
   Icon,
   Pill,
@@ -83,15 +84,7 @@ export function timeAgo(iso: string | undefined): string | null {
   return `${Math.floor(hr / 24)}d ago`;
 }
 
-export function fmtTime(totalSec: number) {
-  totalSec = Math.max(0, Math.floor(totalSec));
-  const h = Math.floor(totalSec / 3600),
-    m = Math.floor((totalSec % 3600) / 60),
-    s = totalSec % 60;
-  const mm = String(m).padStart(2, "0"),
-    ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
-}
+export { fmtTime };
 
 function usePagination<T>(items: T[], pageSize: number) {
   const [page, setPage] = useState(0);

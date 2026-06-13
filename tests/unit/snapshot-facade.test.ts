@@ -21,11 +21,14 @@ const CONFIGS = [
   svc("under-oauth", "automation", { host: "app.oauth.test" }),
 ];
 
+const logoOf = (c: { id: string; logoSlug: string | null }, slug: string) => c.logoSlug === slug || c.id === slug;
 vi.mock("@/lib/integrations/registry", () => ({
   getServiceConfigs: vi.fn(async () => CONFIGS),
   getServiceSecret: vi.fn(async () => "key"),
   getServiceCredentials: vi.fn(async (id: string) => ({ baseUrl: `https://${id}.test`, apiKey: "key", insecureTls: false })),
   isConfigured: vi.fn(async () => true),
+  configMatchesLogo: vi.fn((c: { id: string; logoSlug: string | null }, slug: string) => logoOf(c, slug)),
+  getServiceConfigsByLogo: vi.fn(async (slug: string) => CONFIGS.filter((c) => logoOf(c, slug))),
   getGroups: vi.fn(async () => [{ name: "admins", label: "Admins" }, { name: "friends", label: "Friends" }]),
   getVisibility: vi.fn(async () => [{ serviceId: "sonarr", groupName: "friends", visible: false }]),
   getMembers: vi.fn(async () => [{ id: "u1", name: "Ada", email: "ada@x", role: "user", linked: true }]),
@@ -135,6 +138,20 @@ describe("getSnapshot — facade aggregation", () => {
     expect(snap.traefikDiscovered[0]).toMatchObject({ router: "grafana@docker", hosts: ["grafana.lan"], tls: true });
     // matched-host routers (sonarr.test → an AERIE service) are NOT in the discovered list
     expect(snap.traefikDiscovered.some((r) => r.hosts.includes("sonarr.test"))).toBe(false);
+  });
+
+  it("excludes admin-dismissed hosts from traefikDiscovered (and surfaces the dismissed list)", async () => {
+    const registry = await import("@/lib/integrations/registry");
+    vi.mocked(registry.getDeploymentSetting).mockImplementation(async (key: string) =>
+      key === "traefikDismissed" ? JSON.stringify(["grafana.lan"]) : null,
+    );
+    try {
+      const snap = await getSnapshot();
+      expect(snap.traefikDiscovered.some((r) => r.hosts.includes("grafana.lan"))).toBe(false);
+      expect(snap.traefikDismissed).toContain("grafana.lan");
+    } finally {
+      vi.mocked(registry.getDeploymentSetting).mockImplementation(async () => null);
+    }
   });
 
   it("correlates an Authentik app to a service by launch-URL host and flags authentikConfigured", async () => {

@@ -9,6 +9,7 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { decrypt } from "@/lib/crypto";
 import { hashPassword } from "@/lib/auth/password";
+import { matchPreset } from "@/lib/servicePresets";
 import type { Category, DashboardStore } from "@/lib/types";
 
 export interface ServiceConfig {
@@ -102,6 +103,20 @@ export async function getServiceCredentials(serviceId: string): Promise<ServiceC
 /** A service can be queried for live data only once a secret is stored. */
 export async function isConfigured(serviceId: string): Promise<boolean> {
   return (await getServiceSecret(serviceId)) != null;
+}
+
+/** True when a config is an instance of a given preset logo — by its stored `logoSlug`
+ *  or by its id/name resolving to that preset. Lets multiple renamed instances of one
+ *  service type (e.g. `traefik-unraid`, `traefik-dockerhost`) be recognised as that type. */
+export function configMatchesLogo(c: { id: string; name: string; logoSlug: string | null }, slug: string): boolean {
+  if (c.logoSlug === slug) return true;
+  return (matchPreset(c.id) ?? matchPreset(c.name))?.logoSlug === slug;
+}
+
+/** All service configs that are an instance of the given preset logo slug. */
+export async function getServiceConfigsByLogo(slug: string): Promise<ServiceConfig[]> {
+  const configs = await getServiceConfigs();
+  return configs.filter((c) => configMatchesLogo(c, slug));
 }
 
 /** Per-user pinned-favorite service ids. Returns [] on no row / parse error / DB unavailable. */

@@ -8,7 +8,7 @@ import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
 import { getSessionUser } from "@/lib/session";
-import { setDeploymentSetting } from "@/lib/integrations/registry";
+import { setDeploymentSetting, getDeploymentSetting } from "@/lib/integrations/registry";
 import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId } from "@/lib/integrations/clients";
 import type { OverseerrQuotaSettings } from "@/lib/integrations/clients";
 
@@ -194,6 +194,37 @@ export async function setPrometheusInstance(instance: string | null): Promise<vo
   }
   await setDeploymentSetting("prometheusInstance", instance ?? "");
   revalidatePath("/status");
+}
+
+/** Parse the persisted Traefik dismissed-hosts list (lowercased). Tolerant of malformed JSON. */
+async function readTraefikDismissed(): Promise<string[]> {
+  try {
+    const raw = await getDeploymentSetting("traefikDismissed");
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string").map((h) => h.toLowerCase()) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Hide a Traefik-discovered host from the "Discovered" suggestions panel (persisted, idempotent). */
+export async function dismissTraefikHost(host: string): Promise<void> {
+  await requireAdmin();
+  const h = host.trim().toLowerCase();
+  if (!h) return;
+  const current = await readTraefikDismissed();
+  if (!current.includes(h)) current.push(h);
+  await setDeploymentSetting("traefikDismissed", JSON.stringify(current));
+  revalidatePath("/admin");
+}
+
+/** Restore a previously dismissed Traefik host so it can reappear as a suggestion. */
+export async function restoreTraefikHost(host: string): Promise<void> {
+  await requireAdmin();
+  const h = host.trim().toLowerCase();
+  const current = (await readTraefikDismissed()).filter((x) => x !== h);
+  await setDeploymentSetting("traefikDismissed", JSON.stringify(current));
+  revalidatePath("/admin");
 }
 
 /** Select which source fills the System Status metric cards (when both are configured). */

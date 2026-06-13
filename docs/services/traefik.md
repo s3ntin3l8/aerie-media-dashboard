@@ -16,6 +16,22 @@ It's **read-only** — AERIE never writes to Traefik, and none of this is persis
 (it's recomputed on each snapshot poll). When Traefik isn't configured, nothing
 changes in the UI.
 
+The route insight also feeds the **embedded service view**: its subheader shows the real
+proxy protection for that host (a `forward-auth` label when the router has a forward-auth
+middleware, plus the Authentik group when correlated, or `direct` when no SSO middleware is
+present) instead of a hardcoded string, and the lock icon's tooltip shows the TLS cert expiry.
+
+## Multiple Traefik instances
+
+You can add **more than one** Traefik service (e.g. one per host — `traefik-unraid`,
+`traefik-dockerhost`). AERIE recognises every service whose **logo is `traefik`** as an
+instance (the id can be anything), reads each active one, and **merges** their routers into a
+single correlated set. A discovered host is attributed to its source instance (shown as
+`via <instance>` in the panel when more than one Traefik is configured). If one instance is
+unreachable, the others still resolve — only when *every* instance fails does the insight
+drop out. Because the credential is optional, a renamed instance with no key shows a neutral
+**"No key"** (not a warning).
+
 ## Where it shows up
 
 - **Status** view — each service row gains compact badges next to its host: an
@@ -29,10 +45,16 @@ changes in the UI.
 ### Discovered routers (one-click add)
 
 Traefik routers whose host matches **no** AERIE service are surfaced in **Admin → Services**
-under a **"Discovered via Traefik"** panel — each with an **Add** button that opens the service
-modal pre-filled with the host, scheme, and a guessed name/icon. It's admin-driven and additive
-(no automatic writes); a suggestion **self-clears** once you add it (the host then matches a
-service on the next poll).
+under a **"Discovered via Traefik"** panel — each row shows the host inline with its route badges
+and two actions:
+
+- **Add** — opens the service modal pre-filled with the host, scheme, and a guessed name/icon.
+  A suggestion **self-clears** once you add it (the host then matches a service on the next poll).
+- **Dismiss** (✕) — for hosts you never want to add (infra, internal-only). The host is remembered
+  (persisted as the `traefikDismissed` deployment setting) and stops being suggested. Dismissed
+  hosts are listed under a collapsible **"N dismissed"** disclosure where each can be **restored**.
+
+It's admin-driven and additive — no automatic writes.
 
 ## Requirements
 

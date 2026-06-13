@@ -16,6 +16,7 @@ import { Empty } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
 import { NowPlayingChip } from "@/components/views/NowPlayingChip";
+import { embedAuthSummary } from "@/components/views/embedAuth";
 
 
 function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
@@ -215,6 +216,9 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
   const loaded = embedState === "ok";
   const embedFailed = embedState === "unverified";
   const who = user.name || user.email || "session";
+  // Embed subheader auth/cert summary — reflects the service's real Traefik middleware / Authentik
+  // access (see embedAuth.ts). Pure + unit-tested there.
+  const { lockColor, lockTitle, authText, authColor, authIcon, authTitle } = embedAuthSummary(s, who, oidc);
 
   // Self-heal: when a failed embed (likely an expired upstream SSO session that redirected the
   // frame to a login page that refuses framing) regains focus, reload it. The user re-authenticates
@@ -271,12 +275,14 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
       {s.embeddable ? (
         <>
           <div style={{ height: 34, flexShrink: 0, display: "flex", alignItems: "center", gap: 9, padding: "0 16px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 60%, transparent)" }}>
-            <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={13} color={s.scheme === "https" ? "var(--originator-own)" : "var(--amber)"} />
+            <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center", cursor: s.route?.cert ? "help" : undefined }}>
+              <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={13} color={lockColor} />
+            </span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{url}</span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, padding: "1px 7px", borderRadius: 4, background: `color-mix(in srgb, ${badge.color} 12%, transparent)`, color: badge.color, fontWeight: 700 }}>{badge.label}</span>
-            <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
-              <Icon name="shield_person" size={12} color="var(--primary)" />
-              {oidc ? `forward-auth · ${who}` : who}
+            <span title={authTitle} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
+              <Icon name={authIcon} size={12} color={authColor} />
+              {authText}
             </span>
           </div>
           <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "var(--surface-container-low)" }}>
