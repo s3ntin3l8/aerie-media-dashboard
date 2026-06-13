@@ -63,6 +63,18 @@ describe("getSnapshot — facade aggregation", () => {
     expect(snap.services.find((s) => s.id === "qbittorrent")?.status).toBe("unknown");
   });
 
+  it("flags hasSecret per stored secret (boolean only, value never surfaced)", async () => {
+    const registry = await import("@/lib/integrations/registry");
+    vi.mocked(registry.getServiceSecret).mockImplementation(async (id: string) => (id === "qbittorrent" ? null : "key"));
+    try {
+      const snap = await getSnapshot();
+      expect(snap.services.find((s) => s.id === "sonarr")?.hasSecret).toBe(true);
+      expect(snap.services.find((s) => s.id === "qbittorrent")?.hasSecret).toBe(false);
+    } finally {
+      vi.mocked(registry.getServiceSecret).mockImplementation(async () => "key");
+    }
+  });
+
   it("returns well-formed (empty) collections and resolves the metrics/queue sources", async () => {
     const snap = await getSnapshot();
     for (const key of ["library", "libraryAll", "recent", "recentAll", "queue", "upcoming", "downloads", "nowPlaying", "requests"] as const) {

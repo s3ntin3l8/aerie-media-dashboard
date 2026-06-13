@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchJson, IntegrationError } from "@/lib/integrations/http";
+import { fetchJson, fetchRaw, IntegrationError } from "@/lib/integrations/http";
 
 describe("IntegrationError", () => {
   it("sets service, message, and status", () => {
@@ -160,5 +160,38 @@ describe("fetchJson", () => {
     await fetchJson("http://svc/api", { service: "svc" });
     expect(clearTimeoutSpy).toHaveBeenCalled();
     clearTimeoutSpy.mockRestore();
+  });
+});
+
+describe("fetchRaw", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  it("returns the raw Response WITHOUT throwing on a non-2xx status (caller inspects it)", async () => {
+    const res = { ok: false, status: 403, headers: new Headers({ "set-cookie": "SID=x" }) };
+    globalThis.fetch = vi.fn().mockResolvedValue(res);
+    const out = await fetchRaw("http://svc/login", { service: "qbittorrent" });
+    expect(out).toBe(res); // no JSON parse, no throw — unlike fetchJson
+    expect(out.status).toBe(403);
+  });
+
+  it("passes a string body through verbatim (form-encoded login) and defaults to GET", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true });
+    await fetchRaw("http://svc/login", { service: "qbittorrent", method: "POST", body: "username=u&password=p" });
+    const init = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe("username=u&password=p"); // not JSON.stringify'd
+  });
+
+  it("JSON-serializes a non-string body", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true });
+    await fetchRaw("http://svc/x", { service: "svc", method: "POST", body: { a: 1 } });
+    const init = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(init.body).toBe(JSON.stringify({ a: 1 }));
+  });
+
+  it("wraps network errors in IntegrationError", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    await expect(fetchRaw("http://svc/x", { service: "svc" })).rejects.toThrow(IntegrationError);
   });
 });

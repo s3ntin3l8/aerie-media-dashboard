@@ -366,6 +366,13 @@ export async function getSnapshot(): Promise<Snapshot> {
     return { status: "unknown", ms: 0, uptime: 0, beats: new Array(30).fill(-1), msHistory: [] };
   };
 
+  // Which services have a secret stored (encrypted) — surfaced to the client as a boolean only
+  // (never the value) so the Admin UI can distinguish configured from unconfigured services.
+  const secretChecks = await Promise.all(
+    configs.map(async (c) => [c.id, (await getServiceSecret(c.id)) != null] as const),
+  );
+  const configuredIds = new Set(secretChecks.filter(([, has]) => has).map(([id]) => id));
+
   const services: Service[] = configs.map((c) => ({
     id: c.id,
     name: c.name,
@@ -384,6 +391,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     version: (c.id === "overseerr" && osVersion) ? osVersion : (c.version ?? ""),
     note: c.note ?? "",
     monitoringKey: c.monitoringKey ?? undefined,
+    hasSecret: configuredIds.has(c.id),
     ...healthFor(c.id, c.name, c.monitoringKey),
   }));
 

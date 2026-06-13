@@ -1,0 +1,38 @@
+import { describe, it, expect } from "vitest";
+import { matchPreset, serviceRequiresKey } from "@/lib/servicePresets";
+
+describe("matchPreset", () => {
+  it("matches by normalized name or id (case/separator insensitive)", () => {
+    expect(matchPreset("qBittorrent")?.logoSlug).toBe("qbittorrent");
+    expect(matchPreset("home-assistant")?.logoSlug).toBe("home-assistant");
+    expect(matchPreset("NZB Get")?.logoSlug).toBe("nzbget");
+    expect(matchPreset("unknown-custom-service")).toBeNull();
+  });
+
+  it("describes credential-pair services as userpass with a format hint", () => {
+    expect(matchPreset("beszel")?.secret).toMatchObject({ kind: "userpass", placeholder: "email:password" });
+    expect(matchPreset("nzbget")?.secret).toMatchObject({ kind: "userpass", placeholder: "username:password" });
+    expect(matchPreset("qbittorrent")?.secret).toMatchObject({ kind: "userpass", placeholder: "username:password" });
+  });
+
+  it("marks no-auth / key-optional services as optional (orthogonal to format)", () => {
+    expect(matchPreset("gatus")?.secret?.optional).toBe(true);
+    expect(matchPreset("prometheus")?.secret?.optional).toBe(true);
+    // NZBGet keeps its userpass *format* while still being optional auth.
+    expect(matchPreset("nzbget")?.secret).toMatchObject({ kind: "userpass", optional: true });
+  });
+});
+
+describe("serviceRequiresKey", () => {
+  it("is false only for key-optional types", () => {
+    expect(serviceRequiresKey("gatus")).toBe(false);
+    expect(serviceRequiresKey("prometheus")).toBe(false);
+    expect(serviceRequiresKey("nzbget")).toBe(false); // optional auth
+  });
+
+  it("is true for token services, credential-pair services, and unknown/custom services", () => {
+    expect(serviceRequiresKey("sonarr")).toBe(true); // plain apiKey, no explicit descriptor
+    expect(serviceRequiresKey("beszel")).toBe(true); // userpass still needs credentials
+    expect(serviceRequiresKey("some-custom-thing")).toBe(true); // unknown → assume a key is wanted
+  });
+});

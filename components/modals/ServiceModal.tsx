@@ -11,6 +11,7 @@ import { Icon, Divider, Heartbeat, StatusDot, catColor } from "@/components/prim
 import { ModalShell, SectionLabel, Field, ToggleRow, Toggle, CatPicker, fieldInput } from "@/components/modals/ModalShell";
 import { IconPicker } from "@/components/modals/IconPicker";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { matchPreset } from "@/lib/servicePresets";
 
 export interface ServiceForm {
   name: string;
@@ -77,43 +78,6 @@ function MonitoringKeyPicker({ value, onChange }: { value: string; onChange: (v:
 }
 
 const isIcon = (s: string) => /^[a-z_]+$/.test(s);
-
-// Known service presets applied to blank fields when the name matches.
-const SERVICE_PRESETS: Record<string, { cat: string; icon: string; logoSlug: string }> = {
-  jellyfin:      { cat: "stream",     icon: "smart_display", logoSlug: "jellyfin" },
-  emby:          { cat: "stream",     icon: "smart_display", logoSlug: "emby" },
-  plex:          { cat: "stream",     icon: "smart_display", logoSlug: "plex" },
-  tautulli:      { cat: "monitor",    icon: "bar_chart",     logoSlug: "tautulli" },
-  overseerr:     { cat: "request",    icon: "add_circle",    logoSlug: "overseerr" },
-  jellyseerr:    { cat: "request",    icon: "add_circle",    logoSlug: "jellyseerr" },
-  sonarr:        { cat: "automation", icon: "live_tv",       logoSlug: "sonarr" },
-  radarr:        { cat: "automation", icon: "movie",         logoSlug: "radarr" },
-  lidarr:        { cat: "automation", icon: "library_music", logoSlug: "lidarr" },
-  readarr:       { cat: "automation", icon: "menu_book",     logoSlug: "readarr" },
-  listenarr:     { cat: "automation", icon: "headphones",    logoSlug: "listenarr" },
-  prowlarr:      { cat: "automation", icon: "search",        logoSlug: "prowlarr" },
-  nzbget:        { cat: "automation", icon: "download",      logoSlug: "nzbget" },
-  qbittorrent:   { cat: "automation", icon: "downloading",   logoSlug: "qbittorrent" },
-  nzbhydra:      { cat: "automation", icon: "manage_search", logoSlug: "nzbhydra2" },
-  nzbhydra2:     { cat: "automation", icon: "manage_search", logoSlug: "nzbhydra2" },
-  bazarr:        { cat: "automation", icon: "subtitles",     logoSlug: "bazarr" },
-  whisparr:      { cat: "automation", icon: "movie",         logoSlug: "whisparr" },
-  agregarr:      { cat: "automation", icon: "collections",   logoSlug: "agregarr" },
-  wizarr:        { cat: "automation", icon: "person_add",    logoSlug: "wizarr" },
-  audiobookshelf:{ cat: "stream",     icon: "headphones",    logoSlug: "audiobookshelf" },
-  gatus:         { cat: "monitor",    icon: "monitor_heart", logoSlug: "gatus" },
-  prometheus:    { cat: "infra",      icon: "query_stats",   logoSlug: "prometheus" },
-  grafana:       { cat: "infra",      icon: "monitoring",    logoSlug: "grafana" },
-  portainer:     { cat: "infra",      icon: "dns",           logoSlug: "portainer" },
-  nextcloud:     { cat: "infra",      icon: "cloud",         logoSlug: "nextcloud" },
-  homeassistant: { cat: "infra",      icon: "home",          logoSlug: "home-assistant" },
-  uptimekuma:    { cat: "monitor",    icon: "monitor_heart", logoSlug: "uptime-kuma" },
-};
-
-function matchPreset(name: string) {
-  const key = name.toLowerCase().replace(/[\s\-_.]/g, "");
-  return SERVICE_PRESETS[key] ?? null;
-}
 
 type ConnStatus = { state: "idle" } | { state: "testing" } | { state: "ok"; version: string | null } | { state: "err" };
 
@@ -278,9 +242,17 @@ export function ServiceModal({
   // Save-then-test needs a saveable form (name + host); a typed key is only required when
   // adding — in edit mode a blank key field reuses the stored secret. Falls back to the
   // bare onTestConnection probe only when the save-and-test handlers aren't provided.
+  // Secret-field descriptor for the current service type (edit → id, add → typed name).
+  // Drives the field's label/hint/placeholder and the colon-pair format validation below.
+  const sec = matchPreset(editing ? (service?.id ?? "") : f.name)?.secret;
+  // A "userpass" service expects a colon-separated pair in the key field; flag a typed value
+  // that's missing the ":" so we can warn inline and block a doomed connection test.
+  const secretMalformed = sec?.kind === "userpass" && f.apiKey.trim() !== "" && !f.apiKey.includes(":");
+
   const canTest =
-    (Boolean(onSaveAndTest) && Boolean(onTestSaved) && f.name.trim() !== "" && f.host.trim() !== "" && (editing || f.apiKey.trim() !== "")) ||
-    (!(onSaveAndTest && onTestSaved) && Boolean(onTestConnection));
+    !secretMalformed &&
+    ((Boolean(onSaveAndTest) && Boolean(onTestSaved) && f.name.trim() !== "" && f.host.trim() !== "" && (editing || f.apiKey.trim() !== "")) ||
+    (!(onSaveAndTest && onTestSaved) && Boolean(onTestConnection)));
 
   const set = <K extends keyof ServiceForm>(k: K, v: ServiceForm[K]) => setF((prev) => ({ ...prev, [k]: v }));
   const c = catColor(f.cat as Service["cat"]);
@@ -441,7 +413,10 @@ export function ServiceModal({
                 desc="Keep the iframe mounted after first open so switching between services preserves its state (it keeps running in the background)."
               />
             )}
-            <Field label="API key" hint={editing ? "leave blank to keep current key" : "encrypted at rest"}>
+            <Field
+              label={sec?.label ?? "API key"}
+              hint={editing ? (sec?.kind === "userpass" ? "leave blank to keep current credentials" : "leave blank to keep current key") : (sec?.hint ?? "encrypted at rest")}
+            >
               <div style={{ display: "flex", gap: 7 }}>
                 <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
                   <Icon name="key" size={15} color="var(--originator-own)" style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)" }} />
@@ -451,7 +426,7 @@ export function ServiceModal({
                     style={{ ...fieldInput, paddingLeft: 34, fontFamily: "var(--font-mono)" }}
                     value={f.apiKey}
                     onChange={(e) => set("apiKey", e.target.value)}
-                    placeholder={editing ? "•••••••• (unchanged)" : "paste service API key"}
+                    placeholder={editing ? "•••••••• (unchanged)" : (sec?.placeholder ?? "paste service API key")}
                   />
                 </div>
                 <button type="button" onClick={() => setRevealKey((r) => !r)} className="btn btn-secondary btn-sm" style={{ padding: "0 11px" }} title={revealKey ? "Hide" : "Reveal"}>
@@ -461,6 +436,12 @@ export function ServiceModal({
                   {connStatus.state === "testing" ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}>…</span> : <Icon name="wifi_find" size={16} />}
                 </button>
               </div>
+              {secretMalformed && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--warning)" }}>
+                  <Icon name="warning" size={13} />
+                  <span>Expected {sec?.placeholder ?? "user:password"} — include the “:” separator</span>
+                </div>
+              )}
               {connStatus.state !== "idle" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 7, fontSize: 11, fontFamily: "var(--font-mono)" }}>
                   {connStatus.state === "testing" && <span style={{ color: "var(--on-surface-variant)" }}>Saving & testing…</span>}
@@ -475,7 +456,11 @@ export function ServiceModal({
                   {connStatus.state === "err" && (
                     <>
                       <StatusDot status="down" size={7} />
-                      <span style={{ color: "var(--on-surface-variant)" }}>Could not connect — check host and API key</span>
+                      <span style={{ color: "var(--on-surface-variant)" }}>
+                        {sec?.kind === "userpass"
+                          ? `Could not connect — check host and the ${sec.placeholder ?? "user:password"} format`
+                          : "Could not connect — check host and API key"}
+                      </span>
                     </>
                   )}
                 </div>
