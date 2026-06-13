@@ -14,6 +14,7 @@ import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
 import { PageHeader } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
+import { serviceRequiresKey } from "@/lib/servicePresets";
 import { Toast } from "@/components/modals/Toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
@@ -45,6 +46,33 @@ function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest
         boxSizing: "border-box",
       }}
     />
+  );
+}
+
+// Stored-secret indicator. Distinguishes a configured service (masked AES-GCM badge) from an
+// unconfigured one — warning-tinted "Not set" when the service type expects a key, neutral
+// "No key" for legitimately key-optional services (Gatus / Prometheus / NZBGet-without-auth).
+function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
+  const base = { display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11, opacity: dim } as const;
+  if (service.hasSecret) {
+    return (
+      <span style={{ ...base, gap: 6, color: "var(--on-surface-variant)" }}>
+        <Icon name="lock" size={12} color="var(--originator-own)" />
+        ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
+      </span>
+    );
+  }
+  if (serviceRequiresKey(service.id)) {
+    return (
+      <span style={{ ...base, color: "var(--warning)" }}>
+        <Icon name="warning" size={12} />Not set
+      </span>
+    );
+  }
+  return (
+    <span style={{ ...base, color: "var(--on-surface-variant)" }}>
+      <Icon name="lock_open" size={12} />No key
+    </span>
   );
 }
 
@@ -160,10 +188,7 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>API key</Eyebrow>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
-                    <Icon name="lock" size={12} color="var(--originator-own)" />
-                    ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
-                  </span>
+                  <KeyIndicator service={s} />
                 </div>
               </div>
               <Divider style={{ margin: "12px 0 8px" }} />
@@ -258,10 +283,7 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
               >
                 <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
               </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", opacity: dim }}>
-                <Icon name="lock" size={12} color="var(--originator-own)" />
-                ••••••••<span style={{ fontSize: 9, opacity: 0.7 }}>AES-GCM</span>
-              </span>
+              <KeyIndicator service={s} dim={dim} />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                 <button onClick={() => toggleFavorite(s.id)} className="btn btn-ghost btn-sm" style={{ padding: 6, color: pinned ? "var(--amber)" : undefined }} title={pinned ? "Unpin from rail" : "Pin to rail"}>
                   <Icon name={pinned ? "star" : "star_border"} size={15} />

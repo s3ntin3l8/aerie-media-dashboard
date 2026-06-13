@@ -46,6 +46,10 @@ export interface Service {
   msHistory?: number[];
   note: string;
   monitoringKey?: string;
+  /** true → an API key/credential is stored (encrypted) for this service. The secret value
+   *  itself never leaves the server; only this boolean is surfaced (drives the Admin "configured"
+   *  indicator). */
+  hasSecret?: boolean;
 }
 
 export interface NowPlaying {
