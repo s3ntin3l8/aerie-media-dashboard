@@ -12,16 +12,18 @@ vi.mock("@/lib/integrations/clients", () => ({
   beszelSystems: vi.fn(),
   prometheusInstances: vi.fn(),
   overseerrSearch: vi.fn(),
+  traefikRoutes: vi.fn(),
 }));
 
 import { getSessionUser } from "@/lib/session";
 import { getServiceCredentials, getServiceSecret } from "@/lib/integrations/registry";
-import { tautulliStreamHistory, gatusHealth, beszelSystems, prometheusInstances, overseerrSearch } from "@/lib/integrations/clients";
+import { tautulliStreamHistory, gatusHealth, beszelSystems, prometheusInstances, overseerrSearch, traefikRoutes } from "@/lib/integrations/clients";
 
 import { GET as historyGET } from "@/app/api/history/route";
 import { GET as gatusGET } from "@/app/api/gatus-endpoints/route";
 import { GET as beszelGET } from "@/app/api/beszel/systems/route";
 import { GET as promGET } from "@/app/api/prometheus/instances/route";
+import { GET as traefikGET } from "@/app/api/traefik/routes/route";
 import { GET as discoverGET } from "@/app/api/discover/route";
 import { GET as iconsGET } from "@/app/api/icons/route";
 
@@ -94,6 +96,22 @@ describe("admin-gated proxy routes", () => {
     vi.mocked(getServiceCredentials).mockResolvedValue({ baseUrl: "http://p", apiKey: "" } as never);
     vi.mocked(prometheusInstances).mockResolvedValue(["node1"] as never);
     expect(await (await promGET()).json()).toEqual(["node1"]);
+  });
+
+  it("traefik/routes: 403 for non-admins, [] when unconfigured, passthrough, [] on throw", async () => {
+    vi.mocked(getSessionUser).mockResolvedValue(user("U", "u@x") as never);
+    expect((await traefikGET()).status).toBe(403);
+
+    vi.mocked(getSessionUser).mockResolvedValue(admin as never);
+    vi.mocked(getServiceCredentials).mockResolvedValue(null as never);
+    expect(await (await traefikGET()).json()).toEqual([]);
+
+    vi.mocked(getServiceCredentials).mockResolvedValue({ baseUrl: "http://t", apiKey: "u:p" } as never);
+    vi.mocked(traefikRoutes).mockResolvedValue([{ router: "sonarr@docker", serviceId: "" }] as never);
+    expect(await (await traefikGET()).json()).toEqual([{ router: "sonarr@docker", serviceId: "" }]);
+
+    vi.mocked(traefikRoutes).mockRejectedValue(new Error("down"));
+    expect(await (await traefikGET()).json()).toEqual([]);
   });
 });
 

@@ -50,6 +50,35 @@ export interface Service {
    *  itself never leaves the server; only this boolean is surfaced (drives the Admin "configured"
    *  indicator). */
   hasSecret?: boolean;
+  /** Traefik router correlated to this service by host (read-only admin insight). Absent when
+   *  Traefik isn't configured, or no router/cert covers this service's host. */
+  route?: TraefikRoute;
+}
+
+/** A Traefik router correlated to an AERIE service by host. Read-only; derived live from the
+ *  Traefik HTTP API (`/api/http/routers` + `/api/http/services`) and, best-effort, its
+ *  `/metrics` endpoint for TLS-cert expiry. Never persisted. */
+export interface TraefikRoute {
+  /** the AERIE service id this router maps to (host match) */
+  serviceId: string;
+  /** Traefik router name, e.g. "sonarr@docker" */
+  router: string;
+  /** raw routing rule, e.g. Host(`sonarr.example.com`) */
+  rule: string;
+  /** hostnames parsed out of the rule (lowercased) — the key used to correlate to a service */
+  hosts: string[];
+  status: "enabled" | "disabled" | "warning" | "unknown";
+  /** the router terminates TLS (presence only — expiry is in `cert`) */
+  tls: boolean;
+  /** a forward-auth middleware is in the chain → the service is "behind SSO" */
+  forwardAuth: boolean;
+  /** middleware names in the router's chain (for a tooltip) */
+  middlewares: string[];
+  /** backend health from /api/http/services serverStatus (UP/DOWN across servers) */
+  serverStatus: "up" | "down" | "mixed" | "unknown";
+  /** TLS cert expiry from the traefik_tls_certs_not_after metric, matched by host. Absent when
+   *  Traefik metrics are off/unreachable or no served cert covers this host. */
+  cert?: { notAfter: number; daysRemaining: number; domains: string[] }; // notAfter = unix seconds
 }
 
 export interface NowPlaying {

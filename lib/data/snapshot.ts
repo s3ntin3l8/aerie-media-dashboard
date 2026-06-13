@@ -6,10 +6,11 @@
 // panel. Live calls only fire for services that have a stored secret.
 // ============================================================
 import "server-only";
-import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
+import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
+  traefikRoutes,
   tautulliActivity,
   tautulliUsers,
   jellyfinNowPlaying,
@@ -143,6 +144,9 @@ export interface Snapshot {
   lazylibrarian: LazyLibrarianStats | null;
   /** Listenarr audiobook library stats — null when unconfigured */
   listenarr: ListenarrStats | null;
+  /** Traefik service exists + active in config (drives the route indicators' visibility). Per-service
+   *  route detail rides on each `Service.route`; this just gates whether the UI renders that column. */
+  traefikConfigured: boolean;
 }
 
 export async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -231,6 +235,9 @@ export async function getSnapshot(): Promise<Snapshot> {
   const has = async (id: string) => isActive(id) && (await getServiceSecret(id)) != null;
   const gatusOn = configs.some((c) => c.id === "gatus" && c.active);
   const promOn = configs.some((c) => c.id === "prometheus" && c.active);
+  // Traefik's API can run open or behind basicAuth, so (like Gatus/Prometheus) gate on the row
+  // being active rather than on a stored secret — a baseUrl is enough to read its API.
+  const traefikOn = isActive("traefik");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
   const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn, qbitOn] = await Promise.all([
@@ -288,7 +295,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers, absNow, llStats,
     listenarrQ, listenarrHist, listenarrHealthIssues, listenarrData,
-    qbitQ, qbStats, altMetricsResult,
+    qbitQ, qbStats, altMetricsResult, traefikRoutesData,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -349,6 +356,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     (metricsSource === "beszel" ? promOn : beszelOn)
       ? perf("live:metrics(alt)", safe(metricsSource === "beszel" ? prometheusMetrics : beszelMetrics))
       : Promise.resolve(null),
+    traefikOn ? perf("live:traefikRoutes", safe(traefikRoutes)) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -373,6 +381,16 @@ export async function getSnapshot(): Promise<Snapshot> {
   );
   const configuredIds = new Set(secretChecks.filter(([, has]) => has).map(([id]) => id));
 
+  // Correlate Traefik routers to services by host (the only reliable join). First match wins.
+  const routeByHost = new Map<string, TraefikRoute>();
+  for (const r of traefikRoutesData ?? []) {
+    for (const h of r.hosts) if (!routeByHost.has(h)) routeByHost.set(h, r);
+  }
+  const routeFor = (c: { id: string; host: string }): TraefikRoute | undefined => {
+    const r = routeByHost.get(c.host.toLowerCase());
+    return r ? { ...r, serviceId: c.id } : undefined;
+  };
+
   const services: Service[] = configs.map((c) => ({
     id: c.id,
     name: c.name,
@@ -392,6 +410,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     note: c.note ?? "",
     monitoringKey: c.monitoringKey ?? undefined,
     hasSecret: configuredIds.has(c.id),
+    route: routeFor(c),
     ...healthFor(c.id, c.name, c.monitoringKey),
   }));
 
@@ -530,6 +549,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     nzbhydra: nzbhydraData ?? null,
     lazylibrarian: llStats ?? null,
     listenarr: listenarrData ?? null,
+    traefikConfigured: traefikOn,
   };
   lastSnapshot = snapshot;
   return snapshot;

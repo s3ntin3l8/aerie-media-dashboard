@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceCredentials, getDeploymentSetting } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -115,6 +115,136 @@ export async function gatusHealth(): Promise<ServiceHealth[]> {
     }
     return { key: ep.name.toLowerCase(), name: ep.name, group: ep.group, status, ms, uptime, beats, msHistory, lastIncidentAt };
   });
+}
+
+// ── Traefik — per-service route, forward-auth & TLS-cert expiry ──
+// Read-only: the routing rule → host (the join key to AERIE services), the router status,
+// the middleware chain (→ "behind forward-auth"), backend health, and — best-effort from the
+// /metrics endpoint — TLS cert expiry. Throws on the routers/services call; the facade catches.
+interface TraefikApiRouter {
+  name: string;
+  rule?: string;
+  service?: string;
+  provider?: string;
+  status?: string;
+  middlewares?: string[];
+  tls?: unknown; // presence indicates TLS termination; shape unused
+}
+interface TraefikApiService {
+  name: string;
+  serverStatus?: Record<string, string>; // server URL → "UP" | "DOWN"
+}
+
+/** Extract hostnames from a Traefik routing rule. Handles Host(`a`,`b`), HostSNI/HostRegexp,
+ *  and `||`/`,`-joined unions. Best-effort: HostRegexp patterns are returned verbatim (matched
+ *  exactly later). */
+export function hostsFromRule(rule: string): string[] {
+  const hosts: string[] = [];
+  const callRe = /Host(?:SNI|Regexp)?\s*\(([^)]*)\)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = callRe.exec(rule)) !== null) {
+    const argRe = /`([^`]+)`/g;
+    let a: RegExpExecArray | null;
+    while ((a = argRe.exec(m[1])) !== null) hosts.push(a[1].toLowerCase());
+  }
+  return [...new Set(hosts)];
+}
+
+/** Parse `traefik_tls_certs_not_after` gauge lines out of Traefik's Prometheus /metrics text.
+ *  Each carries cn/sans (the cert domains) and a value = expiry unix seconds. */
+export function parseCertMetric(text: string): { domains: string[]; notAfter: number }[] {
+  const out: { domains: string[]; notAfter: number }[] = [];
+  const lineRe = /^traefik_tls_certs_not_after\{([^}]*)\}\s+([0-9.eE+-]+)\s*$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = lineRe.exec(text)) !== null) {
+    const notAfter = Math.round(parseFloat(m[2]));
+    if (!Number.isFinite(notAfter) || notAfter <= 0) continue;
+    const labels = m[1];
+    const domains: string[] = [];
+    const cn = /cn="([^"]*)"/.exec(labels)?.[1];
+    const sans = /sans="([^"]*)"/.exec(labels)?.[1];
+    if (cn) domains.push(cn.toLowerCase());
+    if (sans) for (const s of sans.split(",")) { const t = s.trim().toLowerCase(); if (t) domains.push(t); }
+    if (domains.length) out.push({ domains: [...new Set(domains)], notAfter });
+  }
+  return out;
+}
+
+function certForHost(host: string, certs: { domains: string[]; notAfter: number }[]): TraefikRoute["cert"] {
+  const h = host.toLowerCase();
+  const matches = certs.filter((c) =>
+    c.domains.some((d) =>
+      d === h ||
+      // wildcard covers exactly one label: *.example.com matches a.example.com, not a.b.example.com
+      (d.startsWith("*.") && h.endsWith(d.slice(1)) && h.split(".").length === d.split(".").length),
+    ),
+  );
+  if (!matches.length) return undefined;
+  const best = matches.reduce((a, b) => (b.notAfter < a.notAfter ? b : a));
+  return { notAfter: best.notAfter, daysRemaining: Math.floor((best.notAfter * 1000 - Date.now()) / 86_400_000), domains: best.domains };
+}
+
+function aggServerStatus(serverStatus?: Record<string, string>): TraefikRoute["serverStatus"] {
+  const vals = Object.values(serverStatus ?? {});
+  if (!vals.length) return "unknown";
+  const up = vals.filter((v) => v.toUpperCase() === "UP").length;
+  return up === vals.length ? "up" : up === 0 ? "down" : "mixed";
+}
+
+function normRouterStatus(s?: string): TraefikRoute["status"] {
+  return s === "enabled" || s === "disabled" || s === "warning" ? s : "unknown";
+}
+
+async function traefikRoutesUncached(baseUrlRaw: string, apiKey: string | null, insecureTls?: boolean): Promise<TraefikRoute[]> {
+  const base = baseUrlRaw.replace(/\/$/, "");
+  const headers: Record<string, string> = {};
+  // Traefik's API auth, when present, is HTTP basicAuth → secret holds "user:password".
+  if (apiKey && apiKey.includes(":")) headers.Authorization = `Basic ${Buffer.from(apiKey).toString("base64")}`;
+  const [routers, services] = await Promise.all([
+    fetchJson<TraefikApiRouter[]>(`${base}/api/http/routers`, { service: "traefik", headers, insecureTls }),
+    fetchJson<TraefikApiService[]>(`${base}/api/http/services`, { service: "traefik", headers, insecureTls }),
+  ]);
+
+  // Cert expiry is best-effort: a missing/legacy /metrics endpoint must not fail the route read.
+  let certs: { domains: string[]; notAfter: number }[] = [];
+  try {
+    const res = await fetchRaw(`${base}/metrics`, { service: "traefik", headers, insecureTls });
+    if (res.ok) certs = parseCertMetric(await res.text());
+  } catch { /* metrics optional */ }
+
+  const svcStatus = new Map<string, TraefikRoute["serverStatus"]>();
+  for (const s of services ?? []) svcStatus.set(s.name, aggServerStatus(s.serverStatus));
+
+  const routes: TraefikRoute[] = [];
+  for (const r of routers ?? []) {
+    const hosts = hostsFromRule(r.rule ?? "");
+    if (!hosts.length) continue; // only host-routed routers correlate to a service
+    const middlewares = r.middlewares ?? [];
+    // router.service is sometimes bare ("sonarr") and sometimes name@provider ("sonarr@docker").
+    const serverStatus = svcStatus.get(r.service ?? "") ?? svcStatus.get(`${r.service}@${r.provider}`) ?? "unknown";
+    let cert: TraefikRoute["cert"];
+    for (const h of hosts) { cert = certForHost(h, certs); if (cert) break; }
+    routes.push({
+      serviceId: "", // correlated to an AERIE service id in getSnapshot()
+      router: r.name,
+      rule: r.rule ?? "",
+      hosts,
+      status: normRouterStatus(r.status),
+      tls: r.tls != null,
+      forwardAuth: middlewares.some((mw) => /auth|forward|authentik/i.test(mw)),
+      middlewares,
+      serverStatus,
+      cert,
+    });
+  }
+  return routes;
+}
+
+export async function traefikRoutes(): Promise<TraefikRoute[]> {
+  const c = await getServiceCredentials("traefik");
+  if (!c) throw new IntegrationError("traefik", "not configured");
+  // Routers/certs change slowly; this feeds the 12s snapshot poll → cache to spare Traefik.
+  return cached("traefik:routes", 30_000, () => traefikRoutesUncached(c.baseUrl, c.apiKey, c.insecureTls));
 }
 
 // ── Tautulli — Plex now-playing + library counts ───────────

@@ -14,6 +14,7 @@ const CONFIGS = [
   svc("gatus", "monitor"), svc("prometheus", "monitor"), svc("sonarr", "automation"),
   svc("radarr", "automation"), svc("tautulli", "stream"), svc("overseerr", "request"),
   svc("nzbget", "automation"), svc("qbittorrent", "automation"), svc("prowlarr", "automation"),
+  svc("traefik", "infra"),
 ];
 
 vi.mock("@/lib/integrations/registry", () => ({
@@ -39,6 +40,13 @@ vi.mock("@/lib/integrations/http", () => ({
     // (most clients then return [] or throw → safe() → null).
     if (url.includes("/api/v1/endpoints/statuses")) {
       return [{ name: "sonarr", group: "auto", results: [{ success: true, duration: 1_000_000, timestamp: "t1" }] }];
+    }
+    // Traefik: one router for the sonarr service host, behind a forward-auth middleware.
+    if (url.includes("/api/http/routers")) {
+      return [{ name: "sonarr@docker", rule: "Host(`sonarr.test`)", service: "sonarr", provider: "docker", status: "enabled", middlewares: ["authentik@docker"], tls: {} }];
+    }
+    if (url.includes("/api/http/services")) {
+      return [{ name: "sonarr@docker", serverStatus: { "http://10.0.0.2:8989": "UP" } }];
     }
     return {};
   }),
@@ -84,6 +92,15 @@ describe("getSnapshot — facade aggregation", () => {
     expect(snap.metricsBySource).toHaveProperty("prometheus");
     expect(snap.queueSource).toBe("arr"); // sonarr/radarr active
     expect(snap.adminGroup).toBe("admins");
+  });
+
+  it("correlates a Traefik route to a service by host and flags traefikConfigured", async () => {
+    const snap = await getSnapshot();
+    expect(snap.traefikConfigured).toBe(true);
+    const sonarr = snap.services.find((s) => s.id === "sonarr");
+    expect(sonarr?.route).toMatchObject({ serviceId: "sonarr", router: "sonarr@docker", forwardAuth: true, serverStatus: "up", tls: true });
+    // a service with no matching router carries no route
+    expect(snap.services.find((s) => s.id === "qbittorrent")?.route).toBeUndefined();
   });
 
   it("passes through groups and visibility", async () => {

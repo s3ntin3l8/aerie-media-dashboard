@@ -12,7 +12,7 @@ import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } fro
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
-import { PageHeader } from "@/components/views/shared";
+import { PageHeader, RouteBadges } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { serviceRequiresKey } from "@/lib/servicePresets";
 import { Toast } from "@/components/modals/Toast";
@@ -190,6 +190,12 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>API key</Eyebrow>
                   <KeyIndicator service={s} />
                 </div>
+                {s.route && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Eyebrow style={{ width: 52, flexShrink: 0 }}>Route</Eyebrow>
+                    <RouteBadges route={s.route} />
+                  </div>
+                )}
               </div>
               <Divider style={{ margin: "12px 0 8px" }} />
               <div style={{ display: "flex", gap: 6 }}>
@@ -272,6 +278,7 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
                   <div style={{ fontSize: 10 }}>
                     <CatBadge cat={s.cat} size="xs" />
                   </div>
+                  {s.route && <div style={{ marginTop: 4 }}><RouteBadges route={s.route} /></div>}
                 </div>
               </div>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>

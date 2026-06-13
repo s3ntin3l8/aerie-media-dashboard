@@ -9,7 +9,7 @@ import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
 import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
-import { PageHeader, StatTile } from "@/components/views/shared";
+import { PageHeader, StatTile, RouteBadges } from "@/components/views/shared";
 import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
 
 const HEALTH_STATUS_ORDER: Record<string, number> = { up: 0, degraded: 1, down: 2, unknown: 3 };
@@ -278,6 +278,7 @@ export function Status() {
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", marginTop: 2 }}>
                       {s.lastIncidentAt ? `incident ${timeAgo(s.lastIncidentAt)}` : s.host}
                     </div>
+                    {s.route && <div style={{ marginTop: 4 }}><RouteBadges route={s.route} /></div>}
                   </div>
                   <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
                     <Heartbeat beats={s.beats} h={24} barW={5} />
