@@ -15,6 +15,10 @@ const CONFIGS = [
   svc("radarr", "automation"), svc("tautulli", "stream"), svc("overseerr", "request"),
   svc("nzbget", "automation"), svc("qbittorrent", "automation"), svc("prowlarr", "automation"),
   svc("traefik", "infra"), svc("authentik", "infra"),
+  // Subdomain services for outpost-correlation tests: one under the proxy outpost (lan.test),
+  // one under the OAuth2 app's host (oauth.test) which must NOT inherit.
+  svc("under-outpost", "automation", { host: "app.lan.test" }),
+  svc("under-oauth", "automation", { host: "app.oauth.test" }),
 ];
 
 const logoOf = (c: { id: string; logoSlug: string | null }, slug: string) => c.logoSlug === slug || c.id === slug;
@@ -57,12 +61,21 @@ vi.mock("@/lib/integrations/http", () => ({
     if (url.includes("/api/http/services")) {
       return [{ name: "sonarr@docker", serverStatus: { "http://10.0.0.2:8989": "UP" } }];
     }
-    // Authentik: an app launching at the sonarr service host, with one group binding.
+    // Authentik apps: an exact-host proxy app (sonarr), a forward-auth proxy OUTPOST launching at a
+    // parent domain (lan.test → covers *.lan.test), and an OAuth2 app at a parent domain (oauth.test)
+    // which must NOT suffix-match subdomains (only proxy outposts do).
     if (url.includes("/core/applications/")) {
-      return { results: [{ pk: "a1", name: "Sonarr", slug: "sonarr", meta_launch_url: "https://sonarr.test/", provider_obj: { name: "sonarr-proxy", verbose_name: "Proxy Provider" } }] };
+      return { results: [
+        { pk: "a1", name: "Sonarr", slug: "sonarr", meta_launch_url: "https://sonarr.test/", provider_obj: { name: "sonarr-proxy", verbose_name: "Proxy Provider" } },
+        { pk: "op1", name: "lan-forward-auth", slug: "lan-forward-auth", meta_launch_url: "https://lan.test/", provider_obj: { name: "lan-proxy", verbose_name: "Proxy Provider" } },
+        { pk: "oa1", name: "oauth-app", slug: "oauth-app", meta_launch_url: "https://oauth.test/", provider_obj: { name: "oauth-prov", verbose_name: "OAuth2/OpenID Provider" } },
+      ] };
     }
     if (url.includes("/policies/bindings/")) {
-      return { results: [{ target: "a1", group: "g1", group_obj: { name: "media" }, enabled: true }] };
+      return { results: [
+        { target: "a1", group: "g1", group_obj: { name: "media" }, enabled: true },
+        { target: "op1", group: "g2", group_obj: { name: "infra" }, enabled: true },
+      ] };
     }
     return {};
   }),
@@ -148,6 +161,19 @@ describe("getSnapshot — facade aggregation", () => {
       serviceId: "sonarr", appSlug: "sonarr", everyone: false, groups: ["media"], providerType: "Proxy Provider",
     });
     expect(snap.services.find((s) => s.id === "qbittorrent")?.authentik).toBeUndefined();
+  });
+
+  it("inherits a forward-auth proxy outpost's access for subdomain services (longest parent wins)", async () => {
+    const snap = await getSnapshot();
+    // app.lan.test has no exact app, but is covered by the lan.test proxy outpost.
+    const inherited = snap.services.find((s) => s.id === "under-outpost")?.authentik;
+    expect(inherited).toMatchObject({ serviceId: "under-outpost", groups: ["infra"], inheritedFrom: "lan-forward-auth" });
+    // exact-host matches keep winning and are NOT marked inherited.
+    const exact = snap.services.find((s) => s.id === "sonarr")?.authentik;
+    expect(exact).toMatchObject({ groups: ["media"] });
+    expect(exact?.inheritedFrom).toBeUndefined();
+    // An OAuth2 (non-proxy) app at a parent host must NOT suffix-match its subdomains.
+    expect(snap.services.find((s) => s.id === "under-oauth")?.authentik).toBeUndefined();
   });
 
   it("passes through groups and visibility", async () => {

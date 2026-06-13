@@ -148,14 +148,15 @@ export function AccessBadges({ access }: { access: AuthentikAccess }) {
     access.policyGated ? "policy-gated" : null,
   ].filter(Boolean);
   const provider = [access.providerType, access.providerName].filter(Boolean).join(" · ");
+  const inherited = access.inheritedFrom ? `via ${access.inheritedFrom} outpost` : null;
   if (access.everyone) {
     return (
-      <RouteChip color="var(--on-surface-variant)" title={[`Authentik: all users can access`, provider].filter(Boolean).join(" — ")}>
+      <RouteChip color="var(--on-surface-variant)" title={[`Authentik: all users can access`, inherited, provider].filter(Boolean).join(" — ")}>
         <Icon name="group" size={11} /> everyone
       </RouteChip>
     );
   }
-  const detail = [`Authentik access — ${access.groups.join(", ") || "groups: none"}`, ...extras, provider].filter(Boolean).join(" · ");
+  const detail = [`Authentik access — ${access.groups.join(", ") || "groups: none"}`, ...extras, inherited, provider].filter(Boolean).join(" · ");
   const n = access.groups.length;
   const label = n === 0 ? "restricted" : n === 1 ? access.groups[0] : `${n} groups`;
   return (

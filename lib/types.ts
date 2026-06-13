@@ -80,6 +80,10 @@ export interface AuthentikAccess {
   users: number;
   /** ≥1 expression-policy binding (access gated by a policy we can't resolve to groups) */
   policyGated: boolean;
+  /** set when this access was inherited from a forward-auth proxy outpost covering a parent domain
+   *  (the outpost app name), rather than an app whose launch host exactly matches the service.
+   *  Undefined for exact-host matches. */
+  inheritedFrom?: string | null;
 }
 
 /** A Traefik router correlated to an AERIE service by host. Read-only; derived live from the

@@ -106,6 +106,22 @@ describe("serviceKind — via detectVersion and probeVersion", () => {
       expect(result).toBe("1.34.0");
     });
 
+    it("detects Authentik version via /api/v3/admin/version/ with a Bearer token", async () => {
+      mockFetchJson.mockResolvedValue({ version_current: "2026.5.2" });
+      const result = await probeVersion("https://authentik.test", "tok", "authentik");
+      expect(result).toBe("2026.5.2");
+      expect(mockFetchJson).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v3/admin/version/"),
+        expect.objectContaining({ service: "version-detect", headers: { Authorization: "Bearer tok" } }),
+      );
+    });
+
+    it("detectVersion('authentik') returns null when the token is rejected (403 throws)", async () => {
+      mockGetCreds.mockResolvedValue({ baseUrl: "https://authentik.test", apiKey: "bad", insecureTls: false });
+      mockFetchJson.mockRejectedValue(new Error("[version-detect] HTTP 403"));
+      expect(await detectVersion("authentik")).toBeNull();
+    });
+
     it("detects Jellyseerr as overseerr kind", async () => {
       mockFetchJson.mockResolvedValue({ version: "2.0.0" });
       const result = await probeVersion("http://jellyseerr:5055", "key", "jellyseerr");

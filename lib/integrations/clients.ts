@@ -2827,6 +2827,7 @@ type ServiceKind =
   | "unraid" // GraphQL /graphql (x-api-key) → info.versions.core.unraid
   | "lazylibrarian" // /api?cmd=getVersion&apikey= → current_version (short SHA); always HTTP 200
   | "listenarr" // own /api/v1 (NOT the shared *arr API) — X-Api-Key; /system/info → version
+  | "authentik" // /api/v3/admin/version/ (Bearer) → version_current; admin-namespaced ⇒ superuser check
   | "plex"; // /identity (no auth needed) → MediaContainer.version
 
 function serviceKind(id: string): ServiceKind | null {
@@ -2846,6 +2847,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("prowlarr") || l.includes("lidarr") || l.includes("readarr")) return "arr-v1";
   if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
   if (l.includes("tautulli")) return "tautulli";
+  if (l.includes("authentik")) return "authentik";
   if (l.includes("prometheus")) return "prometheus";
   if (l.includes("gatus")) return "gatus";
   if (l.includes("beszel")) return "beszel";
@@ -3030,6 +3032,15 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
       headers: apiKey ? { "X-Api-Key": apiKey } : {},
     });
     return normalizeVersion(d.version);
+  }
+  if (kind === "authentik") {
+    // /api/v3/admin/version/ is admin-namespaced, so a 200 confirms the token is valid AND a
+    // superuser (which AERIE requires for the apps/bindings reads). A non-superuser or bad token 403s.
+    const d = await fetchJson<{ version_current?: string }>(`${b}/api/v3/admin/version/`, {
+      service: "version-detect",
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    });
+    return normalizeVersion(d.version_current);
   }
   if (kind === "plex") {
     // /identity is unauthenticated and returns the server version as JSON (Accept: application/json
