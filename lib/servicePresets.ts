@@ -36,12 +36,21 @@ const USERPASS_USER: ServicePreset["secret"] = {
 };
 // Token-based but auth is optional (these run no-auth too) → never warn on a missing key.
 const OPTIONAL_APIKEY: ServicePreset["secret"] = { kind: "apiKey", optional: true };
+// Plex: panels are fed by Tautulli/Overseerr; the only direct call is the unauthenticated
+// /identity version probe. A token is accepted (future-proofing) but never required → optional.
+const PLEX_TOKEN: ServicePreset["secret"] = {
+  kind: "apiKey",
+  optional: true,
+  label: "Plex token",
+  hint: "optional — Plex data comes via Tautulli/Overseerr",
+  placeholder: "X-Plex-Token (optional)",
+};
 
 // Known service presets applied to blank fields when the name matches.
 export const SERVICE_PRESETS: Record<string, ServicePreset> = {
   jellyfin:      { cat: "stream",     icon: "smart_display", logoSlug: "jellyfin" },
   emby:          { cat: "stream",     icon: "smart_display", logoSlug: "emby" },
-  plex:          { cat: "stream",     icon: "smart_display", logoSlug: "plex" },
+  plex:          { cat: "stream",     icon: "smart_display", logoSlug: "plex", secret: PLEX_TOKEN },
   tautulli:      { cat: "monitor",    icon: "bar_chart",     logoSlug: "tautulli" },
   overseerr:     { cat: "request",    icon: "add_circle",    logoSlug: "overseerr" },
   jellyseerr:    { cat: "request",    icon: "add_circle",    logoSlug: "jellyseerr" },
