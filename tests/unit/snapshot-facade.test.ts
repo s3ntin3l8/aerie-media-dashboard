@@ -41,9 +41,15 @@ vi.mock("@/lib/integrations/http", () => ({
     if (url.includes("/api/v1/endpoints/statuses")) {
       return [{ name: "sonarr", group: "auto", results: [{ success: true, duration: 1_000_000, timestamp: "t1" }] }];
     }
-    // Traefik: one router for the sonarr service host, behind a forward-auth middleware.
+    // Traefik: a router for the sonarr service host (behind forward-auth), plus a routed host
+    // with NO matching AERIE service (grafana.lan) declared twice — http + https — to exercise
+    // discovered-dedupe (https preferred).
     if (url.includes("/api/http/routers")) {
-      return [{ name: "sonarr@docker", rule: "Host(`sonarr.test`)", service: "sonarr", provider: "docker", status: "enabled", middlewares: ["authentik@docker"], tls: {} }];
+      return [
+        { name: "sonarr@docker", rule: "Host(`sonarr.test`)", service: "sonarr", provider: "docker", status: "enabled", middlewares: ["authentik@docker"], tls: {} },
+        { name: "grafana-http@docker", rule: "Host(`grafana.lan`)", service: "grafana", provider: "docker", status: "enabled", middlewares: [] },
+        { name: "grafana@docker", rule: "Host(`grafana.lan`)", service: "grafana", provider: "docker", status: "enabled", middlewares: [], tls: {} },
+      ];
     }
     if (url.includes("/api/http/services")) {
       return [{ name: "sonarr@docker", serverStatus: { "http://10.0.0.2:8989": "UP" } }];
@@ -101,6 +107,14 @@ describe("getSnapshot — facade aggregation", () => {
     expect(sonarr?.route).toMatchObject({ serviceId: "sonarr", router: "sonarr@docker", forwardAuth: true, serverStatus: "up", tls: true });
     // a service with no matching router carries no route
     expect(snap.services.find((s) => s.id === "qbittorrent")?.route).toBeUndefined();
+  });
+
+  it("surfaces unmatched routers as traefikDiscovered (deduped by host, https preferred)", async () => {
+    const snap = await getSnapshot();
+    expect(snap.traefikDiscovered).toHaveLength(1); // grafana.lan once (http+https collapsed)
+    expect(snap.traefikDiscovered[0]).toMatchObject({ router: "grafana@docker", hosts: ["grafana.lan"], tls: true });
+    // matched-host routers (sonarr.test → an AERIE service) are NOT in the discovered list
+    expect(snap.traefikDiscovered.some((r) => r.hosts.includes("sonarr.test"))).toBe(false);
   });
 
   it("passes through groups and visibility", async () => {

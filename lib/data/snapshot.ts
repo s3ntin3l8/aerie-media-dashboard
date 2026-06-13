@@ -147,6 +147,9 @@ export interface Snapshot {
   /** Traefik service exists + active in config (drives the route indicators' visibility). Per-service
    *  route detail rides on each `Service.route`; this just gates whether the UI renders that column. */
   traefikConfigured: boolean;
+  /** Traefik routers whose host matches no configured AERIE service — suggestions for one-click add in
+   *  Admin (deduped by host, https preferred). Self-clearing: once added, the host matches and drops out. */
+  traefikDiscovered: TraefikRoute[];
 }
 
 export async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -390,6 +393,17 @@ export async function getSnapshot(): Promise<Snapshot> {
     const r = routeByHost.get(c.host.toLowerCase());
     return r ? { ...r, serviceId: c.id } : undefined;
   };
+  // Routers whose host matches no configured service → "discovered" suggestions for Admin
+  // (deduped by host; prefer the https/TLS router when a host has both http + https routers).
+  const configuredHosts = new Set(configs.map((c) => c.host.toLowerCase()));
+  const discoveredByHost = new Map<string, TraefikRoute>();
+  for (const r of traefikRoutesData ?? []) {
+    if (r.hosts.some((h) => configuredHosts.has(h))) continue;
+    const key = r.hosts[0];
+    const existing = discoveredByHost.get(key);
+    if (!existing || (r.tls && !existing.tls)) discoveredByHost.set(key, r);
+  }
+  const traefikDiscovered = [...discoveredByHost.values()];
 
   const services: Service[] = configs.map((c) => ({
     id: c.id,
@@ -550,6 +564,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     lazylibrarian: llStats ?? null,
     listenarr: listenarrData ?? null,
     traefikConfigured: traefikOn,
+    traefikDiscovered,
   };
   lastSnapshot = snapshot;
   return snapshot;
