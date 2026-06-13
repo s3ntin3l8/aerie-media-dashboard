@@ -6,11 +6,12 @@
 // panel. Live calls only fire for services that have a stored secret.
 // ============================================================
 import "server-only";
-import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
+import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, AuthentikAccess, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
   traefikRoutes,
+  authentikApps,
   tautulliActivity,
   tautulliUsers,
   jellyfinNowPlaying,
@@ -150,6 +151,9 @@ export interface Snapshot {
   /** Traefik routers whose host matches no configured AERIE service — suggestions for one-click add in
    *  Admin (deduped by host, https preferred). Self-clearing: once added, the host matches and drops out. */
   traefikDiscovered: TraefikRoute[];
+  /** Authentik service has a stored token + is active (drives the access-badge visibility). Per-service
+   *  access detail rides on each `Service.authentik`. */
+  authentikConfigured: boolean;
 }
 
 export async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -241,6 +245,8 @@ export async function getSnapshot(): Promise<Snapshot> {
   // Traefik's API can run open or behind basicAuth, so (like Gatus/Prometheus) gate on the row
   // being active rather than on a stored secret — a baseUrl is enough to read its API.
   const traefikOn = isActive("traefik");
+  // Authentik's API requires a token, so gate on a stored secret (like Beszel).
+  const authentikOn = await has("authentik");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
   const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn, qbitOn] = await Promise.all([
@@ -298,7 +304,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers, absNow, llStats,
     listenarrQ, listenarrHist, listenarrHealthIssues, listenarrData,
-    qbitQ, qbStats, altMetricsResult, traefikRoutesData,
+    qbitQ, qbStats, altMetricsResult, traefikRoutesData, authentikData,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -360,6 +366,7 @@ export async function getSnapshot(): Promise<Snapshot> {
       ? perf("live:metrics(alt)", safe(metricsSource === "beszel" ? prometheusMetrics : beszelMetrics))
       : Promise.resolve(null),
     traefikOn ? perf("live:traefikRoutes", safe(traefikRoutes)) : Promise.resolve(null),
+    authentikOn ? perf("live:authentikApps", safe(authentikApps)) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
 
@@ -393,6 +400,13 @@ export async function getSnapshot(): Promise<Snapshot> {
     const r = routeByHost.get(c.host.toLowerCase());
     return r ? { ...r, serviceId: c.id } : undefined;
   };
+  // Authentik apps correlated to services by launch-URL host (same join as Traefik).
+  const accessByHost = new Map<string, AuthentikAccess>();
+  for (const a of authentikData ?? []) if (!accessByHost.has(a.host)) accessByHost.set(a.host, a);
+  const accessFor = (c: { id: string; host: string }): AuthentikAccess | undefined => {
+    const a = accessByHost.get(c.host.toLowerCase());
+    return a ? { ...a, serviceId: c.id } : undefined;
+  };
   // Routers whose host matches no configured service → "discovered" suggestions for Admin
   // (deduped by host; prefer the https/TLS router when a host has both http + https routers).
   const configuredHosts = new Set(configs.map((c) => c.host.toLowerCase()));
@@ -425,6 +439,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     monitoringKey: c.monitoringKey ?? undefined,
     hasSecret: configuredIds.has(c.id),
     route: routeFor(c),
+    authentik: accessFor(c),
     ...healthFor(c.id, c.name, c.monitoringKey),
   }));
 
@@ -565,6 +580,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     listenarr: listenarrData ?? null,
     traefikConfigured: traefikOn,
     traefikDiscovered,
+    authentikConfigured: authentikOn,
   };
   lastSnapshot = snapshot;
   return snapshot;

@@ -14,7 +14,7 @@ const CONFIGS = [
   svc("gatus", "monitor"), svc("prometheus", "monitor"), svc("sonarr", "automation"),
   svc("radarr", "automation"), svc("tautulli", "stream"), svc("overseerr", "request"),
   svc("nzbget", "automation"), svc("qbittorrent", "automation"), svc("prowlarr", "automation"),
-  svc("traefik", "infra"),
+  svc("traefik", "infra"), svc("authentik", "infra"),
 ];
 
 vi.mock("@/lib/integrations/registry", () => ({
@@ -53,6 +53,13 @@ vi.mock("@/lib/integrations/http", () => ({
     }
     if (url.includes("/api/http/services")) {
       return [{ name: "sonarr@docker", serverStatus: { "http://10.0.0.2:8989": "UP" } }];
+    }
+    // Authentik: an app launching at the sonarr service host, with one group binding.
+    if (url.includes("/core/applications/")) {
+      return { results: [{ pk: "a1", name: "Sonarr", slug: "sonarr", meta_launch_url: "https://sonarr.test/", provider_obj: { name: "sonarr-proxy", verbose_name: "Proxy Provider" } }] };
+    }
+    if (url.includes("/policies/bindings/")) {
+      return { results: [{ target: "a1", group: "g1", group_obj: { name: "media" }, enabled: true }] };
     }
     return {};
   }),
@@ -115,6 +122,15 @@ describe("getSnapshot — facade aggregation", () => {
     expect(snap.traefikDiscovered[0]).toMatchObject({ router: "grafana@docker", hosts: ["grafana.lan"], tls: true });
     // matched-host routers (sonarr.test → an AERIE service) are NOT in the discovered list
     expect(snap.traefikDiscovered.some((r) => r.hosts.includes("sonarr.test"))).toBe(false);
+  });
+
+  it("correlates an Authentik app to a service by launch-URL host and flags authentikConfigured", async () => {
+    const snap = await getSnapshot();
+    expect(snap.authentikConfigured).toBe(true);
+    expect(snap.services.find((s) => s.id === "sonarr")?.authentik).toMatchObject({
+      serviceId: "sonarr", appSlug: "sonarr", everyone: false, groups: ["media"], providerType: "Proxy Provider",
+    });
+    expect(snap.services.find((s) => s.id === "qbittorrent")?.authentik).toBeUndefined();
   });
 
   it("passes through groups and visibility", async () => {

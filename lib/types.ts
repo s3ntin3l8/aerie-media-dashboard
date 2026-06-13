@@ -53,6 +53,33 @@ export interface Service {
   /** Traefik router correlated to this service by host (read-only admin insight). Absent when
    *  Traefik isn't configured, or no router/cert covers this service's host. */
   route?: TraefikRoute;
+  /** Authentik application access correlated to this service by launch-URL host (read-only admin
+   *  insight). Absent when Authentik isn't configured, or no app maps to this service's host. */
+  authentik?: AuthentikAccess;
+}
+
+/** Authentik application access correlated to an AERIE service by launch-URL host. Read-only;
+ *  derived live from the Authentik REST API (`/api/v3/core/applications` + `/api/v3/policies/bindings`).
+ *  Never persisted. */
+export interface AuthentikAccess {
+  /** the AERIE service id this app maps to (launch-URL host match) */
+  serviceId: string;
+  appName: string;
+  appSlug: string;
+  /** launch-URL hostname (lowercased) — the key used to correlate to a service */
+  host: string;
+  /** provider_obj.name, e.g. "sonarr-proxy" */
+  providerName: string | null;
+  /** provider_obj.verbose_name, e.g. "Proxy Provider" (fallback: component) */
+  providerType: string | null;
+  /** no enabled access binding on the app → all users can access (Authentik default) */
+  everyone: boolean;
+  /** group names bound with access */
+  groups: string[];
+  /** count of user-specific access bindings */
+  users: number;
+  /** ≥1 expression-policy binding (access gated by a policy we can't resolve to groups) */
+  policyGated: boolean;
 }
 
 /** A Traefik router correlated to an AERIE service by host. Read-only; derived live from the

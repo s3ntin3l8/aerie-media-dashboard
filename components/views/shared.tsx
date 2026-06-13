@@ -5,7 +5,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Eyebrow } from "@/components/primitives";
-import type { TraefikRoute } from "@/lib/types";
+import type { TraefikRoute, AuthentikAccess } from "@/lib/types";
 
 export function PageHeader({
   eyebrow,
@@ -138,6 +138,31 @@ export function RouteBadges({ route }: { route: TraefikRoute }) {
   }
   if (!badges.length) return null;
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{badges}</span>;
+}
+
+/** Read-only Authentik access summary for a service: provider type + who can access (everyone, or the
+ *  bound groups, with user-count / policy-gated noted in the tooltip). Admin-facing insight. */
+export function AccessBadges({ access }: { access: AuthentikAccess }) {
+  const extras = [
+    access.users > 0 ? `${access.users} user${access.users === 1 ? "" : "s"}` : null,
+    access.policyGated ? "policy-gated" : null,
+  ].filter(Boolean);
+  const provider = [access.providerType, access.providerName].filter(Boolean).join(" · ");
+  if (access.everyone) {
+    return (
+      <RouteChip color="var(--on-surface-variant)" title={[`Authentik: all users can access`, provider].filter(Boolean).join(" — ")}>
+        <Icon name="group" size={11} /> everyone
+      </RouteChip>
+    );
+  }
+  const detail = [`Authentik access — ${access.groups.join(", ") || "groups: none"}`, ...extras, provider].filter(Boolean).join(" · ");
+  const n = access.groups.length;
+  const label = n === 0 ? "restricted" : n === 1 ? access.groups[0] : `${n} groups`;
+  return (
+    <RouteChip color="var(--primary)" title={detail}>
+      <Icon name="group" size={11} /> {label}
+    </RouteChip>
+  );
 }
 
 export function StatTile({ label, value, color = "var(--on-surface)", icon }: { label: string; value: React.ReactNode; color?: string; icon?: string }) {
