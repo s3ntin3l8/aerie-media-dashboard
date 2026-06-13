@@ -74,6 +74,7 @@ export const SERVICE_PRESETS: Record<string, ServicePreset> = {
   prometheus:    { cat: "infra",      icon: "query_stats",   logoSlug: "prometheus", secret: OPTIONAL_APIKEY },
   grafana:       { cat: "infra",      icon: "monitoring",    logoSlug: "grafana" },
   portainer:     { cat: "infra",      icon: "dns",           logoSlug: "portainer" },
+  traefik:       { cat: "infra",      icon: "router",        logoSlug: "traefik", secret: { ...USERPASS_USER, optional: true } },
   nextcloud:     { cat: "infra",      icon: "cloud",         logoSlug: "nextcloud" },
   homeassistant: { cat: "infra",      icon: "home",          logoSlug: "home-assistant" },
   uptimekuma:    { cat: "monitor",    icon: "monitor_heart", logoSlug: "uptime-kuma" },

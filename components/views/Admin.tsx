@@ -12,9 +12,10 @@ import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } fro
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
-import { PageHeader } from "@/components/views/shared";
+import { PageHeader, RouteBadges } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
-import { serviceRequiresKey } from "@/lib/servicePresets";
+import { serviceRequiresKey, matchPreset } from "@/lib/servicePresets";
+import type { TraefikRoute } from "@/lib/types";
 import { Toast } from "@/components/modals/Toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
 
@@ -76,9 +77,24 @@ function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
   );
 }
 
-function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void }) {
+// Seed the add-service form from a discovered Traefik router: guess the name from the host's
+// first label, take the scheme from TLS, and pull category/icon/logo from the matching preset.
+function discoveredPrefill(r: TraefikRoute): Partial<ServiceForm> {
+  const label = r.hosts[0].split(":")[0].split(".")[0];
+  const p = matchPreset(label);
+  return {
+    name: label,
+    host: r.hosts[0],
+    scheme: r.tls ? "https" : "http",
+    cat: (p?.cat as Service["cat"]) ?? "infra",
+    icon: p?.icon ?? "dns",
+    logoSlug: p?.logoSlug ?? "",
+  };
+}
+
+function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void; onAddDiscovered: (prefill: Partial<ServiceForm>) => void }) {
   // Admin sees the FULL list (incl. inactive); every other surface gets active-only via useData().services.
-  const { allServices: services } = useData();
+  const { allServices: services, traefikDiscovered = [] } = useData();
   const { favorites, toggleFavorite } = usePortal();
   const patchData = usePatchData();
   const [, startActiveTransition] = useTransition();
@@ -125,9 +141,35 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
       : { col, dir: "asc" });
   }
 
+  // Suggestions from Traefik: routed hosts with no matching AERIE service yet. Admin-only,
+  // additive — clicking Add opens the service modal pre-filled; the row self-clears once added.
+  const discoveredEl = traefikDiscovered.length > 0 ? (
+    <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)", padding: 14, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <Icon name="travel_explore" size={16} color="var(--primary)" />
+        <Eyebrow>Discovered via Traefik</Eyebrow>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{traefikDiscovered.length}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {traefikDiscovered.map((r) => (
+          <div key={r.router} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.hosts[0]}</div>
+              <div style={{ marginTop: 3 }}><RouteBadges route={r} /></div>
+            </div>
+            <button onClick={() => onAddDiscovered(discoveredPrefill(r))} className="btn btn-ghost btn-sm" style={{ gap: 5 }} title={`Add ${r.hosts[0]} as a service`}>
+              <Icon name="add" size={14} /> Add
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   if (isMobile) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {discoveredEl}
         <select
           value={`${sort.col}:${sort.dir}`}
           onChange={(e) => {
@@ -190,6 +232,12 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>API key</Eyebrow>
                   <KeyIndicator service={s} />
                 </div>
+                {s.route && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Eyebrow style={{ width: 52, flexShrink: 0 }}>Route</Eyebrow>
+                    <RouteBadges route={s.route} />
+                  </div>
+                )}
               </div>
               <Divider style={{ margin: "12px 0 8px" }} />
               <div style={{ display: "flex", gap: 6 }}>
@@ -227,6 +275,8 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
   }
 
   return (
+    <>
+    {discoveredEl}
     <div className="aerie-x-scroll">
       <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
@@ -272,6 +322,7 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
                   <div style={{ fontSize: 10 }}>
                     <CatBadge cat={s.cat} size="xs" />
                   </div>
+                  {s.route && <div style={{ marginTop: 4 }}><RouteBadges route={s.route} /></div>}
                 </div>
               </div>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
@@ -300,6 +351,7 @@ function AdminServices({ isMobile, onOpenService, onEdit }: { isMobile: boolean;
         })}
       </div>
     </div>
+    </>
   );
 }
 
@@ -606,7 +658,7 @@ export function Admin() {
   const patchData = usePatchData();
   const isMobile = useIsMobile();
   const [tab, setTab] = useState("services");
-  const [svcModal, setSvcModal] = useState<{ mode: "add" | "edit"; service?: Service } | null>(null);
+  const [svcModal, setSvcModal] = useState<{ mode: "add" | "edit"; service?: Service; prefill?: Partial<ServiceForm> } | null>(null);
   // The id auto-saved by "Test connection" in add mode — lets a subsequent save/test of the
   // same id reconcile idempotently instead of tripping the duplicate-id guard.
   const lastAutoSavedId = useRef<string | null>(null);
@@ -772,7 +824,7 @@ export function Admin() {
       </div>
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
         <div className="aerie-page-pad" style={{ maxWidth: 1080, margin: "0 auto" }}>
-          {tab === "services" && <AdminServices isMobile={isMobile} onOpenService={openService} onEdit={(s) => setSvcModal({ mode: "edit", service: s })} />}
+          {tab === "services" && <AdminServices isMobile={isMobile} onOpenService={openService} onEdit={(s) => setSvcModal({ mode: "edit", service: s })} onAddDiscovered={(prefill) => { lastAutoSavedId.current = null; setSvcModal({ mode: "add", prefill }); }} />}
           {tab === "members" && <AdminMembers isMobile={isMobile} />}
           {tab === "visibility" && <AdminVisibility isMobile={isMobile} />}
         </div>
@@ -783,6 +835,7 @@ export function Admin() {
           open
           mode={svcModal.mode}
           service={svcModal.service}
+          prefill={svcModal.prefill}
           groups={groups}
           adminGroup={adminGroup}
           initialVisibility={svcModal.mode === "edit" && svcModal.service ? visForService(svcModal.service.id) : addDefaults()}

@@ -5,6 +5,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Eyebrow } from "@/components/primitives";
+import type { TraefikRoute } from "@/lib/types";
 
 export function PageHeader({
   eyebrow,
@@ -76,6 +77,67 @@ export function PageHeader({
       </div>
     </div>
   );
+}
+
+function RouteChip({ children, color, title }: { children: React.ReactNode; color: string; title?: string }) {
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        fontFamily: "var(--font-mono)",
+        fontSize: 10,
+        lineHeight: 1.4,
+        padding: "1px 6px",
+        borderRadius: 9999,
+        color,
+        border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
+        background: `color-mix(in srgb, ${color} 12%, transparent)`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Compact read-only badges for a service's correlated Traefik route: forward-auth ("SSO"),
+ *  a route-problem chip when the router/backend is unhealthy, and TLS cert expiry (color-coded by
+ *  days remaining). Renders nothing when the route is fully healthy and carries no cert info. */
+export function RouteBadges({ route }: { route: TraefikRoute }) {
+  const badges: React.ReactNode[] = [];
+  if (route.forwardAuth) {
+    badges.push(
+      <RouteChip key="sso" color="var(--primary)" title={`forward-auth via ${route.middlewares.join(", ") || "middleware"}`}>
+        <Icon name="shield" size={11} /> SSO
+      </RouteChip>,
+    );
+  }
+  const routeBad = route.serverStatus === "down" || (route.status !== "enabled" && route.status !== "unknown");
+  if (routeBad) {
+    const color = route.serverStatus === "down" ? "var(--error)" : "var(--amber)";
+    badges.push(
+      <RouteChip key="route" color={color} title={`router ${route.status}, backend ${route.serverStatus} — ${route.router}`}>
+        <Icon name="error" size={11} /> route
+      </RouteChip>,
+    );
+  }
+  if (route.cert) {
+    const d = route.cert.daysRemaining;
+    const color = d < 3 ? "var(--error)" : d < 14 ? "var(--amber)" : "var(--on-surface-variant)";
+    const expires = new Date(route.cert.notAfter * 1000).toLocaleDateString();
+    badges.push(
+      <RouteChip key="cert" color={color} title={`TLS cert for ${route.cert.domains.join(", ")} — expires ${expires}`}>
+        <Icon name="lock" size={11} /> {d < 0 ? "cert expired" : `cert ${d}d`}
+      </RouteChip>,
+    );
+  } else if (route.tls) {
+    badges.push(<Icon key="tls" name="lock" size={11} color="var(--on-surface-variant)" />);
+  }
+  if (!badges.length) return null;
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{badges}</span>;
 }
 
 export function StatTile({ label, value, color = "var(--on-surface)", icon }: { label: string; value: React.ReactNode; color?: string; icon?: string }) {

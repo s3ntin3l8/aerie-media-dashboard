@@ -134,4 +134,28 @@ describe("ServiceModal — keep-alive field", () => {
     render(<ServiceModal {...modalProps} mode="edit" service={mkSvc({ keepAlive: true }) as never} />);
     expect(screen.getByText("Keep session alive")).toBeInTheDocument();
   });
+
+  it("seeds the add form from a prefill (discovered Traefik router)", () => {
+    render(<ServiceModal {...modalProps} mode="add" prefill={{ name: "grafana", host: "grafana.lan", scheme: "https", cat: "infra", icon: "monitoring" }} />);
+    expect(screen.getByDisplayValue("grafana")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("grafana.lan")).toBeInTheDocument();
+  });
+});
+
+describe("Admin — discovered Traefik routers", () => {
+  it("lists discovered routers and opens the add modal pre-filled on Add", () => {
+    vi.mocked(useData).mockReturnValue({
+      services: [mkSvc()], allServices: [mkSvc()], groups: [], visibility: [], adminGroup: "admins", users: [],
+      traefikConfigured: true,
+      traefikDiscovered: [{ serviceId: "", router: "grafana@docker", rule: "Host(`grafana.lan`)", hosts: ["grafana.lan"], status: "enabled", tls: true, forwardAuth: true, middlewares: ["authentik@docker"], serverStatus: "up" }],
+    } as never);
+    render(<Admin />);
+
+    expect(screen.getByText("Discovered via Traefik")).toBeInTheDocument();
+    expect(screen.getByText("grafana.lan")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("Add grafana.lan as a service"));
+    // modal opened pre-filled with the discovered host
+    expect(screen.getByDisplayValue("grafana.lan")).toBeInTheDocument();
+  });
 });

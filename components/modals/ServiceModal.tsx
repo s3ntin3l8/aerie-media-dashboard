@@ -95,10 +95,13 @@ export function ServiceModal({
   onTestConnection,
   onSaveAndTest,
   onTestSaved,
+  prefill,
 }: {
   open: boolean;
   mode: "add" | "edit";
   service?: Service | null;
+  /** Add-mode: seed the blank form (e.g. host/scheme/name from a discovered Traefik router). */
+  prefill?: Partial<ServiceForm>;
   groups: { name: string }[];
   adminGroup: string;
   initialVisibility: Record<string, boolean>;
@@ -166,7 +169,7 @@ export function ServiceModal({
         monitoringKey: service.monitoringKey ?? "",
       };
     }
-    return blank();
+    return { ...blank(), ...(prefill ?? {}) };
   };
 
   const [f, setF] = useState<ServiceForm>(init);
@@ -188,7 +191,7 @@ export function ServiceModal({
       setConnStatus({ state: "idle" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, service?.id, mode]);
+  }, [open, service?.id, mode, prefill?.host]);
 
   // Category-driven default for the member ("friends") group when ADDING a service:
   // streaming/requests default visible, infra/monitoring/automation default admin-only.
