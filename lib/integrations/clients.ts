@@ -6,7 +6,7 @@
 // ============================================================
 import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
-import { getServiceCredentials, getDeploymentSetting } from "./registry";
+import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo } from "./registry";
 import { env } from "@/lib/env";
 import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute, AuthentikAccess } from "@/lib/types";
 
@@ -240,11 +240,28 @@ async function traefikRoutesUncached(baseUrlRaw: string, apiKey: string | null, 
   return routes;
 }
 
-export async function traefikRoutes(): Promise<TraefikRoute[]> {
-  const c = await getServiceCredentials("traefik");
-  if (!c) throw new IntegrationError("traefik", "not configured");
+/** Routes from a single Traefik instance, tagged with its source service id. */
+export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[]> {
+  const c = await getServiceCredentials(serviceId);
+  if (!c) throw new IntegrationError("traefik", `not configured (${serviceId})`);
   // Routers/certs change slowly; this feeds the 12s snapshot poll → cache to spare Traefik.
-  return cached("traefik:routes", 30_000, () => traefikRoutesUncached(c.baseUrl, c.apiKey, c.insecureTls));
+  const routes = await cached(`traefik:routes:${serviceId}`, 30_000, () => traefikRoutesUncached(c.baseUrl, c.apiKey, c.insecureTls));
+  return routes.map((r) => ({ ...r, via: serviceId }));
+}
+
+/** Aggregate routes across every active Traefik instance (any service whose logo is "traefik").
+ *  A single instance failing only drops its own routes — the others still resolve; only when EVERY
+ *  instance fails does this throw (so the facade degrades the panel). */
+export async function traefikRoutes(): Promise<TraefikRoute[]> {
+  const active = (await getServiceConfigsByLogo("traefik")).filter((c) => c.active);
+  if (!active.length) throw new IntegrationError("traefik", "not configured");
+  const settled = await Promise.allSettled(active.map((c) => traefikRoutesFor(c.id)));
+  const ok = settled.filter((r): r is PromiseFulfilledResult<TraefikRoute[]> => r.status === "fulfilled");
+  if (!ok.length) {
+    const firstErr = settled.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+    throw firstErr?.reason ?? new IntegrationError("traefik", "no routes");
+  }
+  return ok.flatMap((r) => r.value);
 }
 
 // ── Authentik — per-app SSO access (which groups/users may access each application) ──

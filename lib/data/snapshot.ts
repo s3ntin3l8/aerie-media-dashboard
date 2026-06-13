@@ -7,7 +7,7 @@
 // ============================================================
 import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, AuthentikAccess, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
-import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
+import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, configMatchesLogo, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
   traefikRoutes,
@@ -149,8 +149,12 @@ export interface Snapshot {
    *  route detail rides on each `Service.route`; this just gates whether the UI renders that column. */
   traefikConfigured: boolean;
   /** Traefik routers whose host matches no configured AERIE service — suggestions for one-click add in
-   *  Admin (deduped by host, https preferred). Self-clearing: once added, the host matches and drops out. */
+   *  Admin (deduped by host, https preferred). Self-clearing: once added, the host matches and drops out.
+   *  Excludes hosts in `traefikDismissed`. */
   traefikDiscovered: TraefikRoute[];
+  /** Hosts the admin has dismissed from the discovered panel (lowercased) — surfaced so Admin can
+   *  offer a restore affordance. */
+  traefikDismissed: string[];
   /** Authentik service has a stored token + is active (drives the access-badge visibility). Per-service
    *  access detail rides on each `Service.authentik`. */
   authentikConfigured: boolean;
@@ -244,7 +248,9 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus" && c.active);
   // Traefik's API can run open or behind basicAuth, so (like Gatus/Prometheus) gate on the row
   // being active rather than on a stored secret — a baseUrl is enough to read its API.
-  const traefikOn = isActive("traefik");
+  // Multi-instance: any active service whose logo is "traefik" counts (ids may be renamed,
+  // e.g. traefik-unraid / traefik-dockerhost), and traefikRoutes() aggregates across them.
+  const traefikOn = configs.some((c) => c.active && configMatchesLogo(c, "traefik"));
   // Authentik's API requires a token, so gate on a stored secret (like Beszel).
   const authentikOn = await has("authentik");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
@@ -270,11 +276,24 @@ export async function getSnapshot(): Promise<Snapshot> {
 
   // Active metrics source: honour the stored preference when its source is live,
   // otherwise fall back to whichever of Prometheus / Beszel is configured.
-  const [metricsSourceSetting, beszelSystemSetting, queueSourceSetting] = await Promise.all([
+  const [metricsSourceSetting, beszelSystemSetting, queueSourceSetting, traefikDismissedSetting] = await Promise.all([
     getDeploymentSetting("metricsSource"),
     getDeploymentSetting("beszelSystem"),
     getDeploymentSetting("queueSource"),
+    getDeploymentSetting("traefikDismissed"),
   ]);
+  // Hosts the admin has dismissed from the discovered-routers panel (JSON array of lowercased
+  // hosts). Malformed JSON degrades to "nothing dismissed".
+  const traefikDismissed = new Set<string>(
+    (() => {
+      try {
+        const parsed = traefikDismissedSetting ? JSON.parse(traefikDismissedSetting) : [];
+        return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string").map((h) => h.toLowerCase()) : [];
+      } catch {
+        return [];
+      }
+    })(),
+  );
   const metricsSource: "prometheus" | "beszel" =
     metricsSourceSetting === "beszel" && beszelOn ? "beszel"
     : promOn ? "prometheus"
@@ -413,6 +432,8 @@ export async function getSnapshot(): Promise<Snapshot> {
   const discoveredByHost = new Map<string, TraefikRoute>();
   for (const r of traefikRoutesData ?? []) {
     if (r.hosts.some((h) => configuredHosts.has(h))) continue;
+    // Hosts the admin dismissed never reappear as suggestions.
+    if (r.hosts.some((h) => traefikDismissed.has(h.toLowerCase()))) continue;
     const key = r.hosts[0];
     const existing = discoveredByHost.get(key);
     if (!existing || (r.tls && !existing.tls)) discoveredByHost.set(key, r);
@@ -580,6 +601,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     listenarr: listenarrData ?? null,
     traefikConfigured: traefikOn,
     traefikDiscovered,
+    traefikDismissed: [...traefikDismissed],
     authentikConfigured: authentikOn,
   };
   lastSnapshot = snapshot;

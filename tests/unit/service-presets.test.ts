@@ -38,4 +38,13 @@ describe("serviceRequiresKey", () => {
     expect(serviceRequiresKey("beszel")).toBe(true); // userpass still needs credentials
     expect(serviceRequiresKey("some-custom-thing")).toBe(true); // unknown → assume a key is wanted
   });
+
+  it("falls back to logoSlug so renamed instances resolve to their (optional) preset", () => {
+    // A renamed Traefik instance whose id no longer matches the preset, but whose logoSlug does.
+    expect(serviceRequiresKey("traefik-dockerhost")).toBe(true); // without the logo hint → unknown → wants key
+    expect(serviceRequiresKey("traefik-dockerhost", "traefik")).toBe(false); // logo hint → optional
+    expect(serviceRequiresKey("traefik-unraid", "traefik")).toBe(false);
+    // A custom id with a non-optional logo stays required.
+    expect(serviceRequiresKey("my-sonarr", "sonarr")).toBe(true);
+  });
 });

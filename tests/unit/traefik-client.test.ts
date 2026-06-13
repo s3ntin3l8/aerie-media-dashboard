@@ -11,11 +11,11 @@ vi.mock("@/lib/integrations/http", () => ({
     constructor(service: string, message: string) { super(`[${service}] ${message}`); this.service = service; }
   },
 }));
-vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn() }));
+vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigsByLogo: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { encryptionKey: "0".repeat(64), authSecret: "test", configFile: "/dev/null", databaseUrl: "file::memory:" }, authConfigured: false }));
 
 import { fetchJson, fetchRaw } from "@/lib/integrations/http";
-import { getServiceCredentials } from "@/lib/integrations/registry";
+import { getServiceCredentials, getServiceConfigsByLogo } from "@/lib/integrations/registry";
 import { clearCache, traefikRoutes, hostsFromRule, parseCertMetric } from "@/lib/integrations/clients";
 
 const mockJson = vi.mocked(fetchJson);
@@ -25,6 +25,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearCache();
   vi.mocked(getServiceCredentials).mockResolvedValue({ baseUrl: "http://traefik:8080", apiKey: "user:pass", insecureTls: false } as never);
+  // One active Traefik instance by default; aggregation resolves instances via the logo helper.
+  vi.mocked(getServiceConfigsByLogo).mockResolvedValue([{ id: "traefik", name: "traefik", active: true, logoSlug: "traefik" }] as never);
 });
 
 describe("hostsFromRule", () => {
@@ -107,11 +109,41 @@ describe("traefikRoutes", () => {
   });
 
   it("throws when not configured and when the routers call fails", async () => {
-    vi.mocked(getServiceCredentials).mockResolvedValueOnce(null as never);
+    // No active Traefik instance → "not configured".
+    vi.mocked(getServiceConfigsByLogo).mockResolvedValueOnce([] as never);
     await expect(traefikRoutes()).rejects.toThrow();
 
+    // One instance configured, but its routers call fails → every instance failed → throws.
     mockJson.mockRejectedValue(new Error("HTTP 500"));
     mockRaw.mockResolvedValue({ ok: true, text: async () => "" } as never);
     await expect(traefikRoutes()).rejects.toThrow();
+  });
+
+  it("aggregates routes across multiple Traefik instances, tagging each with its source (via)", async () => {
+    wire();
+    vi.mocked(getServiceConfigsByLogo).mockResolvedValue([
+      { id: "traefik-unraid", name: "traefik unraid", active: true, logoSlug: "traefik" },
+      { id: "traefik-dockerhost", name: "traefik dockerhost", active: true, logoSlug: "traefik" },
+    ] as never);
+    const routes = await traefikRoutes();
+    // Two routers per instance × two instances = 4 routes; each tagged by its source id.
+    expect(routes).toHaveLength(4);
+    expect(routes.filter((r) => r.via === "traefik-unraid")).toHaveLength(2);
+    expect(routes.filter((r) => r.via === "traefik-dockerhost")).toHaveLength(2);
+  });
+
+  it("keeps a healthy instance's routes when another instance fails", async () => {
+    vi.mocked(getServiceConfigsByLogo).mockResolvedValue([
+      { id: "traefik-ok", name: "ok", active: true, logoSlug: "traefik" },
+      { id: "traefik-bad", name: "bad", active: true, logoSlug: "traefik" },
+    ] as never);
+    // The bad instance has no credentials (traefikRoutesFor throws); the good one wires normally.
+    vi.mocked(getServiceCredentials).mockImplementation(async (id: string) =>
+      id === "traefik-bad" ? null : ({ baseUrl: "http://traefik:8080", apiKey: "user:pass", insecureTls: false }) as never,
+    );
+    wire();
+    const routes = await traefikRoutes();
+    expect(routes).toHaveLength(2);
+    expect(routes.every((r) => r.via === "traefik-ok")).toBe(true);
   });
 });

@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation";
 import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { setVisibility, upsertService, setServiceSecret, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota } from "@/app/(portal)/admin/actions";
-import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
+import { setVisibility, upsertService, setServiceSecret, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
+import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar } from "@/components/primitives";
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
-import { PageHeader, RouteBadges, AccessBadges } from "@/components/views/shared";
+import { PageHeader, RouteBadges, MetaBadges } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { serviceRequiresKey, matchPreset } from "@/lib/servicePresets";
 import type { TraefikRoute } from "@/lib/types";
@@ -63,7 +63,7 @@ function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
       </span>
     );
   }
-  if (serviceRequiresKey(service.id)) {
+  if (serviceRequiresKey(service.id, service.logoSlug)) {
     return (
       <span style={{ ...base, color: "var(--warning)" }}>
         <Icon name="warning" size={12} />Not set
@@ -94,7 +94,7 @@ function discoveredPrefill(r: TraefikRoute): Partial<ServiceForm> {
 
 function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void; onAddDiscovered: (prefill: Partial<ServiceForm>) => void }) {
   // Admin sees the FULL list (incl. inactive); every other surface gets active-only via useData().services.
-  const { allServices: services, traefikDiscovered = [] } = useData();
+  const { allServices: services, traefikDiscovered = [], traefikDismissed = [] } = useData();
   const { favorites, toggleFavorite } = usePortal();
   const patchData = usePatchData();
   const [, startActiveTransition] = useTransition();
@@ -141,28 +141,80 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
       : { col, dir: "asc" });
   }
 
+  // More than one Traefik instance configured → attribute each discovered host to its source.
+  const multiTraefik = services.filter((s) => s.logoSlug === "traefik").length > 1;
+  const traefikName = (id?: string) => services.find((s) => s.id === id)?.name ?? id ?? "traefik";
+
+  // Optimistically drop a discovered host from the panel (and remember it) while the action persists.
+  const dismissHost = (host: string) => {
+    const h = host.toLowerCase();
+    patchData((snap) => ({
+      ...snap,
+      traefikDiscovered: snap.traefikDiscovered.filter((r) => !r.hosts.some((x) => x.toLowerCase() === h)),
+      traefikDismissed: [...new Set([...(snap.traefikDismissed ?? []), h])],
+    }));
+    startActiveTransition(async () => {
+      try { await dismissTraefikHost(host); }
+      catch { /* next snapshot poll reconciles */ }
+    });
+  };
+  const restoreHost = (host: string) => {
+    const h = host.toLowerCase();
+    patchData((snap) => ({ ...snap, traefikDismissed: (snap.traefikDismissed ?? []).filter((x) => x !== h) }));
+    startActiveTransition(async () => {
+      try { await restoreTraefikHost(host); }
+      catch { /* next snapshot poll reconciles */ }
+    });
+  };
+
   // Suggestions from Traefik: routed hosts with no matching AERIE service yet. Admin-only,
   // additive — clicking Add opens the service modal pre-filled; the row self-clears once added.
-  const discoveredEl = traefikDiscovered.length > 0 ? (
+  // Dismiss hides a host you never want to add (persisted; restorable below).
+  const discoveredEl = (traefikDiscovered.length > 0 || traefikDismissed.length > 0) ? (
     <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)", padding: 14, marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <Icon name="travel_explore" size={16} color="var(--primary)" />
         <Eyebrow>Discovered via Traefik</Eyebrow>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{traefikDiscovered.length}</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {traefikDiscovered.map((r) => (
-          <div key={r.router} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.hosts[0]}</div>
-              <div style={{ marginTop: 3 }}><RouteBadges route={r} /></div>
-            </div>
-            <button onClick={() => onAddDiscovered(discoveredPrefill(r))} className="btn btn-ghost btn-sm" style={{ gap: 5 }} title={`Add ${r.hosts[0]} as a service`}>
-              <Icon name="add" size={14} /> Add
-            </button>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {traefikDiscovered.map((r, i) => (
+          <div key={r.router} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1, minWidth: 0 }}>{r.hosts[0]}</span>
+            <RouteBadges route={r} />
+            {multiTraefik && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)", opacity: 0.8 }} title={`Discovered via ${traefikName(r.via)}`}>
+                via {traefikName(r.via)}
+              </span>
+            )}
+            <span style={{ marginLeft: "auto", display: "inline-flex", gap: 2, flexShrink: 0 }}>
+              <button onClick={() => onAddDiscovered(discoveredPrefill(r))} className="btn btn-ghost btn-sm" style={{ gap: 5 }} title={`Add ${r.hosts[0]} as a service`}>
+                <Icon name="add" size={14} /> Add
+              </button>
+              <button onClick={() => dismissHost(r.hosts[0])} className="btn btn-ghost btn-sm" style={{ padding: 6, color: "var(--on-surface-variant)" }} title={`Dismiss ${r.hosts[0]} — stop suggesting it`}>
+                <Icon name="close" size={14} />
+              </button>
+            </span>
           </div>
         ))}
+        {traefikDiscovered.length === 0 && (
+          <div style={{ fontSize: 11, color: "var(--on-surface-variant)", padding: "4px 0" }}>No new hosts — all routed hosts are added or dismissed.</div>
+        )}
       </div>
+      {traefikDismissed.length > 0 && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", cursor: "pointer" }}>
+            {traefikDismissed.length} dismissed
+          </summary>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+            {traefikDismissed.map((h) => (
+              <button key={h} onClick={() => restoreHost(h)} className="btn btn-ghost btn-sm" style={{ gap: 5, fontFamily: "var(--font-mono)", fontSize: 10.5 }} title={`Restore ${h} to suggestions`}>
+                <Icon name="undo" size={13} /> {h}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   ) : null;
 
@@ -200,7 +252,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                     <span style={{ fontWeight: 700, fontSize: 14, color: "var(--on-surface)" }}>{s.name}</span>
                     {!s.active && <Pill rawColor="var(--on-surface-variant)">inactive</Pill>}
                   </div>
-                  <div style={{ marginTop: 2 }}><CatBadge cat={s.cat} size="xs" /></div>
+                  <div style={{ marginTop: 3 }}><MetaBadges cat={s.cat} route={s.route} access={s.authentik} /></div>
                 </div>
               </div>
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -232,18 +284,6 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>API key</Eyebrow>
                   <KeyIndicator service={s} />
                 </div>
-                {s.route && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Eyebrow style={{ width: 52, flexShrink: 0 }}>Route</Eyebrow>
-                    <RouteBadges route={s.route} />
-                  </div>
-                )}
-                {s.authentik && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Eyebrow style={{ width: 52, flexShrink: 0 }}>Access</Eyebrow>
-                    <AccessBadges access={s.authentik} />
-                  </div>
-                )}
               </div>
               <Divider style={{ margin: "12px 0 8px" }} />
               <div style={{ display: "flex", gap: 6 }}>
@@ -325,11 +365,9 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                     <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</span>
                     {!s.active && <Pill rawColor="var(--on-surface-variant)">inactive</Pill>}
                   </div>
-                  <div style={{ fontSize: 10 }}>
-                    <CatBadge cat={s.cat} size="xs" />
+                  <div style={{ marginTop: 3 }}>
+                    <MetaBadges cat={s.cat} route={s.route} access={s.authentik} />
                   </div>
-                  {s.route && <div style={{ marginTop: 4 }}><RouteBadges route={s.route} /></div>}
-                  {s.authentik && <div style={{ marginTop: 4 }}><AccessBadges access={s.authentik} /></div>}
                 </div>
               </div>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
