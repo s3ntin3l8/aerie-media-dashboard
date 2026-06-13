@@ -13,17 +13,19 @@ vi.mock("@/lib/integrations/clients", () => ({
   prometheusInstances: vi.fn(),
   overseerrSearch: vi.fn(),
   traefikRoutes: vi.fn(),
+  authentikApps: vi.fn(),
 }));
 
 import { getSessionUser } from "@/lib/session";
 import { getServiceCredentials, getServiceSecret } from "@/lib/integrations/registry";
-import { tautulliStreamHistory, gatusHealth, beszelSystems, prometheusInstances, overseerrSearch, traefikRoutes } from "@/lib/integrations/clients";
+import { tautulliStreamHistory, gatusHealth, beszelSystems, prometheusInstances, overseerrSearch, traefikRoutes, authentikApps } from "@/lib/integrations/clients";
 
 import { GET as historyGET } from "@/app/api/history/route";
 import { GET as gatusGET } from "@/app/api/gatus-endpoints/route";
 import { GET as beszelGET } from "@/app/api/beszel/systems/route";
 import { GET as promGET } from "@/app/api/prometheus/instances/route";
 import { GET as traefikGET } from "@/app/api/traefik/routes/route";
+import { GET as authentikGET } from "@/app/api/authentik/apps/route";
 import { GET as discoverGET } from "@/app/api/discover/route";
 import { GET as iconsGET } from "@/app/api/icons/route";
 
@@ -112,6 +114,22 @@ describe("admin-gated proxy routes", () => {
 
     vi.mocked(traefikRoutes).mockRejectedValue(new Error("down"));
     expect(await (await traefikGET()).json()).toEqual([]);
+  });
+
+  it("authentik/apps: 403 for non-admins, [] when unconfigured, passthrough, [] on throw", async () => {
+    vi.mocked(getSessionUser).mockResolvedValue(user("U", "u@x") as never);
+    expect((await authentikGET()).status).toBe(403);
+
+    vi.mocked(getSessionUser).mockResolvedValue(admin as never);
+    vi.mocked(getServiceCredentials).mockResolvedValue(null as never);
+    expect(await (await authentikGET()).json()).toEqual([]);
+
+    vi.mocked(getServiceCredentials).mockResolvedValue({ baseUrl: "http://a", apiKey: "tok" } as never);
+    vi.mocked(authentikApps).mockResolvedValue([{ appSlug: "sonarr", serviceId: "" }] as never);
+    expect(await (await authentikGET()).json()).toEqual([{ appSlug: "sonarr", serviceId: "" }]);
+
+    vi.mocked(authentikApps).mockRejectedValue(new Error("down"));
+    expect(await (await authentikGET()).json()).toEqual([]);
   });
 });
 
