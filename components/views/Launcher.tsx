@@ -216,6 +216,34 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
   const embedFailed = embedState === "unverified";
   const who = user.name || user.email || "session";
 
+  // Embed subheader: reflect this service's REAL proxy protection (Traefik middleware / Authentik
+  // access) instead of a blanket "forward-auth" literal. Falls back to the global OIDC hint only
+  // when we have no Traefik route data for this host.
+  const cert = s.route?.cert;
+  const lockColor = cert
+    ? cert.daysRemaining < 3 ? "var(--error)" : cert.daysRemaining < 14 ? "var(--amber)" : "var(--originator-own)"
+    : s.scheme === "https" ? "var(--originator-own)" : "var(--amber)";
+  const lockTitle = cert
+    ? `TLS cert for ${cert.domains.join(", ")} — expires ${new Date(cert.notAfter * 1000).toLocaleDateString()} (${cert.daysRemaining < 0 ? "expired" : `${cert.daysRemaining}d left`})`
+    : s.scheme === "https" ? "HTTPS" : "HTTP — not encrypted";
+  const access = s.authentik;
+  const accessLbl = access
+    ? access.everyone ? "everyone" : access.groups.length === 0 ? "restricted" : access.groups.length === 1 ? access.groups[0] : `${access.groups.length} groups`
+    : null;
+  const behindSso = Boolean(s.route?.forwardAuth) || Boolean(access);
+  const authText = behindSso
+    ? `forward-auth${accessLbl ? ` · ${accessLbl}` : ` · ${who}`}`
+    : s.route
+      ? `direct · ${who}` // route known but no forward-auth middleware → not behind SSO
+      : oidc ? `forward-auth · ${who}` : who; // no route data → fall back to the global OIDC hint
+  const authColor = behindSso ? "var(--primary)" : "var(--on-surface-variant)";
+  const authIcon = behindSso ? "shield_person" : s.route ? "lock_open" : "shield_person";
+  const authTitle = [
+    s.route ? `middlewares: ${s.route.middlewares.join(", ") || "none"}` : null,
+    access ? `Authentik: ${access.everyone ? "all users" : access.groups.join(", ") || "restricted"}` : null,
+    `signed in as ${who}`,
+  ].filter(Boolean).join("\n");
+
   // Self-heal: when a failed embed (likely an expired upstream SSO session that redirected the
   // frame to a login page that refuses framing) regains focus, reload it. The user re-authenticates
   // top-level in another tab; returning here issues a fresh navigation with the now-valid cookie.
@@ -271,12 +299,14 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
       {s.embeddable ? (
         <>
           <div style={{ height: 34, flexShrink: 0, display: "flex", alignItems: "center", gap: 9, padding: "0 16px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 60%, transparent)" }}>
-            <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={13} color={s.scheme === "https" ? "var(--originator-own)" : "var(--amber)"} />
+            <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center", cursor: cert ? "help" : undefined }}>
+              <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={13} color={lockColor} />
+            </span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{url}</span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, padding: "1px 7px", borderRadius: 4, background: `color-mix(in srgb, ${badge.color} 12%, transparent)`, color: badge.color, fontWeight: 700 }}>{badge.label}</span>
-            <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
-              <Icon name="shield_person" size={12} color="var(--primary)" />
-              {oidc ? `forward-auth · ${who}` : who}
+            <span title={authTitle} style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
+              <Icon name={authIcon} size={12} color={authColor} />
+              {authText}
             </span>
           </div>
           <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "var(--surface-container-low)" }}>

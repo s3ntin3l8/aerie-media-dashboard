@@ -4,8 +4,8 @@
 // ============================================================
 import React from "react";
 import { useRouter } from "next/navigation";
-import { Icon, Eyebrow } from "@/components/primitives";
-import type { TraefikRoute, AuthentikAccess } from "@/lib/types";
+import { Icon, Eyebrow, CatBadge } from "@/components/primitives";
+import type { TraefikRoute, AuthentikAccess, Category } from "@/lib/types";
 
 export function PageHeader({
   eyebrow,
@@ -162,6 +162,19 @@ export function AccessBadges({ access }: { access: AuthentikAccess }) {
     <RouteChip color="var(--primary)" title={detail}>
       <Icon name="group" size={11} /> {label}
     </RouteChip>
+  );
+}
+
+/** One compact, wrapping meta row for a service: an optional category pill followed by the
+ *  Traefik route badges and the Authentik access badge. Replaces stacking each in its own
+ *  margined line so service rows stay short (two lines instead of four). */
+export function MetaBadges({ cat, route, access }: { cat?: Category; route?: TraefikRoute; access?: AuthentikAccess }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 5, rowGap: 4 }}>
+      {cat && <CatBadge cat={cat} size="xs" />}
+      {route && <RouteBadges route={route} />}
+      {access && <AccessBadges access={access} />}
+    </span>
   );
 }
 

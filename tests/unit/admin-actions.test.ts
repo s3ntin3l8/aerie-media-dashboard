@@ -24,6 +24,7 @@ import {
   upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceActive,
   serviceExists, deleteService, detectServiceVersion, setMetricsSource, setQueueSource,
   setBeszelSystem, setPrometheusInstance, setUserOverseerrQuota,
+  dismissTraefikHost, restoreTraefikHost,
 } from "@/app/(portal)/admin/actions";
 
 const asAdmin = () => vi.mocked(getSessionUser).mockResolvedValue({ role: "admin" } as never);
@@ -145,6 +146,31 @@ describe("deployment-setting actions", () => {
   it("rejects non-admin callers", async () => {
     asUser();
     await expect(setMetricsSource("beszel")).rejects.toThrow("forbidden");
+  });
+});
+
+describe("Traefik discovered-host dismiss/restore", () => {
+  beforeEach(() => asAdmin());
+
+  it("dismiss persists a lowercased host (idempotent) and restore removes it", async () => {
+    await dismissTraefikHost("Books.Unraid.lan");
+    let stored = JSON.parse((await getDeploymentSetting("traefikDismissed")) ?? "[]");
+    expect(stored).toContain("books.unraid.lan");
+    // idempotent — no duplicate
+    await dismissTraefikHost("books.unraid.lan");
+    stored = JSON.parse((await getDeploymentSetting("traefikDismissed")) ?? "[]");
+    expect(stored.filter((h: string) => h === "books.unraid.lan")).toHaveLength(1);
+
+    await restoreTraefikHost("books.unraid.lan");
+    stored = JSON.parse((await getDeploymentSetting("traefikDismissed")) ?? "[]");
+    expect(stored).not.toContain("books.unraid.lan");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin");
+  });
+
+  it("rejects a non-admin caller", async () => {
+    asUser();
+    await expect(dismissTraefikHost("x.lan")).rejects.toThrow("forbidden");
+    await expect(restoreTraefikHost("x.lan")).rejects.toThrow("forbidden");
   });
 });
 

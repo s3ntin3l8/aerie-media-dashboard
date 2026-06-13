@@ -270,24 +270,28 @@ export function Status() {
               {sortedList.map((s, i) => (
                 <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
                   <ServiceLogo service={s} size={30} radius={8} />
-                  <div style={{ flex: "0 0 150px", minWidth: 0 }}>
+                  <div style={{ flex: "0 0 200px", minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <StatusDot status={s.status} size={7} />
                       <span style={{ fontWeight: 700, fontSize: 13, color: "var(--on-surface)" }}>{s.name}</span>
                     </div>
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", marginTop: 2 }}>
-                      {s.lastIncidentAt ? `incident ${timeAgo(s.lastIncidentAt)}` : s.host}
+                    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, rowGap: 4, marginTop: 2 }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+                        {s.lastIncidentAt ? `incident ${timeAgo(s.lastIncidentAt)}` : s.host}
+                      </span>
+                      {s.route && <RouteBadges route={s.route} />}
                     </div>
-                    {s.route && <div style={{ marginTop: 4 }}><RouteBadges route={s.route} /></div>}
                   </div>
                   <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
                     <Heartbeat beats={s.beats} h={24} barW={5} />
                   </div>
-                  {s.msHistory && s.msHistory.length > 1 && (
-                    <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }} title="response time, last 30 checks">
+                  {/* Always reserve this column (even when empty) so heartbeats stay aligned
+                      across monitored and unmonitored rows. */}
+                  <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }} title="response time, last 30 checks">
+                    {s.msHistory && s.msHistory.length > 1 && (
                       <Sparkline data={s.msHistory} w={64} h={24} color="var(--primary)" strokeW={1.25} />
-                    </div>
-                  )}
+                    )}
+                  </div>
                   <div style={{ flex: "0 0 60px", textAlign: "right" }}>
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: s.status === "down" ? "var(--error)" : s.status === "degraded" ? "var(--amber)" : "var(--on-surface)" }}>{s.status === "unknown" ? "—" : `${s.uptime.toFixed(2)}%`}</div>
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{s.status === "unknown" ? "—" : `${s.ms}ms`}</div>

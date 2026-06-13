@@ -41,4 +41,15 @@ describe("NowPlayingChip", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(push).toHaveBeenCalledWith("/streams");
   });
+
+  it("shows elapsed / total runtime (cur=600s of a 148-min title)", () => {
+    render(<NowPlayingChip sessions={[sess()]} accent="var(--primary)" />);
+    // useStreamProgress is stubbed to cur=600 → 10:00; dur 148min → total 2:28:00.
+    expect(screen.getByText("10:00 / 2:28:00")).toBeInTheDocument();
+  });
+
+  it("still renders the runtime readout in compact (mobile) mode", () => {
+    render(<NowPlayingChip sessions={[sess()]} accent="var(--primary)" compact />);
+    expect(screen.getByText("10:00 / 2:28:00")).toBeInTheDocument();
+  });
 });

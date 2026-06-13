@@ -5,15 +5,28 @@ import { ServiceLogo } from "@/components/ServiceLogo";
 import { LaunchScreen } from "@/components/views/Launcher";
 import { useEmbedProbe } from "@/components/hooks/useEmbedProbe";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { useData } from "@/components/portal/DataProvider";
+import { NowPlayingChip } from "@/components/views/NowPlayingChip";
 import { catColor } from "@/lib/categories";
 import type { Service } from "@/lib/types";
 
 export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => void }) {
   const { embedState, badge, onLoad, onError, reload, reloadKey } = useEmbedProbe(s);
   const { paletteOpen, modalOpen } = usePortal();
+  const { nowPlaying = [] } = useData();
+  // Live sessions for this service (matched on the now-playing source id, e.g. "plex").
+  const sessions = nowPlaying.filter((np) => np.src === s.id);
+  const npAccent = s.id === "plex" ? "var(--originator-third-party)" : "var(--primary)";
   const loaded = embedState === "ok";
   const c = catColor(s.cat);
   const url = `${s.scheme}://${s.host}`;
+  const cert = s.route?.cert;
+  const lockColor = cert
+    ? cert.daysRemaining < 3 ? "var(--error)" : cert.daysRemaining < 14 ? "var(--amber)" : "var(--originator-own)"
+    : s.scheme === "https" ? "var(--originator-own)" : "var(--amber)";
+  const lockTitle = cert
+    ? `TLS cert for ${cert.domains.join(", ")} — expires ${new Date(cert.notAfter * 1000).toLocaleDateString()} (${cert.daysRemaining < 0 ? "expired" : `${cert.daysRemaining}d left`})`
+    : s.scheme === "https" ? "HTTPS" : "HTTP — not encrypted";
 
   // Self-heal: a failed embed (likely an expired SSO session redirected to a non-framable login)
   // reloads when the tab regains focus, after the user re-authenticates top-level. Only subscribe
@@ -69,11 +82,20 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
         </a>
       </div>
 
+      {/* Live now-playing for this service (Plex/Jellyfin/ABS) — own strip so it's visible on mobile. */}
+      {sessions.length > 0 && (
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", padding: "6px 10px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
+          <NowPlayingChip sessions={sessions} accent={npAccent} compact />
+        </div>
+      )}
+
       {s.embeddable ? (
         <>
           {/* Forward-auth bar */}
           <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "7px 14px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 60%, transparent)" }}>
-            <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={12} color={s.scheme === "https" ? "var(--originator-own)" : "var(--amber)"} />
+            <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center", cursor: cert ? "help" : undefined }}>
+              <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={12} color={lockColor} />
+            </span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{url}</span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, padding: "1px 7px", borderRadius: 4, background: `color-mix(in srgb, ${badge.color} 12%, transparent)`, color: badge.color, fontWeight: 700, flexShrink: 0 }}>{badge.label}</span>
           </div>

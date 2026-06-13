@@ -9,6 +9,7 @@ vi.mock("@/components/portal/PortalProvider", () => ({
   usePortal: () => ({ paletteOpen: false, modalOpen: false, favorites: [], toggleFavorite: vi.fn(), user: { name: "t" }, oidc: true }),
 }));
 vi.mock("@/app/(portal)/admin/actions", () => ({ setQueueSource: vi.fn() }));
+vi.mock("@/components/portal/DataProvider", () => ({ useData: () => ({ nowPlaying: [] }) }));
 
 const probe = {
   embedState: "unverified" as "checking" | "ok" | "unverified",
