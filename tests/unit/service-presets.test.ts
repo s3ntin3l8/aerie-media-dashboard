@@ -20,6 +20,8 @@ describe("matchPreset", () => {
     expect(matchPreset("prometheus")?.secret?.optional).toBe(true);
     // NZBGet keeps its userpass *format* while still being optional auth.
     expect(matchPreset("nzbget")?.secret).toMatchObject({ kind: "userpass", optional: true });
+    // Plex token is accepted but never required (data comes via Tautulli/Overseerr).
+    expect(matchPreset("plex")?.secret).toMatchObject({ kind: "apiKey", optional: true });
   });
 });
 
@@ -28,6 +30,7 @@ describe("serviceRequiresKey", () => {
     expect(serviceRequiresKey("gatus")).toBe(false);
     expect(serviceRequiresKey("prometheus")).toBe(false);
     expect(serviceRequiresKey("nzbget")).toBe(false); // optional auth
+    expect(serviceRequiresKey("plex")).toBe(false); // token optional; no panel depends on it
   });
 
   it("is true for token services, credential-pair services, and unknown/custom services", () => {
