@@ -16,6 +16,7 @@ import { Empty } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
 import { NowPlayingChip } from "@/components/views/NowPlayingChip";
+import { embedAuthSummary } from "@/components/views/embedAuth";
 
 
 function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
@@ -215,34 +216,9 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
   const loaded = embedState === "ok";
   const embedFailed = embedState === "unverified";
   const who = user.name || user.email || "session";
-
-  // Embed subheader: reflect this service's REAL proxy protection (Traefik middleware / Authentik
-  // access) instead of a blanket "forward-auth" literal. Falls back to the global OIDC hint only
-  // when we have no Traefik route data for this host.
-  const cert = s.route?.cert;
-  const lockColor = cert
-    ? cert.daysRemaining < 3 ? "var(--error)" : cert.daysRemaining < 14 ? "var(--amber)" : "var(--originator-own)"
-    : s.scheme === "https" ? "var(--originator-own)" : "var(--amber)";
-  const lockTitle = cert
-    ? `TLS cert for ${cert.domains.join(", ")} — expires ${new Date(cert.notAfter * 1000).toLocaleDateString()} (${cert.daysRemaining < 0 ? "expired" : `${cert.daysRemaining}d left`})`
-    : s.scheme === "https" ? "HTTPS" : "HTTP — not encrypted";
-  const access = s.authentik;
-  const accessLbl = access
-    ? access.everyone ? "everyone" : access.groups.length === 0 ? "restricted" : access.groups.length === 1 ? access.groups[0] : `${access.groups.length} groups`
-    : null;
-  const behindSso = Boolean(s.route?.forwardAuth) || Boolean(access);
-  const authText = behindSso
-    ? `forward-auth${accessLbl ? ` · ${accessLbl}` : ` · ${who}`}`
-    : s.route
-      ? `direct · ${who}` // route known but no forward-auth middleware → not behind SSO
-      : oidc ? `forward-auth · ${who}` : who; // no route data → fall back to the global OIDC hint
-  const authColor = behindSso ? "var(--primary)" : "var(--on-surface-variant)";
-  const authIcon = behindSso ? "shield_person" : s.route ? "lock_open" : "shield_person";
-  const authTitle = [
-    s.route ? `middlewares: ${s.route.middlewares.join(", ") || "none"}` : null,
-    access ? `Authentik: ${access.everyone ? "all users" : access.groups.join(", ") || "restricted"}` : null,
-    `signed in as ${who}`,
-  ].filter(Boolean).join("\n");
+  // Embed subheader auth/cert summary — reflects the service's real Traefik middleware / Authentik
+  // access (see embedAuth.ts). Pure + unit-tested there.
+  const { lockColor, lockTitle, authText, authColor, authIcon, authTitle } = embedAuthSummary(s, who, oidc);
 
   // Self-heal: when a failed embed (likely an expired upstream SSO session that redirected the
   // frame to a login page that refuses framing) regains focus, reload it. The user re-authenticates
@@ -299,7 +275,7 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
       {s.embeddable ? (
         <>
           <div style={{ height: 34, flexShrink: 0, display: "flex", alignItems: "center", gap: 9, padding: "0 16px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 60%, transparent)" }}>
-            <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center", cursor: cert ? "help" : undefined }}>
+            <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center", cursor: s.route?.cert ? "help" : undefined }}>
               <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={13} color={lockColor} />
             </span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{url}</span>
