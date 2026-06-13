@@ -27,9 +27,10 @@ Built with **Next.js (App Router, TypeScript)**.
 | Auth | Auth.js v5; any OIDC provider or local credentials; role from `groups` claim or `AERIE_ADMIN_EMAILS`; route protection |
 | Persistence | SQLite + Drizzle (services, secrets, groups, visibility, users, links, prefs); migrations + seed |
 | Secrets | AES-256-GCM at rest (`ENCRYPTION_KEY`) |
-| Integrations | Gatus, Tautulli, Jellyfin, Overseerr, Sonarr/Radarr, Prometheus, Beszel clients; real-data-or-empty per panel |
-| Live data | `/api/snapshot` polled by the client; now-playing/status stay fresh |
-| Cover art | Tautulli/Jellyfin proxy (`/api/artwork`) with placeholder fallback |
+| Integrations | Gatus, Tautulli, Jellyfin, Audiobookshelf, Overseerr, Sonarr/Radarr, Prowlarr, Bazarr, NZBHydra2, Listenarr, NZBGet, qBittorrent, Wizarr, Agregarr, Prometheus, Beszel clients; real-data-or-empty per panel |
+| Service insight | Read-only **Traefik** (route health, "behind SSO", TLS-cert expiry + discovered-router add) and **Authentik** (per-app group access) correlated by host — see `docs/services/` |
+| Live data | `/api/snapshot` polled by the client; now-playing/status stay fresh, incl. a live now-playing chip in the embed header |
+| Cover art | Tautulli/Jellyfin/ABS proxy (`/api/artwork`) with placeholder fallback |
 | Embedding | Real `<iframe>` + Traefik `frame-ancestors` middleware + OIDC forward-auth (`docs/EMBEDDING.md`) |
 | Admin | Add/edit/remove **service modal** (wired to `upsertService`/`setServiceSecret`/`deleteService`), persisted visibility matrix |
 | Requests | **Request modal** (member discover→confirm→submit) + **review modal** (admin approve/decline); real Overseerr search/create/review when configured |
@@ -41,7 +42,8 @@ Built with **Next.js (App Router, TypeScript)**.
    local-admin mode), `AUTH_SECRET`, `ENCRYPTION_KEY`.
 2. `npm run db:migrate && npm run db:seed` (or let the runtime bootstrap do it).
 3. Enter each service's API key in **Admin → Services** (stored encrypted) to light up live
-   data; services without a key show an empty state until configured.
+   data; services without a key show an empty state until configured. Per-service setup
+   (credential format, what each surfaces) is documented in [`docs/services/`](docs/services/README.md).
 4. Deploy with `docker compose up -d` behind Traefik; apply the embed + forward-auth
    middlewares to embeddable services (see `docs/EMBEDDING.md`).
 

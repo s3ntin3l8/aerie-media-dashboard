@@ -4,6 +4,10 @@ The portal embeds services in an `<iframe>` (the in-portal "Open" experience).
 This only works when two conditions hold. **Validate them with the spike below
 before relying on embedding.**
 
+> Related: AERIE can also read the Traefik API to surface per-service route health, a "behind
+> forward-auth" badge, and TLS-cert expiry as read-only insight — see
+> [`docs/services/traefik.md`](services/traefik.md).
+
 ## Hard requirements
 
 1. **Same registrable domain.** The portal and every embeddable service must

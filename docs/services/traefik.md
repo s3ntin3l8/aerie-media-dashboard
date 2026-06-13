@@ -26,6 +26,14 @@ changes in the UI.
   correlated routers (for debugging). The Status/Admin data is the source of truth;
   this just exposes it directly.
 
+### Discovered routers (one-click add)
+
+Traefik routers whose host matches **no** AERIE service are surfaced in **Admin → Services**
+under a **"Discovered via Traefik"** panel — each with an **Add** button that opens the service
+modal pre-filled with the host, scheme, and a guessed name/icon. It's admin-driven and additive
+(no automatic writes); a suggestion **self-clears** once you add it (the host then matches a
+service on the next poll).
+
 ## Requirements
 
 1. **Traefik API enabled.** It is **off by default**. Enable it (and keep it

@@ -8,6 +8,10 @@ AERIE **always requires authentication**. There are two modes:
   **create-admin** setup form. After that, `/login` is an email + password sign-in. Passwords
   are hashed (scrypt) at rest. See [Local admin](#local-admin-no-oidc) below.
 
+> This page covers **signing in to AERIE**. Separately, AERIE can read Authentik's API to surface
+> *which groups can access each app* as a read-only admin insight — that's a different feature; see
+> [`docs/services/authentik.md`](services/authentik.md).
+
 ---
 
 ## OIDC setup (generic)

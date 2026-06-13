@@ -111,8 +111,15 @@ on the `Snapshot` type.
 - `http.ts` — `fetchJson()`: every upstream call goes through this bounded-timeout (5s),
   `cache: "no-store"` fetch that throws a typed `IntegrationError`. Use it for all upstream
   HTTP so the facade can degrade per-panel.
-- `clients.ts` — one normalizing function per upstream (Gatus, Tautulli, Jellyfin, Overseerr,
-  Sonarr/Radarr, Prometheus, Beszel). They **throw** on missing config/errors; the facade catches.
+- `clients.ts` — one normalizing function per upstream (Gatus, Tautulli, Jellyfin, Audiobookshelf,
+  Overseerr, Sonarr/Radarr, Prowlarr, Bazarr, NZBHydra2, Listenarr, NZBGet, qBittorrent, Wizarr,
+  Agregarr, Prometheus, Beszel, plus the read-only **Traefik** and **Authentik** insight clients).
+  They **throw** on missing config/errors; the facade catches.
+  **Read-only service insight (Traefik/Authentik).** `traefikRoutes()` and `authentikApps()` don't
+  drive a panel — they correlate to existing services **by host** and ride on each `Service` as
+  `route` / `authentik` (with `traefikConfigured`/`authentikConfigured`/`traefikDiscovered` on the
+  `Snapshot`), surfaced as read-only badges in Status/Admin. Per-service setup for **every**
+  integration is documented under `docs/services/` (see its `README.md` index).
   **Prometheus and Beszel are interchangeable sources for `Snapshot.metrics`** (the System Status
   cards): `getSnapshot()` resolves an active source from the `metricsSource` deployment setting and
   calls only that one. Beszel's hub is PocketBase, so `beszelMetrics()` authenticates as a **superuser**
