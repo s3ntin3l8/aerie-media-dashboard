@@ -16,6 +16,8 @@ vi.mock("@/components/portal/PortalProvider", () => ({
   }),
 }));
 vi.mock("@/app/(portal)/admin/actions", () => ({ setQueueSource: vi.fn() }));
+// ServiceView reads now-playing for the header chip; stub the snapshot context.
+vi.mock("@/components/portal/DataProvider", () => ({ useData: () => ({ nowPlaying: [] }) }));
 
 import { ServiceView } from "@/components/views/Launcher";
 import { EMBED_LOAD_TIMEOUT_MS } from "@/components/hooks/useEmbedProbe";
