@@ -15,6 +15,7 @@ import { Icon, StatusDot, Heartbeat, Divider, SearchField } from "@/components/p
 import { Empty } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader } from "@/components/views/shared";
+import { NowPlayingChip } from "@/components/views/NowPlayingChip";
 
 
 function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
@@ -194,6 +195,10 @@ export function ServiceViewById({ serviceId, deepPath }: { serviceId: string; de
 export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) {
   const router = useRouter();
   const { paletteOpen, modalOpen, favorites, toggleFavorite, user, oidc } = usePortal();
+  const { nowPlaying = [] } = useData();
+  // Live sessions belonging to this service (matched on the now-playing source id, e.g. "plex").
+  const sessions = nowPlaying.filter((np) => np.src === s.id);
+  const npAccent = s.id === "plex" ? "var(--originator-third-party)" : "var(--primary)";
   const pinned = favorites.includes(s.id);
   const c = catColor(s.cat);
   const url = `${s.scheme}://${s.host}`;
@@ -241,6 +246,8 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>v{String(s.version).replace(/^v/i, "")}</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Live now-playing for this service (Plex/Jellyfin/ABS) — nothing when idle. */}
+          {sessions.length > 0 && <NowPlayingChip sessions={sessions} accent={npAccent} />}
           {/* Live health — real Gatus data. Hidden entirely when unmonitored
               (status "unknown" → uptime 0 / dead beats), per real-data-or-empty. */}
           {monitored && <Heartbeat beats={s.beats} h={14} barW={2.5} gap={1.5} />}

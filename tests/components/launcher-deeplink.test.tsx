@@ -24,6 +24,9 @@ vi.mock("@/components/hooks/useEmbedProbe", () => ({
   useEmbedProbe: () => ({ embedState: "checking", badge: { label: "checking", color: "#888" }, onLoad: vi.fn(), onError: vi.fn(), reload: vi.fn(), reloadKey: 0 }),
 }));
 
+// ServiceView reads now-playing for the header chip; stub the snapshot context.
+vi.mock("@/components/portal/DataProvider", () => ({ useData: () => ({ nowPlaying: [] }) }));
+
 import { ServiceView } from "@/components/views/Launcher";
 
 const svc = {

@@ -27,6 +27,8 @@ const probe = {
   reloadKey: 0,
 };
 vi.mock("@/components/hooks/useEmbedProbe", () => ({ useEmbedProbe: () => probe }));
+// ServiceView reads now-playing for the header chip; stub the snapshot context.
+vi.mock("@/components/portal/DataProvider", () => ({ useData: () => ({ nowPlaying: [] }) }));
 
 import { ServiceView } from "@/components/views/Launcher";
 
