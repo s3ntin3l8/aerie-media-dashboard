@@ -403,9 +403,19 @@ export async function getSnapshot(): Promise<Snapshot> {
   // Authentik apps correlated to services by launch-URL host (same join as Traefik).
   const accessByHost = new Map<string, AuthentikAccess>();
   for (const a of authentikData ?? []) if (!accessByHost.has(a.host)) accessByHost.set(a.host, a);
+  // Forward-auth proxy outposts protect a whole parent domain (e.g. an app launching at
+  // `unraid.in.example.com` covers `sonarr.unraid.in.example.com`). Restrict the parent-domain
+  // fallback to *proxy* providers (not OAuth2 apps, which are per-host) and prefer the most specific
+  // (longest host) outpost. Exact-host matches always win over an inherited outpost.
+  const proxyOutposts = (authentikData ?? [])
+    .filter((a) => /proxy/i.test(a.providerType ?? ""))
+    .sort((x, y) => y.host.length - x.host.length);
   const accessFor = (c: { id: string; host: string }): AuthentikAccess | undefined => {
-    const a = accessByHost.get(c.host.toLowerCase());
-    return a ? { ...a, serviceId: c.id } : undefined;
+    const host = c.host.toLowerCase();
+    const exact = accessByHost.get(host);
+    if (exact) return { ...exact, serviceId: c.id };
+    const outpost = proxyOutposts.find((a) => host === a.host || host.endsWith(`.${a.host}`));
+    return outpost ? { ...outpost, serviceId: c.id, inheritedFrom: outpost.appName } : undefined;
   };
   // Routers whose host matches no configured service → "discovered" suggestions for Admin
   // (deduped by host; prefer the https/TLS router when a host has both http + https routers).

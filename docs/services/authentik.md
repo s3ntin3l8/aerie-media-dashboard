@@ -17,6 +17,24 @@ service. AERIE stays generic OIDC for every other deployment.
   access. Table and mobile card both show it.
 - **`GET /api/authentik/apps`** — an admin-only JSON endpoint returning the correlated apps (debugging).
   The Admin data is the source of truth.
+- **Connection test.** The Admin "Test" action validates the token by calling
+  `/api/v3/admin/version/` (Bearer). Because that endpoint is admin-namespaced, a green result also
+  confirms the token belongs to a **superuser** (which AERIE needs for `superuser_full_list`); a
+  non-superuser or invalid token fails the test.
+
+## Forward-auth outpost correlation (parent domains)
+
+Many estates protect a whole domain with a single Authentik **forward-auth proxy outpost** — one
+application launching at, say, `unraid.example.com` that guards every `*.unraid.example.com` service via
+the embedded/proxy outpost. Those per-service subdomains have **no app of their own**, so an exact-host
+match would leave them blank.
+
+AERIE handles this: when no app's launch host exactly matches a service, it falls back to the
+**proxy/forward-auth** app whose launch host is a **parent domain** of the service host (e.g.
+`sonarr.unraid.example.com` inherits the `unraid.example.com` outpost). The **most specific** (longest)
+parent wins, and only **Proxy Provider** apps are eligible — OAuth2/OpenID apps never suffix-match their
+subdomains. Inherited access is marked in the chip tooltip as *"via &lt;outpost&gt; outpost"* so it's
+clear the access is domain-wide rather than app-specific.
 
 ## How access is resolved
 
@@ -51,7 +69,12 @@ Within ~12 s (the snapshot poll) the access chips appear on services whose host 
 ## Troubleshooting
 
 - **No chips appear.** Confirm the Authentik service is active with a stored token, and the app launch-URL
-  hosts match the AERIE service **Host**. Check `GET /api/authentik/apps` (as an admin) returns entries.
+  hosts match the AERIE service **Host** (or a parent-domain forward-auth outpost covers them). Use the
+  Admin **Test** action — a green version means the token is valid and a superuser. Check
+  `GET /api/authentik/apps` (as an admin) returns entries.
+- **A service under a forward-auth outpost still shows no chip.** Only **Proxy Provider** apps are used
+  for parent-domain matching, and the outpost app must have an **absolute launch URL** on the parent
+  domain. OAuth2 apps deliberately don't suffix-match their subdomains.
 - **An app shows `everyone` unexpectedly.** That app has no enabled group/user/policy binding in Authentik
   — add a binding there to restrict it.
 - **Truncation.** AERIE fetches up to 1000 apps/bindings per call and logs a warning if Authentik paginates
