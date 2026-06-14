@@ -151,6 +151,19 @@ describe("traefikRoutes via the aggregator", () => {
     expect(urls.some((u) => u.includes("/api/http/routers"))).toBe(false);
   });
 
+  it("stays detected after the cosmetic icon changes — candidacy uses logo OR id/name (regression)", async () => {
+    // The bug: changing the aggregator's icon (logo_slug "traefik" → "traefik-proxy") dropped it
+    // from the candidate set, killing discovery. Candidacy now also accepts the id/name "traefik"
+    // signal, so any icon — even one unrelated to traefik — keeps the source.
+    for (const logoSlug of ["traefik-proxy", "router"]) {
+      clearCache();
+      wireConfigs([{ id: "traefik-viewer", name: "traefik-viewer", active: true, logoSlug }]);
+      const routes = await traefikRoutes();
+      expect(routes).toHaveLength(3);
+      expect(routes.every((r) => r.via === "traefik-viewer")).toBe(true);
+    }
+  });
+
   it("falls back to the raw per-instance scrape when /api/snapshot is absent (real Traefik)", async () => {
     wireConfigs([{ id: "traefik", name: "traefik", active: true, logoSlug: "traefik" }]);
     mockJson.mockImplementation(async (url: string) => {
