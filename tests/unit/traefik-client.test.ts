@@ -11,7 +11,7 @@ vi.mock("@/lib/integrations/http", () => ({
     constructor(service: string, message: string) { super(`[${service}] ${message}`); this.service = service; }
   },
 }));
-vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigs: vi.fn(), getServiceConfigsByLogo: vi.fn(), configMatchesLogo: vi.fn() }));
+vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getServiceSecret: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigs: vi.fn(), getServiceConfigsByLogo: vi.fn(), configMatchesLogo: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { encryptionKey: "0".repeat(64), authSecret: "test", configFile: "/dev/null", databaseUrl: "file::memory:" }, authConfigured: false }));
 
 import { fetchJson, fetchRaw } from "@/lib/integrations/http";

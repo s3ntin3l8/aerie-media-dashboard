@@ -11,11 +11,11 @@ vi.mock("@/lib/integrations/http", () => ({
     constructor(service: string, message: string) { super(`[${service}] ${message}`); this.service = service; }
   },
 }));
-vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigs: vi.fn(), getServiceConfigsByLogo: vi.fn(), configMatchesLogo: vi.fn() }));
+vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getServiceSecret: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigs: vi.fn(), getServiceConfigsByLogo: vi.fn(), configMatchesLogo: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { encryptionKey: "0".repeat(64), authSecret: "test", configFile: "/dev/null", databaseUrl: "file::memory:" }, authConfigured: false }));
 
 import { fetchJson } from "@/lib/integrations/http";
-import { getServiceCredentials, getServiceConfigs } from "@/lib/integrations/registry";
+import { getServiceCredentials, getServiceConfigs, getServiceSecret } from "@/lib/integrations/registry";
 import { clearCache, traefikRoutes, traefikInstances } from "@/lib/integrations/clients";
 
 const mockJson = vi.mocked(fetchJson);
@@ -129,6 +129,20 @@ describe("traefikRoutes via the aggregator", () => {
   it("throws when the snapshot fetch fails", async () => {
     mockJson.mockRejectedValue(new Error("HTTP 502"));
     await expect(traefikRoutes()).rejects.toThrow();
+  });
+
+  it("authenticates through authentik forward-auth when a forwardAuth secret is set", async () => {
+    // The aggregator sits behind an authentik outpost: a `forwardAuth` secret adds the
+    // outpost Authorization to the /api/snapshot request (here HTTP Basic).
+    vi.mocked(getServiceSecret).mockImplementation(async (_id: string, kind?: string) =>
+      kind === "forwardAuth" ? JSON.stringify({ method: "basic", username: "svc", password: "pw" }) : null,
+    );
+    const routes = await traefikRoutes();
+    expect(routes).toHaveLength(3);
+    const snapCall = mockJson.mock.calls.find((c) => (c[0] as string).includes("/api/snapshot"))!;
+    expect((snapCall[1] as { headers?: Record<string, string> }).headers?.Authorization).toBe(
+      `Basic ${Buffer.from("svc:pw").toString("base64")}`,
+    );
   });
 
   it("never reads the raw per-instance API for a source that probes as an aggregator", async () => {

@@ -10,6 +10,7 @@ import "server-only";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import * as schema from "@/lib/db/schema";
 import { encrypt } from "@/lib/crypto";
+import { parseForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import type { ServiceConfigFile } from "./services";
 
 type DB = LibSQLDatabase<typeof schema>;
@@ -63,6 +64,21 @@ export async function applyServiceConfig(db: DB, cfg: ServiceConfigFile): Promis
       });
     if (secrets.length) {
       await db.insert(schema.serviceSecrets).values(secrets).onConflictDoNothing();
+    }
+
+    // Forward-auth (authentik) configs — a separate `forwardAuth`-kind secret. Validate each
+    // (skips entries left incomplete by an unresolved ${ENV_VAR}); store as encrypted JSON.
+    const faSecrets = cfg.services
+      .map((s) => {
+        if (!s.forwardAuth) return null;
+        const json = JSON.stringify(s.forwardAuth);
+        if (!parseForwardAuthConfig(json)) return null;
+        const enc = encrypt(json);
+        return { serviceId: s.id, kind: "forwardAuth", iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: now };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    if (faSecrets.length) {
+      await db.insert(schema.serviceSecrets).values(faSecrets).onConflictDoNothing();
     }
   }
 

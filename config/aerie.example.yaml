@@ -199,6 +199,37 @@ services:
     embeddable: false
     note: "Identity · OIDC"
 
+  - id: traefik
+    name: Traefik
+    cat: infra
+    icon: dns
+    logoSlug: traefik
+    host: traefik.aerie.tv
+    internalUrl: https://traefik-viewer.aerie.tv
+    embeddable: false
+    note: "Edge router · read-only insight"
+    # `forwardAuth` works on ANY service that sits BEHIND authentik forward-auth (Sonarr,
+    # Radarr, Overseerr, …), not just Traefik — AERIE authenticates THROUGH the outpost
+    # rather than circumventing it. NOTE: forward-auth owns the Authorization header, so it
+    # only conflicts with a service whose OWN auth also uses Authorization (e.g. nzbget's
+    # HTTP Basic) AND that you actually place behind the outpost. The common cases coexist
+    # fine: X-Api-Key (*arr/Overseerr), query-param (Tautulli/Bazarr), and cookie
+    # (qBittorrent) auth are all separate from Authorization. Two flows (pick one):
+    #   • bearer — mint a short-lived JWT from authentik's token endpoint
+    #     (grant_type=client_credentials). Needs the proxy provider's client_id.
+    #   • basic  — send the service-account user:password; the outpost runs the exchange.
+    # Use ${ENV_VAR} refs so no plaintext lives in the file. An incomplete entry (e.g. an
+    # unresolved env ref) is skipped, not fatal. This is SEPARATE from apiKey above, so a
+    # service can carry both (the app's own key must then use a non-Authorization header).
+    forwardAuth:
+      method: bearer
+      tokenUrl: https://auth.aerie.tv/application/o/token/
+      clientId: ${TRAEFIK_FA_CLIENT_ID}
+      username: ${TRAEFIK_FA_USERNAME}
+      password: ${TRAEFIK_FA_PASSWORD}
+      scope: openid
+      # For HTTP Basic instead, drop tokenUrl/clientId/scope and set method: basic.
+
 # ── Visibility (optional) ────────────────────────────────────
 # Which group can see which service. Omit to use AERIE's defaults
 # (admins: all; friends: all but infra/prometheus/beszel; guests: streaming).

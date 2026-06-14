@@ -51,6 +51,21 @@ describe("applyServiceConfig", () => {
     expect(decrypt({ iv: secrets[0].iv, authTag: secrets[0].authTag, ciphertext: secrets[0].ciphertext })).toBe("secret-token"); // trimmed
   });
 
+  it("encrypts a valid forwardAuth config and skips an incomplete one", async () => {
+    const { db, inserts } = fakeDb();
+    await applyServiceConfig(db as never, { services: [
+      { ...baseService, forwardAuth: { method: "bearer", tokenUrl: "https://auth.lan/application/o/token/", clientId: "cid", username: "svc", password: "pw", scope: "openid" } },
+      // radarr's password didn't resolve (empty ${ENV}) → invalid → skipped, not fatal.
+      { id: "radarr", name: "Radarr", cat: "automation", icon: "movie", host: "radarr.lan", forwardAuth: { method: "bearer", tokenUrl: "https://auth.lan/application/o/token/", clientId: "cid", username: "svc", password: "" } },
+    ] } as never);
+    // The forwardAuth insert is the only serviceSecrets insert here (no apiKeys).
+    const faInsert = inserts.find((i) => i.table === schema.serviceSecrets);
+    const secrets = faInsert!.values as { serviceId: string; kind: string; iv: string; authTag: string; ciphertext: string }[];
+    expect(secrets).toHaveLength(1); // radarr (empty password) skipped
+    expect(secrets[0]).toMatchObject({ serviceId: "sonarr", kind: "forwardAuth" });
+    expect(JSON.parse(decrypt({ iv: secrets[0].iv, authTag: secrets[0].authTag, ciphertext: secrets[0].ciphertext }))).toMatchObject({ method: "bearer", clientId: "cid" });
+  });
+
   it("inserts groups and visibility when present, and skips secret insert when no keys", async () => {
     const { db, valuesFor } = fakeDb();
     await applyServiceConfig(db as never, {

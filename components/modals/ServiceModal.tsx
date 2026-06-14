@@ -33,6 +33,15 @@ export interface ServiceForm {
   apiKey: string;
   monitoringKey: string;
   lokiQuery: string;
+  // Forward-auth (authentik) — auth THROUGH a reverse-proxy outpost. "" = keep current /
+  // none, "remove" = clear stored config. The credential fields are blank-means-keep in
+  // edit mode (like apiKey), serialized to a `forwardAuth`-kind secret by the Admin view.
+  forwardAuthMethod: "" | "basic" | "bearer" | "remove";
+  forwardAuthTokenUrl: string;
+  forwardAuthClientId: string;
+  forwardAuthUsername: string;
+  forwardAuthPassword: string;
+  forwardAuthScope: string;
 }
 
 interface GatusEndpoint { key: string; name: string; group?: string }
@@ -142,6 +151,12 @@ export function ServiceModal({
     apiKey: "",
     monitoringKey: "",
     lokiQuery: "",
+    forwardAuthMethod: "",
+    forwardAuthTokenUrl: "",
+    forwardAuthClientId: "",
+    forwardAuthUsername: "",
+    forwardAuthPassword: "",
+    forwardAuthScope: "",
   });
   // stored internalUrl is a full URL ("http://host:port"); split for the two-input form
   const splitInternal = (u?: string): { scheme: "https" | "http"; rest: string } => {
@@ -486,6 +501,50 @@ export function ServiceModal({
                 </div>
               )}
             </Field>
+
+            {/* FORWARD-AUTH (authentik) — authenticate THROUGH a reverse-proxy outpost.
+                Separate from the API key above, so a service can carry both. */}
+            <Field
+              label="Forward-auth"
+              hint={editing ? "authentik outpost — leave method unset to keep current" : "authentik outpost — optional"}
+            >
+              <select
+                className="input"
+                style={{ ...fieldInput, fontFamily: "var(--font-mono)" }}
+                value={f.forwardAuthMethod}
+                onChange={(e) => set("forwardAuthMethod", e.target.value as ServiceForm["forwardAuthMethod"])}
+              >
+                <option value="">Not behind forward-auth{editing ? " (keep current)" : ""}</option>
+                <option value="bearer">Bearer JWT (client-credentials)</option>
+                <option value="basic">HTTP Basic (service account)</option>
+                {editing && <option value="remove">Remove forward-auth</option>}
+              </select>
+            </Field>
+            {(f.forwardAuthMethod === "basic" || f.forwardAuthMethod === "bearer") && (
+              <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 10, paddingLeft: 11, borderLeft: "2px solid var(--outline-variant)" }}>
+                {f.forwardAuthMethod === "bearer" && (
+                  <>
+                    <Field label="Token URL" hint="authentik OAuth2 token endpoint">
+                      <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.forwardAuthTokenUrl} onChange={(e) => set("forwardAuthTokenUrl", e.target.value)} placeholder="https://authentik.example.com/application/o/token/" />
+                    </Field>
+                    <Field label="Client ID" hint="the proxy provider's client_id">
+                      <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.forwardAuthClientId} onChange={(e) => set("forwardAuthClientId", e.target.value)} placeholder="proxy provider client_id" />
+                    </Field>
+                  </>
+                )}
+                <Field label="Service account">
+                  <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.forwardAuthUsername} onChange={(e) => set("forwardAuthUsername", e.target.value)} placeholder="service-account username" />
+                </Field>
+                <Field label="App password" hint={editing ? "leave blank to keep current" : "encrypted at rest"}>
+                  <input className="input" type={revealKey ? "text" : "password"} style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.forwardAuthPassword} onChange={(e) => set("forwardAuthPassword", e.target.value)} placeholder={editing ? "•••••••• (unchanged)" : "app password"} />
+                </Field>
+                {f.forwardAuthMethod === "bearer" && (
+                  <Field label="Scope" hint="optional — defaults to openid">
+                    <input className="input" style={{ ...fieldInput, fontFamily: "var(--font-mono)" }} value={f.forwardAuthScope} onChange={(e) => set("forwardAuthScope", e.target.value)} placeholder="openid" />
+                  </Field>
+                )}
+              </div>
+            )}
           </div>
         </section>
 

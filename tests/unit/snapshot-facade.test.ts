@@ -24,7 +24,7 @@ const CONFIGS = [
 const logoOf = (c: { id: string; logoSlug: string | null }, slug: string) => c.logoSlug === slug || c.id === slug;
 vi.mock("@/lib/integrations/registry", () => ({
   getServiceConfigs: vi.fn(async () => CONFIGS),
-  getServiceSecret: vi.fn(async () => "key"),
+  getServiceSecret: vi.fn(async (_id: string, kind?: string) => (kind === "forwardAuth" ? null : "key")),
   getServiceCredentials: vi.fn(async (id: string) => ({ baseUrl: `https://${id}.test`, apiKey: "key", insecureTls: false })),
   isConfigured: vi.fn(async () => true),
   configMatchesLogo: vi.fn((c: { id: string; logoSlug: string | null }, slug: string) => logoOf(c, slug)),
@@ -102,13 +102,13 @@ describe("getSnapshot — facade aggregation", () => {
 
   it("flags hasSecret per stored secret (boolean only, value never surfaced)", async () => {
     const registry = await import("@/lib/integrations/registry");
-    vi.mocked(registry.getServiceSecret).mockImplementation(async (id: string) => (id === "qbittorrent" ? null : "key"));
+    vi.mocked(registry.getServiceSecret).mockImplementation(async (id: string, kind?: string) => (kind === "forwardAuth" || id === "qbittorrent" ? null : "key"));
     try {
       const snap = await getSnapshot();
       expect(snap.services.find((s) => s.id === "sonarr")?.hasSecret).toBe(true);
       expect(snap.services.find((s) => s.id === "qbittorrent")?.hasSecret).toBe(false);
     } finally {
-      vi.mocked(registry.getServiceSecret).mockImplementation(async () => "key");
+      vi.mocked(registry.getServiceSecret).mockImplementation(async (_id: string, kind?: string) => (kind === "forwardAuth" ? null : "key"));
     }
   });
 
