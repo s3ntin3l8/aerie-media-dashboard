@@ -62,13 +62,26 @@ the aggregator sees that has no matching AERIE service.
 | behind SSO | the router's resolved `authentik`, else a forward-auth middleware name |
 | TLS-cert expiry | matched from the snapshot's `certificates[]` (`domain` + `sans`, `notAfter`) |
 
+## What the aggregator adds (beyond the raw Traefik path)
+
+Because the aggregator's merged snapshot is richer than a single Traefik's API, AERIE surfaces a few
+extras when it's the source — all **scoped to your configured services** so unrelated infra never
+clutters the view:
+
+- **Traefik nodes panel** (Admin, collapsed by default) — health/version/counts for each Traefik
+  node, limited to **only the nodes that route at least one configured AERIE service**. A node that
+  serves nothing in your stack never appears.
+- **Serving node + middleware types** — each service's route tooltip names the Traefik node serving
+  it and the resolved middleware *types* (e.g. `authentik (forwardauth)`), not just names.
+- **Richer cert detail** — the cert chip/tooltip adds issuer, ACME resolver, and key type from the
+  aggregator's `/api/certificates` (the raw path only has the expiry gauge).
+
 ## Scope & limitations
 
 - Read-only; AERIE never writes to the aggregator or Traefik, and nothing is persisted.
 - Correlation is **by host only** — same as the raw Traefik path.
-- This first pass surfaces **parity** data only. The aggregator also exposes per-instance
-  health/version, TCP/UDP routers, middleware config, and the full certificate list; those are not
-  yet surfaced in AERIE.
+- Node health is **scoped to configured services** by design (see above). Still out of scope: TCP/UDP
+  routers, raw middleware config, and an unscoped full certificate inventory.
 
 ## Related
 

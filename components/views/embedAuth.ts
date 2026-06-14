@@ -34,8 +34,11 @@ export function embedAuthSummary(s: Service, who: string, oidc: boolean): EmbedA
   const lockColor = cert
     ? cert.daysRemaining < 3 ? "var(--error)" : cert.daysRemaining < 14 ? "var(--amber)" : "var(--originator-own)"
     : s.scheme === "https" ? "var(--originator-own)" : "var(--amber)";
+  const certExtra = cert
+    ? [cert.issuer && `issuer ${cert.issuer}`, cert.resolver && `resolver ${cert.resolver}`, cert.keyType].filter(Boolean).join(" · ")
+    : "";
   const lockTitle = cert
-    ? `TLS cert for ${cert.domains.join(", ")} — expires ${new Date(cert.notAfter * 1000).toLocaleDateString()} (${cert.daysRemaining < 0 ? "expired" : `${cert.daysRemaining}d left`})`
+    ? `TLS cert for ${cert.domains.join(", ")} — expires ${new Date(cert.notAfter * 1000).toLocaleDateString()} (${cert.daysRemaining < 0 ? "expired" : `${cert.daysRemaining}d left`})${certExtra ? ` · ${certExtra}` : ""}`
     : s.scheme === "https" ? "HTTPS" : "HTTP — not encrypted";
 
   const access = s.authentik;
@@ -48,8 +51,15 @@ export function embedAuthSummary(s: Service, who: string, oidc: boolean): EmbedA
       : oidc ? `forward-auth · ${who}` : who; // no route data → fall back to the global OIDC hint
   const authColor = behindSso ? "var(--primary)" : "var(--on-surface-variant)";
   const authIcon = behindSso ? "shield_person" : s.route ? "lock_open" : "shield_person";
+  // Prefer the resolved middleware types ("authentik (forwardauth)") when the aggregator supplied them.
+  const mwLine = s.route
+    ? s.route.middlewareDetail?.length
+      ? s.route.middlewareDetail.map((m) => `${m.name} (${m.type})`).join(", ")
+      : s.route.middlewares.join(", ") || "none"
+    : null;
   const authTitle = [
-    s.route ? `middlewares: ${s.route.middlewares.join(", ") || "none"}` : null,
+    mwLine != null ? `middlewares: ${mwLine}` : null,
+    s.route?.instance ? `served by node: ${s.route.instance}` : null,
     access ? `Authentik: ${access.everyone ? "all users" : access.groups.join(", ") || "restricted"}` : null,
     `signed in as ${who}`,
   ].filter(Boolean).join("\n");

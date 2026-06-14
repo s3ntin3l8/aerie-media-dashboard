@@ -108,11 +108,45 @@ export interface TraefikRoute {
   forwardAuth: boolean;
   /** middleware names in the router's chain (for a tooltip) */
   middlewares: string[];
+  /** resolved type per middleware in the chain (e.g. `{name:"authentik", type:"forwardauth"}`).
+   *  Aggregator-only — the raw per-instance path has only the names above. The raw middleware
+   *  `config` is intentionally not shipped to the client. */
+  middlewareDetail?: { name: string; type: string }[];
+  /** the Traefik node serving this router (e.g. "node-01"). Aggregator-only — the merged snapshot
+   *  attributes each router to its source node. */
+  instance?: string;
   /** backend health from /api/http/services serverStatus (UP/DOWN across servers) */
   serverStatus: "up" | "down" | "mixed" | "unknown";
-  /** TLS cert expiry from the traefik_tls_certs_not_after metric, matched by host. Absent when
-   *  Traefik metrics are off/unreachable or no served cert covers this host. */
-  cert?: { notAfter: number; daysRemaining: number; domains: string[] }; // notAfter = unix seconds
+  /** TLS cert expiry, matched by host. From the `traefik_tls_certs_not_after` metric (raw path) or
+   *  the aggregator's `/api/certificates` (richer: issuer/resolver/keyType/notBefore). Absent when
+   *  metrics are off/unreachable or no served cert covers this host. */
+  cert?: {
+    notAfter: number; // unix seconds
+    daysRemaining: number;
+    domains: string[];
+    issuer?: string;
+    resolver?: string;
+    keyType?: string;
+    notBefore?: number; // unix seconds
+  };
+}
+
+/** One Traefik node from the traefik-dashboard-aggregator's merged snapshot. Read-only, never
+ *  persisted. In AERIE only the nodes that route at least one configured service are surfaced
+ *  (see `Snapshot.traefikInstances`), so unrelated infra never clutters the view. */
+export interface TraefikInstance {
+  /** node name, e.g. "node-01" — matches `TraefikRoute.instance` */
+  name: string;
+  /** "gateway" for the front node, else empty/undefined */
+  role?: string;
+  status: "ok" | "degraded" | "unreachable" | "unknown";
+  version?: string;
+  /** last successful scrape, unix seconds */
+  lastScrape?: number;
+  url?: string;
+  counts?: { routers: number; services: number; middlewares: number; warnings: number };
+  /** the configured AERIE service ids this node routes (the scoping result) */
+  serves?: string[];
 }
 
 export interface NowPlaying {

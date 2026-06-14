@@ -6,11 +6,12 @@
 // panel. Live calls only fire for services that have a stored secret.
 // ============================================================
 import "server-only";
-import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, AuthentikAccess, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
+import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, TraefikInstance, AuthentikAccess, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, configMatchesLogo, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import {
   gatusHealth,
   traefikRoutes,
+  traefikInstances,
   authentikApps,
   tautulliActivity,
   tautulliUsers,
@@ -155,6 +156,10 @@ export interface Snapshot {
   /** Hosts the admin has dismissed from the discovered panel (lowercased) — surfaced so Admin can
    *  offer a restore affordance. */
   traefikDismissed: string[];
+  /** Traefik node health from the aggregator, scoped to only the nodes that route at least one
+   *  configured AERIE service (unrelated infra nodes are excluded). Empty unless an aggregator source
+   *  is active. Each node's `serves` lists the configured service ids it routes. */
+  traefikInstances: TraefikInstance[];
   /** Authentik service has a stored token + is active (drives the access-badge visibility). Per-service
    *  access detail rides on each `Service.authentik`. */
   authentikConfigured: boolean;
@@ -181,6 +186,27 @@ function perf<T>(label: string, p: Promise<T>): Promise<T> {
 export function padBeats(beats: number[]): number[] {
   if (beats.length >= 30) return beats.slice(-30);
   return [...Array(30 - beats.length).fill(1), ...beats];
+}
+
+/** Scope aggregator Traefik nodes to only those that route at least one configured service.
+ *  Maps each service's correlated `route.instance` → service ids, then keeps only the nodes that
+ *  serve ≥1 of them, attaching the served ids as `serves`. Unrelated infra nodes drop out. */
+export function scopeTraefikInstances(
+  instances: TraefikInstance[],
+  services: { id: string; route?: TraefikRoute }[],
+): TraefikInstance[] {
+  const servesByNode = new Map<string, string[]>();
+  for (const s of services) {
+    const node = s.route?.instance;
+    if (!node) continue;
+    const list = servesByNode.get(node) ?? [];
+    list.push(s.id);
+    servesByNode.set(node, list);
+  }
+  return instances.flatMap((n) => {
+    const serves = servesByNode.get(n.name);
+    return serves?.length ? [{ ...n, serves }] : [];
+  });
 }
 
 // The most recent fully-assembled snapshot, kept in-process so the shell can render
@@ -252,6 +278,9 @@ export async function getSnapshot(): Promise<Snapshot> {
   // e.g. traefik-unraid / traefik-dockerhost), and traefikRoutes() aggregates across them. An
   // active traefik-dashboard-aggregator (logo "traefik-aggregator") is an equivalent source.
   const traefikOn = configs.some((c) => c.active && (configMatchesLogo(c, "traefik") || configMatchesLogo(c, "traefik-aggregator")));
+  // Node-health (and the richer route detail) is aggregator-only — gate that extra fetch on an
+  // active aggregator specifically, not the raw per-instance Traefik.
+  const traefikAggregatorOn = configs.some((c) => c.active && configMatchesLogo(c, "traefik-aggregator"));
   // Authentik's API requires a token, so gate on a stored secret (like Beszel).
   const authentikOn = await has("authentik");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
@@ -324,7 +353,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     wizarrData, prowlarrData, agregarrData, bazarrData, nzbhydraData,
     ttUsers, absNow, llStats,
     listenarrQ, listenarrHist, listenarrHealthIssues, listenarrData,
-    qbitQ, qbStats, altMetricsResult, traefikRoutesData, authentikData,
+    qbitQ, qbStats, altMetricsResult, traefikRoutesData, traefikInstancesData, authentikData,
   ] = await Promise.all([
     gatusOn ? perf("live:gatusHealth", safe(gatusHealth)) : Promise.resolve(null),
     ttOn ? perf("live:tautulliActivity", safe(tautulliActivity)) : Promise.resolve(null),
@@ -386,6 +415,7 @@ export async function getSnapshot(): Promise<Snapshot> {
       ? perf("live:metrics(alt)", safe(metricsSource === "beszel" ? prometheusMetrics : beszelMetrics))
       : Promise.resolve(null),
     traefikOn ? perf("live:traefikRoutes", safe(traefikRoutes)) : Promise.resolve(null),
+    traefikAggregatorOn ? perf("live:traefikInstances", safe(traefikInstances)) : Promise.resolve(null),
     authentikOn ? perf("live:authentikApps", safe(authentikApps)) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
@@ -474,6 +504,10 @@ export async function getSnapshot(): Promise<Snapshot> {
     authentik: accessFor(c),
     ...healthFor(c.id, c.name, c.monitoringKey),
   }));
+
+  // Traefik node health, scoped to only the nodes that route a configured service (uses the
+  // per-service `route.instance` just correlated above). Empty unless an aggregator source is active.
+  const traefikInstancesScoped = scopeTraefikInstances(traefikInstancesData ?? [], services);
 
   // Background version refresh — does not block this response; DB is updated asynchronously
   // and the new version is served by the next snapshot poll (≤12 s later).
@@ -613,6 +647,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     traefikConfigured: traefikOn,
     traefikDiscovered,
     traefikDismissed: [...traefikDismissed],
+    traefikInstances: traefikInstancesScoped,
     authentikConfigured: authentikOn,
   };
   lastSnapshot = snapshot;

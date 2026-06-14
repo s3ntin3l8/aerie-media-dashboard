@@ -108,9 +108,16 @@ function RouteChip({ children, color, title }: { children: React.ReactNode; colo
  *  days remaining). Renders nothing when the route is fully healthy and carries no cert info. */
 export function RouteBadges({ route }: { route: TraefikRoute }) {
   const badges: React.ReactNode[] = [];
+  // The serving Traefik node (aggregator-only) is folded into each tooltip rather than shown as its
+  // own chip — keeps the row uncluttered while still exposing which node routes the service.
+  const nodeSuffix = route.instance ? ` · node ${route.instance}` : "";
   if (route.forwardAuth) {
+    // Prefer the resolved middleware types ("authentik (forwardauth)") over bare names.
+    const mwLabel = route.middlewareDetail?.length
+      ? route.middlewareDetail.map((m) => `${m.name} (${m.type})`).join(", ")
+      : route.middlewares.join(", ") || "middleware";
     badges.push(
-      <RouteChip key="sso" color="var(--primary)" title={`forward-auth via ${route.middlewares.join(", ") || "middleware"}`}>
+      <RouteChip key="sso" color="var(--primary)" title={`forward-auth via ${mwLabel}${nodeSuffix}`}>
         <Icon name="shield" size={11} /> SSO
       </RouteChip>,
     );
@@ -119,7 +126,7 @@ export function RouteBadges({ route }: { route: TraefikRoute }) {
   if (routeBad) {
     const color = route.serverStatus === "down" ? "var(--error)" : "var(--amber)";
     badges.push(
-      <RouteChip key="route" color={color} title={`router ${route.status}, backend ${route.serverStatus} — ${route.router}`}>
+      <RouteChip key="route" color={color} title={`router ${route.status}, backend ${route.serverStatus} — ${route.router}${nodeSuffix}`}>
         <Icon name="error" size={11} /> route
       </RouteChip>,
     );
@@ -128,8 +135,13 @@ export function RouteBadges({ route }: { route: TraefikRoute }) {
     const d = route.cert.daysRemaining;
     const color = d < 3 ? "var(--error)" : d < 14 ? "var(--amber)" : "var(--on-surface-variant)";
     const expires = new Date(route.cert.notAfter * 1000).toLocaleDateString();
+    const certExtra = [
+      route.cert.issuer && `issuer ${route.cert.issuer}`,
+      route.cert.resolver && `resolver ${route.cert.resolver}`,
+      route.cert.keyType,
+    ].filter(Boolean).join(" · ");
     badges.push(
-      <RouteChip key="cert" color={color} title={`TLS cert for ${route.cert.domains.join(", ")} — expires ${expires}`}>
+      <RouteChip key="cert" color={color} title={`TLS cert for ${route.cert.domains.join(", ")} — expires ${expires} (${d}d left)${certExtra ? ` · ${certExtra}` : ""}${nodeSuffix}`}>
         <Icon name="lock" size={11} /> {d < 0 ? "cert expired" : `cert ${d}d`}
       </RouteChip>,
     );
