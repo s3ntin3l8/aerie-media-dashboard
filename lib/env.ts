@@ -54,7 +54,7 @@ export const env = {
 
   // ── Branding / deployment ──
   brand: trim(process.env.AERIE_BRAND) || "AERIE",
-  portalUrl: trim(process.env.AERIE_PORTAL_URL) || "https://media.s3ntin3l8.de",
+  portalUrl: trim(process.env.AERIE_PORTAL_URL) || "https://media.example.com",
 } as const;
 
 /** True when real Authentik OIDC is configured; otherwise the app runs in dev/mock mode. */
