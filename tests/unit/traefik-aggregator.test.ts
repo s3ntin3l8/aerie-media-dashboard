@@ -151,6 +151,19 @@ describe("traefikInstances", () => {
     expect(await traefikInstances()).toEqual([]);
   });
 
+  it("keeps a healthy aggregator's nodes when another aggregator fails", async () => {
+    wireConfigs([
+      { id: "agg-ok", name: "agg ok", active: true },
+      { id: "agg-bad", name: "agg bad", active: true },
+    ]);
+    // agg-bad has no credentials → aggregatorSnapshot throws → that source drops out (allSettled).
+    vi.mocked(getServiceCredentials).mockImplementation(async (id: string) =>
+      id === "agg-bad" ? null : ({ baseUrl: "http://aggregator:8080", apiKey: null, insecureTls: false }) as never,
+    );
+    const nodes = await traefikInstances();
+    expect(nodes.map((n) => n.name)).toEqual(["node-01", "node-02", "node-99"]);
+  });
+
   it("shares the cached snapshot with traefikRoutes (one fetch)", async () => {
     await Promise.all([traefikRoutes(), traefikInstances()]);
     const snapCalls = mockJson.mock.calls.filter((c) => (c[0] as string).includes("/api/snapshot"));
