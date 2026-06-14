@@ -103,35 +103,40 @@ function RouteChip({ children, color, title }: { children: React.ReactNode; colo
   );
 }
 
-/** Compact read-only badges for a service's correlated Traefik route: forward-auth ("SSO"),
- *  a route-problem chip when the router/backend is unhealthy, and TLS cert expiry (color-coded by
- *  days remaining). Renders nothing when the route is fully healthy and carries no cert info. */
-export function RouteBadges({ route }: { route: TraefikRoute }) {
-  const badges: React.ReactNode[] = [];
-  // The serving Traefik node (aggregator-only) is folded into each tooltip rather than shown as its
-  // own chip — keeps the row uncluttered while still exposing which node routes the service.
-  const nodeSuffix = route.instance ? ` · node ${route.instance}` : "";
-  if (route.forwardAuth) {
-    // Prefer the resolved middleware types ("authentik (forwardauth)") over bare names.
-    const mwLabel = route.middlewareDetail?.length
-      ? route.middlewareDetail.map((m) => `${m.name} (${m.type})`).join(", ")
-      : route.middlewares.join(", ") || "middleware";
-    badges.push(
-      <RouteChip key="sso" color="var(--primary)" title={`forward-auth via ${mwLabel}${nodeSuffix}`}>
-        <Icon name="shield" size={11} /> SSO
-      </RouteChip>,
-    );
-  }
-  const routeBad = route.serverStatus === "down" || (route.status !== "enabled" && route.status !== "unknown");
-  if (routeBad) {
-    const color = route.serverStatus === "down" ? "var(--error)" : "var(--amber)";
-    badges.push(
-      <RouteChip key="route" color={color} title={`router ${route.status}, backend ${route.serverStatus} — ${route.router}${nodeSuffix}`}>
-        <Icon name="error" size={11} /> route
-      </RouteChip>,
-    );
-  }
-  if (route.cert) {
+/** Muted "—" placeholder so a reserved table column stays aligned when a service
+ *  carries no Traefik/Authentik data for that cell. */
+function DashCell() {
+  return <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", opacity: 0.55 }}>—</span>;
+}
+
+// The serving Traefik node (aggregator-only) is folded into each tooltip rather than shown as its
+// own chip — keeps the row uncluttered while still exposing which node routes the service.
+const nodeSuffixOf = (route: TraefikRoute) => (route.instance ? ` · node ${route.instance}` : "");
+
+/** Forward-auth / SSO indicator for a service's correlated Traefik route.
+ *  - default: the "SSO" chip when forward-auth is on, else null.
+ *  - reserve: render a muted "—" instead of null (keeps aligned table columns flush).
+ *  - iconOnly: just the shield icon + tooltip (the mobile icon rail). */
+export function SsoCell({ route, reserve = false, iconOnly = false }: { route?: TraefikRoute; reserve?: boolean; iconOnly?: boolean }) {
+  if (!route?.forwardAuth) return reserve ? <DashCell /> : null;
+  // Prefer the resolved middleware types ("authentik (forwardauth)") over bare names.
+  const mwLabel = route.middlewareDetail?.length
+    ? route.middlewareDetail.map((m) => `${m.name} (${m.type})`).join(", ")
+    : route.middlewares.join(", ") || "middleware";
+  const title = `forward-auth via ${mwLabel}${nodeSuffixOf(route)}`;
+  if (iconOnly) return <span title={title} style={{ display: "inline-flex" }}><Icon name="shield" size={12} color="var(--primary)" /></span>;
+  return (
+    <RouteChip color="var(--primary)" title={title}>
+      <Icon name="shield" size={11} /> SSO
+    </RouteChip>
+  );
+}
+
+/** TLS cert-expiry indicator for a service's correlated Traefik route (color-coded by days
+ *  remaining: <3 error, <14 amber). Falls back to a bare lock when TLS is on but no cert detail
+ *  was parsed. `reserve` / `iconOnly` behave as in SsoCell. */
+export function CertCell({ route, reserve = false, iconOnly = false }: { route?: TraefikRoute; reserve?: boolean; iconOnly?: boolean }) {
+  if (route?.cert) {
     const d = route.cert.daysRemaining;
     const color = d < 3 ? "var(--error)" : d < 14 ? "var(--amber)" : "var(--on-surface-variant)";
     const expires = new Date(route.cert.notAfter * 1000).toLocaleDateString();
@@ -140,16 +145,49 @@ export function RouteBadges({ route }: { route: TraefikRoute }) {
       route.cert.resolver && `resolver ${route.cert.resolver}`,
       route.cert.keyType,
     ].filter(Boolean).join(" · ");
-    badges.push(
-      <RouteChip key="cert" color={color} title={`TLS cert for ${route.cert.domains.join(", ")} — expires ${expires} (${d}d left)${certExtra ? ` · ${certExtra}` : ""}${nodeSuffix}`}>
+    const title = `TLS cert for ${route.cert.domains.join(", ")} — expires ${expires} (${d}d left)${certExtra ? ` · ${certExtra}` : ""}${nodeSuffixOf(route)}`;
+    if (iconOnly) return <span title={title} style={{ display: "inline-flex" }}><Icon name="lock" size={12} color={color} /></span>;
+    return (
+      <RouteChip color={color} title={title}>
         <Icon name="lock" size={11} /> {d < 0 ? "cert expired" : `cert ${d}d`}
-      </RouteChip>,
+      </RouteChip>
     );
-  } else if (route.tls) {
-    badges.push(<Icon key="tls" name="lock" size={11} color="var(--on-surface-variant)" />);
   }
-  if (!badges.length) return null;
-  return <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{badges}</span>;
+  if (route?.tls) {
+    if (iconOnly) return <span title="TLS enabled" style={{ display: "inline-flex" }}><Icon name="lock" size={12} color="var(--on-surface-variant)" /></span>;
+    return <Icon name="lock" size={11} color="var(--on-surface-variant)" />;
+  }
+  return reserve ? <DashCell /> : null;
+}
+
+/** Route-problem chip shown only when the router/backend is unhealthy. Stays inline in the
+ *  service-name cell as a per-row health signal (cert/SSO live in their own columns now). */
+export function RouteHealthBadge({ route }: { route?: TraefikRoute }) {
+  if (!route) return null;
+  const routeBad = route.serverStatus === "down" || (route.status !== "enabled" && route.status !== "unknown");
+  if (!routeBad) return null;
+  const color = route.serverStatus === "down" ? "var(--error)" : "var(--amber)";
+  return (
+    <RouteChip color={color} title={`router ${route.status}, backend ${route.serverStatus} — ${route.router}${nodeSuffixOf(route)}`}>
+      <Icon name="error" size={11} /> route
+    </RouteChip>
+  );
+}
+
+/** Compact read-only badges for a service's correlated Traefik route: forward-auth ("SSO"),
+ *  a route-problem chip when the router/backend is unhealthy, and TLS cert expiry. Composes the
+ *  individual cells above; used where all three should sit inline (Admin, MetaBadges). */
+export function RouteBadges({ route }: { route: TraefikRoute }) {
+  const routeBad = route.serverStatus === "down" || (route.status !== "enabled" && route.status !== "unknown");
+  // Nothing to show for a fully-healthy route with no TLS/cert — render nothing (no empty span).
+  if (!route.forwardAuth && !routeBad && !route.cert && !route.tls) return null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <SsoCell route={route} />
+      <RouteHealthBadge route={route} />
+      <CertCell route={route} />
+    </span>
+  );
 }
 
 /** Read-only Authentik access summary for a service: provider type + who can access (everyone, or the
