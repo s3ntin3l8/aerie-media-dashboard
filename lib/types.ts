@@ -37,6 +37,8 @@ export interface Service {
   version: string;
   status: ServiceStatus;
   uptime: number;
+  /** uptime % over the last 24 hours (from Gatus); absent when unmonitored or the API is unavailable */
+  uptime24h?: number;
   ms: number;
   /** 30-point heartbeat: 1 = up, 0.5 = degraded, 0 = down, -1 = no data (unknown) */
   beats: number[];
