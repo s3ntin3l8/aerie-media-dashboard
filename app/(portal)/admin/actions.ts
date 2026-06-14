@@ -64,27 +64,32 @@ export async function setServiceSecret(serviceId: string, plaintext: string) {
   revalidatePath("/admin");
 }
 
-/** Store (encrypted) or clear a service's authentik forward-auth config (a separate
- *  `forwardAuth`-kind secret, so it coexists with the service's own apiKey). */
-export async function setServiceForwardAuth(serviceId: string, config: ForwardAuthConfig | null) {
+/** Store (encrypted) a service's authentik forward-auth config — a separate `forwardAuth`-kind
+ *  secret, so it coexists with the service's own apiKey. (Clearing is a distinct action below,
+ *  so no caller-controlled value decides write-vs-delete.) */
+export async function setServiceForwardAuth(serviceId: string, config: ForwardAuthConfig) {
   await requireAdmin();
   await ensureDb();
-  if (!config) {
-    await db
-      .delete(schema.serviceSecrets)
-      .where(and(eq(schema.serviceSecrets.serviceId, serviceId), eq(schema.serviceSecrets.kind, "forwardAuth")));
-  } else {
-    const json = JSON.stringify(config);
-    if (!parseForwardAuthConfig(json)) throw new Error("Invalid forward-auth config");
-    const enc = encrypt(json);
-    await db
-      .insert(schema.serviceSecrets)
-      .values({ serviceId, kind: "forwardAuth", iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: [schema.serviceSecrets.serviceId, schema.serviceSecrets.kind],
-        set: { iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() },
-      });
-  }
+  const json = JSON.stringify(config);
+  if (!parseForwardAuthConfig(json)) throw new Error("Invalid forward-auth config");
+  const enc = encrypt(json);
+  await db
+    .insert(schema.serviceSecrets)
+    .values({ serviceId, kind: "forwardAuth", iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [schema.serviceSecrets.serviceId, schema.serviceSecrets.kind],
+      set: { iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() },
+    });
+  revalidatePath("/admin");
+}
+
+/** Remove a service's stored authentik forward-auth config. */
+export async function clearServiceForwardAuth(serviceId: string) {
+  await requireAdmin();
+  await ensureDb();
+  await db
+    .delete(schema.serviceSecrets)
+    .where(and(eq(schema.serviceSecrets.serviceId, serviceId), eq(schema.serviceSecrets.kind, "forwardAuth")));
   revalidatePath("/admin");
 }
 

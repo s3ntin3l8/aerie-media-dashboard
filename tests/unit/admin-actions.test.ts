@@ -22,7 +22,7 @@ import { getSessionUser } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import * as C from "@/lib/integrations/clients";
 import {
-  upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceForwardAuth, setServiceActive,
+  upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceForwardAuth, clearServiceForwardAuth, setServiceActive,
   serviceExists, deleteService, detectServiceVersion, setMetricsSource, setQueueSource,
   setBeszelSystem, setPrometheusInstance, setUserOverseerrQuota,
   dismissTraefikHost, restoreTraefikHost,
@@ -102,7 +102,7 @@ describe("service CRUD + secrets", () => {
     expect(rows[0].ciphertext).not.toBe(JSON.stringify(cfg)); // encrypted at rest, not plaintext
     expect(JSON.parse(decrypt({ iv: rows[0].iv, authTag: rows[0].authTag, ciphertext: rows[0].ciphertext }))).toMatchObject(cfg);
 
-    await setServiceForwardAuth("radarr", null);
+    await clearServiceForwardAuth("radarr");
     rows = await faRows("radarr");
     expect(rows).toHaveLength(0);
   });
