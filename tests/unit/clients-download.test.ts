@@ -17,7 +17,7 @@ vi.mock("@/lib/integrations/http", () => ({
 }));
 
 vi.mock("@/lib/integrations/registry", () => ({
-  getServiceCredentials: vi.fn(),
+  getServiceSecret: vi.fn(), getServiceCredentials: vi.fn(),
   getDeploymentSetting: vi.fn(),
 }));
 

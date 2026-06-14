@@ -5,7 +5,8 @@
 // to mock so a dead or unconfigured upstream only degrades its panel.
 // ============================================================
 import "server-only";
-import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
+import { IntegrationError, type HttpOpts } from "./http";
+import { authedFetchJson, authedFetchRaw, jwtExpMs } from "./forwardAuth";
 import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo, getServiceConfigs } from "./registry";
 import { isTraefikSource } from "../servicePresets";
 import { env } from "@/lib/env";
@@ -15,6 +16,19 @@ async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: stri
   const c = await getServiceCredentials(serviceId);
   if (!c || !c.apiKey) throw new IntegrationError(serviceId, "not configured (no API key)");
   return { baseUrl: c.baseUrl.replace(/\/$/, ""), apiKey: c.apiKey };
+}
+
+// Forward-auth-aware fetch wrappers. Almost every client is single-instance, so its stored
+// service id equals the `service` label it passes here (panel-id coupling guarantees it) —
+// these derive the id from opts.service and route through authedFetch*, which adds the
+// authentik outpost credential when one is stored and is a plain passthrough otherwise.
+// Multi-instance / dynamic-id sources (Traefik, Loki, Agregarr) call authedFetch* directly
+// with their resolved service id instead.
+function afetchJson<T>(url: string, opts: HttpOpts): Promise<T> {
+  return authedFetchJson<T>(opts.service, url, opts);
+}
+function afetchRaw(url: string, opts: HttpOpts): Promise<Response> {
+  return authedFetchRaw(opts.service, url, opts);
 }
 
 // Generic module-scope TTL cache for slow-changing upstream reads. getSnapshot()
@@ -99,7 +113,7 @@ interface GatusEndpoint {
  *  Cached ~5 min: getSnapshot() polls every few seconds, but a 30-day uptime barely moves. */
 async function gatusUptime30d(base: string, key: string, apiKey: string | null, insecureTls: boolean): Promise<number | null> {
   return cached(`gatus:uptime30d:${key}`, 5 * 60_000, async () => {
-    const res = await fetchRaw(`${base}/api/v1/endpoints/${encodeURIComponent(key)}/uptimes/30d`, {
+    const res = await afetchRaw(`${base}/api/v1/endpoints/${encodeURIComponent(key)}/uptimes/30d`, {
       service: "gatus",
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
       insecureTls,
@@ -117,7 +131,7 @@ export async function gatusHealth(): Promise<ServiceHealth[]> {
   const c = await getServiceCredentials("gatus");
   if (!c) throw new IntegrationError("gatus", "not configured");
   const base = c.baseUrl.replace(/\/$/, "");
-  const data = await fetchJson<GatusEndpoint[]>(`${base}/api/v1/endpoints/statuses`, {
+  const data = await afetchJson<GatusEndpoint[]>(`${base}/api/v1/endpoints/statuses`, {
     service: "gatus",
     headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {},
     insecureTls: c.insecureTls,
@@ -233,20 +247,22 @@ function normRouterStatus(s?: string): TraefikRoute["status"] {
   return s === "enabled" || s === "disabled" || s === "warning" ? s : "unknown";
 }
 
-async function traefikRoutesUncached(baseUrlRaw: string, apiKey: string | null, insecureTls?: boolean): Promise<TraefikRoute[]> {
+async function traefikRoutesUncached(serviceId: string, baseUrlRaw: string, apiKey: string | null, insecureTls?: boolean): Promise<TraefikRoute[]> {
   const base = baseUrlRaw.replace(/\/$/, "");
   const headers: Record<string, string> = {};
   // Traefik's API auth, when present, is HTTP basicAuth → secret holds "user:password".
+  // If this instance sits behind authentik forward-auth, authedFetch* layers the outpost
+  // credential on top (and its Authorization wins over this Basic).
   if (apiKey && apiKey.includes(":")) headers.Authorization = `Basic ${Buffer.from(apiKey).toString("base64")}`;
   const [routers, services] = await Promise.all([
-    fetchJson<TraefikApiRouter[]>(`${base}/api/http/routers`, { service: "traefik", headers, insecureTls }),
-    fetchJson<TraefikApiService[]>(`${base}/api/http/services`, { service: "traefik", headers, insecureTls }),
+    authedFetchJson<TraefikApiRouter[]>(serviceId, `${base}/api/http/routers`, { service: "traefik", headers, insecureTls }),
+    authedFetchJson<TraefikApiService[]>(serviceId, `${base}/api/http/services`, { service: "traefik", headers, insecureTls }),
   ]);
 
   // Cert expiry is best-effort: a missing/legacy /metrics endpoint must not fail the route read.
   let certs: { domains: string[]; notAfter: number }[] = [];
   try {
-    const res = await fetchRaw(`${base}/metrics`, { service: "traefik", headers, insecureTls });
+    const res = await authedFetchRaw(serviceId, `${base}/metrics`, { service: "traefik", headers, insecureTls });
     if (res.ok) certs = parseCertMetric(await res.text());
   } catch { /* metrics optional */ }
 
@@ -346,8 +362,10 @@ async function aggregatorSnapshot(serviceId: string): Promise<AggSnapshot> {
     const base = c.baseUrl.replace(/\/$/, "");
     const headers: Record<string, string> = {};
     // The aggregator has no built-in auth; an optional basicAuth front uses "user:password".
+    // When it sits behind authentik forward-auth, authedFetchJson layers the outpost
+    // credential on top (its Authorization wins over this Basic).
     if (c.apiKey && c.apiKey.includes(":")) headers.Authorization = `Basic ${Buffer.from(c.apiKey).toString("base64")}`;
-    return fetchJson<AggSnapshot>(`${base}/api/snapshot`, { service: "traefik", headers, insecureTls: c.insecureTls });
+    return authedFetchJson<AggSnapshot>(serviceId, `${base}/api/snapshot`, { service: "traefik", headers, insecureTls: c.insecureTls });
   });
 }
 
@@ -477,7 +495,7 @@ export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[
   const c = await getServiceCredentials(serviceId);
   if (!c) throw new IntegrationError("traefik", `not configured (${serviceId})`);
   // Routers/certs change slowly; this feeds the 12s snapshot poll → cache to spare Traefik.
-  const routes = await cached(`traefik:routes:${serviceId}`, 30_000, () => traefikRoutesUncached(c.baseUrl, c.apiKey, c.insecureTls));
+  const routes = await cached(`traefik:routes:${serviceId}`, 30_000, () => traefikRoutesUncached(serviceId, c.baseUrl, c.apiKey, c.insecureTls));
   return routes.map((r) => ({ ...r, via: serviceId }));
 }
 
@@ -553,8 +571,8 @@ async function authentikAppsUncached(baseUrlRaw: string, token: string, insecure
   const base = baseUrlRaw.replace(/\/$/, "");
   const opts = { service: "authentik", headers: { Authorization: `Bearer ${token}` }, insecureTls };
   const [apps, binds] = await Promise.all([
-    fetchJson<AuthentikPage<AuthentikApp>>(`${base}/api/v3/core/applications/?superuser_full_list=true&page_size=1000`, opts),
-    fetchJson<AuthentikPage<AuthentikBinding>>(`${base}/api/v3/policies/bindings/?page_size=1000`, opts),
+    afetchJson<AuthentikPage<AuthentikApp>>(`${base}/api/v3/core/applications/?superuser_full_list=true&page_size=1000`, opts),
+    afetchJson<AuthentikPage<AuthentikBinding>>(`${base}/api/v3/policies/bindings/?page_size=1000`, opts),
   ]);
   if (apps.pagination?.next) console.warn("[authentik] applications list truncated at page_size=1000");
   if (binds.pagination?.next) console.warn("[authentik] bindings list truncated at page_size=1000");
@@ -645,7 +663,7 @@ export async function lokiTail(selector: string, opts: { limit?: number; sinceMs
       : `Bearer ${c.apiKey}`;
   }
 
-  const res = await fetchJson<LokiQueryRangeResponse>(url, { service: "loki", headers, insecureTls: c.insecureTls });
+  const res = await authedFetchJson<LokiQueryRangeResponse>(cfg.id, url, { service: "loki", headers, insecureTls: c.insecureTls });
   const lines: LokiLine[] = [];
   for (const stream of res.data?.result ?? []) {
     const labels = stream.stream ?? {};
@@ -847,7 +865,7 @@ async function tautulliGeoIp(ip: string): Promise<StreamGeo | undefined> {
   return cached(`tautulli:geoip:${ip}`, 6 * 60 * 60 * 1000, async () => {
     try {
       const { baseUrl, apiKey } = await creds("tautulli");
-      const r = await fetchJson<{ response: { result?: string; data?: { city?: string; region?: string; country?: string; code?: string; latitude?: number; longitude?: number } } }>(
+      const r = await afetchJson<{ response: { result?: string; data?: { city?: string; region?: string; country?: string; code?: string; latitude?: number; longitude?: number } } }>(
         `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_geoip_lookup&ip_address=${encodeURIComponent(ip)}`,
         { service: "tautulli" },
       );
@@ -864,7 +882,7 @@ async function tautulliGeoIp(ip: string): Promise<StreamGeo | undefined> {
 /** Now-playing sessions + aggregate bandwidth from a single `get_activity` call. */
 export async function tautulliActivity(): Promise<TautulliActivity> {
   const { baseUrl, apiKey } = await creds("tautulli");
-  const data = await fetchJson<{ response: { data: { sessions: TautulliSession[]; total_bandwidth?: number | string; wan_bandwidth?: number | string } } }>(
+  const data = await afetchJson<{ response: { data: { sessions: TautulliSession[]; total_bandwidth?: number | string; wan_bandwidth?: number | string } } }>(
     `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_activity`,
     { service: "tautulli" },
   );
@@ -910,7 +928,7 @@ export interface PlexUserAvatar {
 export async function tautulliUsers(): Promise<PlexUserAvatar[]> {
   return cached("tautulli:users", 30 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("tautulli");
-    const data = await fetchJson<{ response: { data?: TautulliUser[] } }>(
+    const data = await afetchJson<{ response: { data?: TautulliUser[] } }>(
       `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_users`,
       { service: "tautulli" },
     );
@@ -942,7 +960,7 @@ export async function tautulliLibraries(): Promise<LibraryStat[]> {
   // Library counts change rarely → cache to avoid a fetch on every 3–12s poll.
   return cached("tautulli:libraries", 10 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("tautulli");
-    const data = await fetchJson<{ response: { data: TautulliLibrary[] } }>(`${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_libraries`, { service: "tautulli" });
+    const data = await afetchJson<{ response: { data: TautulliLibrary[] } }>(`${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_libraries`, { service: "tautulli" });
     const libs = data.response?.data ?? [];
     const out: LibraryStat[] = [];
     const movie = libs.find((l) => l.section_type === "movie");
@@ -975,7 +993,7 @@ export async function tautulliPlays24h(): Promise<TautulliPlays> {
     const { baseUrl, apiKey } = await creds("tautulli");
     const sinceMs = Date.now() - 24 * 3600 * 1000;
     const afterDate = new Date(sinceMs).toISOString().slice(0, 10);
-    const data = await fetchJson<{ response: { data: { recordsFiltered?: number; data?: { date?: number; started?: number }[] } } }>(
+    const data = await afetchJson<{ response: { data: { recordsFiltered?: number; data?: { date?: number; started?: number }[] } } }>(
       `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_history&after=${afterDate}&length=1000`,
       { service: "tautulli" },
     );
@@ -1026,7 +1044,7 @@ export async function tautulliStreamHistory(days = 7, limit = 200): Promise<Stre
   return cached("tautulli:history", 5 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("tautulli");
     const afterDate = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const data = await fetchJson<{ response: { data: { data?: TautulliHistoryRecord[] } } }>(
+    const data = await afetchJson<{ response: { data: { data?: TautulliHistoryRecord[] } } }>(
       `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_history&after=${afterDate}&length=${limit}&order_column=date&order_dir=desc`,
       { service: "tautulli" },
     );
@@ -1081,7 +1099,7 @@ export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
   // Recently-added changes only when new media lands → short cache, not every poll.
   return cached(`tautulli:recent:${count}`, 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("tautulli");
-    const data = await fetchJson<{ response: { data: { recently_added: TautulliRecent[] } } }>(
+    const data = await afetchJson<{ response: { data: { recently_added: TautulliRecent[] } } }>(
       `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_recently_added&count=${count}`,
       { service: "tautulli" },
     );
@@ -1109,7 +1127,7 @@ export async function tautulliRecentlyAdded(count = 6): Promise<RecentItem[]> {
 /** Resolve a show/movie TMDB id from a Plex rating key (via Tautulli get_metadata guids). */
 export async function tautulliShowTmdb(ratingKey: number | string): Promise<number | undefined> {
   const { baseUrl, apiKey } = await creds("tautulli");
-  const data = await fetchJson<{ response?: { data?: { guids?: string[] } } }>(
+  const data = await afetchJson<{ response?: { data?: { guids?: string[] } } }>(
     `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_metadata&rating_key=${ratingKey}`,
     { service: "tautulli", timeoutMs: 8000 },
   );
@@ -1133,7 +1151,7 @@ interface TautulliHomeStat {
 export async function tautulliHomeStats(): Promise<TopStats> {
   return cached("tautulli:homestats", 10 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("tautulli");
-    const data = await fetchJson<{ response: { data: TautulliHomeStat[] } }>(
+    const data = await afetchJson<{ response: { data: TautulliHomeStat[] } }>(
       `${baseUrl}/api/v2?apikey=${apiKey}&cmd=get_home_stats&time_range=7&stats_count=5`,
       { service: "tautulli" },
     );
@@ -1241,7 +1259,7 @@ function heightToRes(h: number | undefined): string {
 
 export async function jellyfinNowPlaying(): Promise<NowPlaying[]> {
   const { baseUrl, apiKey } = await creds("jellyfin");
-  const data = await fetchJson<JellyfinSession[]>(`${baseUrl}/Sessions`, {
+  const data = await afetchJson<JellyfinSession[]>(`${baseUrl}/Sessions`, {
     service: "jellyfin",
     headers: { Authorization: `MediaBrowser Token="${apiKey}"` },
   });
@@ -1397,7 +1415,7 @@ function mapAbsSession(u: AbsOnlineUser): NowPlaying {
 
 export async function audiobookshelfNowPlaying(): Promise<NowPlaying[]> {
   const { baseUrl, apiKey } = await creds("audiobookshelf");
-  const data = await fetchJson<{ usersOnline?: AbsOnlineUser[] }>(`${baseUrl}/api/users/online`, {
+  const data = await afetchJson<{ usersOnline?: AbsOnlineUser[] }>(`${baseUrl}/api/users/online`, {
     service: "audiobookshelf",
     headers: { Authorization: `Bearer ${apiKey}` },
   });
@@ -1408,7 +1426,7 @@ export async function audiobookshelfNowPlaying(): Promise<NowPlaying[]> {
 export async function jellyfinLibraries(): Promise<LibraryStat[]> {
   return cached("jellyfin:libraries", 10 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("jellyfin");
-    const d = await fetchJson<{ MovieCount?: number; SeriesCount?: number; EpisodeCount?: number; AlbumCount?: number; SongCount?: number }>(
+    const d = await afetchJson<{ MovieCount?: number; SeriesCount?: number; EpisodeCount?: number; AlbumCount?: number; SongCount?: number }>(
       `${baseUrl}/Items/Counts`,
       { service: "jellyfin", headers: { Authorization: `MediaBrowser Token="${apiKey}"` } },
     );
@@ -1433,7 +1451,7 @@ interface JellyfinItem {
 export async function jellyfinRecentlyAdded(count = 6): Promise<RecentItem[]> {
   return cached("jellyfin:recent", 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("jellyfin");
-    const data = await fetchJson<{ Items?: JellyfinItem[] }>(
+    const data = await afetchJson<{ Items?: JellyfinItem[] }>(
       `${baseUrl}/Items?SortBy=DateCreated&SortOrder=Descending&Recursive=true&Limit=${count}&IncludeItemTypes=Movie,Episode,Audio&Fields=ProductionYear`,
       { service: "jellyfin", headers: { Authorization: `MediaBrowser Token="${apiKey}"` } },
     );
@@ -1543,7 +1561,7 @@ async function enrichMedia(baseUrl: string, apiKey: string, type: "movie" | "tv"
   if (existing) return existing;
   const p = (async () => {
     try {
-      const details = await fetchJson<OverseerrMediaDetails>(
+      const details = await afetchJson<OverseerrMediaDetails>(
         `${baseUrl}/api/v1/${type}/${tmdbId}`,
         { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 15000 },
       );
@@ -1614,7 +1632,7 @@ const QUALITY_PROFILES_TTL = 60 * 60 * 1000;
 async function arrQualityProfileMap(serviceId: "radarr" | "sonarr"): Promise<Record<number, string>> {
   const { baseUrl, apiKey } = await creds(serviceId);
   type ArrProfile = { id: number; name: string };
-  const profiles = await fetchJson<ArrProfile[]>(`${baseUrl}/api/v3/qualityprofile`, {
+  const profiles = await afetchJson<ArrProfile[]>(`${baseUrl}/api/v3/qualityprofile`, {
     service: serviceId,
     headers: { "X-Api-Key": apiKey },
     timeoutMs: 5000,
@@ -1636,7 +1654,7 @@ async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promis
       // Fallback: Overseerr settings knows the active profile without pinging *arr.
       type S = { activeProfileId?: number; activeProfileName?: string };
       const h = { "X-Api-Key": apiKey };
-      const rows = await fetchJson<S[]>(`${baseUrl}/api/v1/settings/radarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
+      const rows = await afetchJson<S[]>(`${baseUrl}/api/v1/settings/radarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
       const m: Record<number, string> = {};
       for (const e of rows) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
       return m;
@@ -1644,7 +1662,7 @@ async function overseerrQualityProfiles(baseUrl: string, apiKey: string): Promis
     arrQualityProfileMap("sonarr").catch(async () => {
       type S = { activeProfileId?: number; activeProfileName?: string };
       const h = { "X-Api-Key": apiKey };
-      const rows = await fetchJson<S[]>(`${baseUrl}/api/v1/settings/sonarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
+      const rows = await afetchJson<S[]>(`${baseUrl}/api/v1/settings/sonarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
       const m: Record<number, string> = {};
       for (const e of rows) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
       return m;
@@ -1673,7 +1691,7 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
   // Fallback: Overseerr service proxy (pings *arr — slow, but works when *arr isn't
   // configured separately in AERIE).
   const h = { "X-Api-Key": apiKey };
-  const get = <T>(url: string) => fetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 20000 });
+  const get = <T>(url: string) => afetchJson<T>(url, { service: "overseerr", headers: h, timeoutMs: 20000 });
   type SvcEntry = { id: number };
   type ProfileEntry = { id: number; name?: string };
   const svcs = await get<SvcEntry[]>(`${baseUrl}/api/v1/service/${arr}`).catch(() => [] as SvcEntry[]);
@@ -1685,7 +1703,7 @@ async function fetchServiceProfiles(baseUrl: string, apiKey: string, arr: "radar
 
   // Last resort: Overseerr settings (active profile only).
   type SettingsEntry = { activeProfileId?: number; activeProfileName?: string };
-  const settings = await fetchJson<SettingsEntry[]>(`${baseUrl}/api/v1/settings/${arr}`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as SettingsEntry[]);
+  const settings = await afetchJson<SettingsEntry[]>(`${baseUrl}/api/v1/settings/${arr}`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as SettingsEntry[]);
   const fromSettings: QualityProfile[] = settings
     .filter((e) => e.activeProfileId != null && e.activeProfileName)
     .map((e) => ({ id: String(e.activeProfileId!), label: e.activeProfileName!, sub: "active profile", icon: "high_quality" }));
@@ -1716,7 +1734,7 @@ async function arrMovieIndexes(): Promise<MovieIndexes> {
       mediaInfo?: { videoCodec?: string };
     };
   };
-  const movies = await fetchJson<RMovie[]>(`${baseUrl}/api/v3/movie`, {
+  const movies = await afetchJson<RMovie[]>(`${baseUrl}/api/v3/movie`, {
     service: "radarr",
     headers: { "X-Api-Key": apiKey },
     timeoutMs: 10000,
@@ -1752,7 +1770,7 @@ export async function sonarrSeriesMeta(seriesId: number): Promise<{ monitored?: 
   return cached(`sonarr:seriesmeta:${seriesId}`, 60_000, async () => {
     const { baseUrl, apiKey } = await creds("sonarr");
     type S = { monitored?: boolean; statistics?: { episodeFileCount?: number }; genres?: string[]; network?: string };
-    const s = await fetchJson<S>(`${baseUrl}/api/v3/series/${seriesId}`, {
+    const s = await afetchJson<S>(`${baseUrl}/api/v3/series/${seriesId}`, {
       service: "sonarr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 8000,
@@ -1771,7 +1789,7 @@ export async function sonarrSeasonQuality(seriesId: number): Promise<SeasonQuali
       hasFile?: boolean;
       episodeFile?: { size?: number; quality?: { quality?: { resolution?: number; source?: string } } };
     };
-    const eps = await fetchJson<Ep[]>(`${baseUrl}/api/v3/episode?seriesId=${seriesId}&includeEpisodeFile=true`, {
+    const eps = await afetchJson<Ep[]>(`${baseUrl}/api/v3/episode?seriesId=${seriesId}&includeEpisodeFile=true`, {
       service: "sonarr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 10000,
@@ -1833,7 +1851,7 @@ export async function overseerrRequests(): Promise<MediaRequest[]> {
 async function fetchOverseerrRequests(): Promise<MediaRequest[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const [data, profileMaps, movieIndexes] = await Promise.all([
-    fetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=250&sort=added`, {
+    afetchJson<{ results: OverseerrRequest[] }>(`${baseUrl}/api/v1/request?take=250&sort=added`, {
       service: "overseerr",
       headers: { "X-Api-Key": apiKey },
       timeoutMs: 10000,
@@ -1942,7 +1960,7 @@ function mapDiscoverResult(r: OverseerrSearchResult): DiscoverItem {
 export async function overseerrMediaByTmdb(tmdbId: number, kind: MediaKind): Promise<DiscoverItem | null> {
   const { baseUrl, apiKey } = await creds("overseerr");
   const path = kind === "series" ? "tv" : "movie";
-  const r = await fetchJson<OverseerrSearchResult & { numberOfSeasons?: number }>(
+  const r = await afetchJson<OverseerrSearchResult & { numberOfSeasons?: number }>(
     `${baseUrl}/api/v1/${path}/${tmdbId}`,
     { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
   );
@@ -1953,7 +1971,7 @@ export async function overseerrMediaByTmdb(tmdbId: number, kind: MediaKind): Pro
 
 export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  const data = await fetchJson<{ results: OverseerrSearchResult[] }>(
+  const data = await afetchJson<{ results: OverseerrSearchResult[] }>(
     `${baseUrl}/api/v1/search?query=${encodeURIComponent(query || "a")}&page=1&language=en`,
     { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 12000 },
   );
@@ -1965,7 +1983,7 @@ export async function overseerrSearch(query: string): Promise<DiscoverItem[]> {
 
 // ── Overseerr — discover (trending / popular / upcoming) ──────
 async function fetchDiscover(baseUrl: string, apiKey: string, path: string, limit = 20): Promise<DiscoverItem[]> {
-  const data = await fetchJson<{ results: OverseerrSearchResult[] }>(
+  const data = await afetchJson<{ results: OverseerrSearchResult[] }>(
     `${baseUrl}/api/v1/discover/${path}?page=1&language=en`,
     { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
   );
@@ -2006,12 +2024,12 @@ export async function overseerrUpcomingMovies(): Promise<DiscoverItem[]> {
 // ── Overseerr — request mutations (delete / edit) ─────────────
 export async function overseerrDeleteRequest(requestId: number): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  await fetchJson(`${baseUrl}/api/v1/request/${requestId}`, { service: "overseerr", method: "DELETE", headers: { "X-Api-Key": apiKey } });
+  await afetchJson(`${baseUrl}/api/v1/request/${requestId}`, { service: "overseerr", method: "DELETE", headers: { "X-Api-Key": apiKey } });
 }
 
 export async function overseerrRequestDetails(requestId: number): Promise<OverseerrRequestDetails> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  const r = await fetchJson<OverseerrRequest>(`${baseUrl}/api/v1/request/${requestId}`, {
+  const r = await afetchJson<OverseerrRequest>(`${baseUrl}/api/v1/request/${requestId}`, {
     service: "overseerr",
     headers: { "X-Api-Key": apiKey },
   });
@@ -2032,7 +2050,7 @@ export async function overseerrEditRequest(requestId: number, changes: { seasons
   const body: Record<string, unknown> = {};
   if (changes.seasons !== undefined) body.seasons = changes.seasons.length ? changes.seasons : "all";
   if (changes.profileId !== undefined) body.profileId = changes.profileId;
-  await fetchJson(`${baseUrl}/api/v1/request/${requestId}`, { service: "overseerr", method: "PUT", headers: { "X-Api-Key": apiKey }, body });
+  await afetchJson(`${baseUrl}/api/v1/request/${requestId}`, { service: "overseerr", method: "PUT", headers: { "X-Api-Key": apiKey }, body });
 }
 
 // ── Overseerr — request counts ────────────────────────────────
@@ -2048,7 +2066,7 @@ export interface RequestCounts {
 export async function overseerrRequestCounts(): Promise<RequestCounts> {
   return cached("overseerr:requestCounts", 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("overseerr");
-    const data = await fetchJson<Record<string, number>>(`${baseUrl}/api/v1/request/count`, {
+    const data = await afetchJson<Record<string, number>>(`${baseUrl}/api/v1/request/count`, {
       service: "overseerr",
       headers: { "X-Api-Key": apiKey },
     });
@@ -2067,7 +2085,7 @@ export async function overseerrRequestCounts(): Promise<RequestCounts> {
 export async function overseerrWatchlist(): Promise<DiscoverItem[]> {
   return cached("overseerr:watchlist", 5 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("overseerr");
-    const data = await fetchJson<{ results: (OverseerrSearchResult & { tmdbId?: number })[] }>(
+    const data = await afetchJson<{ results: (OverseerrSearchResult & { tmdbId?: number })[] }>(
       `${baseUrl}/api/v1/discover/watchlist?page=1`,
       { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 8000 },
     );
@@ -2106,18 +2124,18 @@ export async function overseerrCreateRequest(input: { tmdbId: number; mediaType:
   if (input.profileId) body.profileId = input.profileId;
   // The POST response is the created MediaRequest: `status` is 1 pending / 2 approved
   // (auto-approve), so the caller can tell whether the request needs approval.
-  const res = await fetchJson<{ status?: number; media?: { status?: number } }>(`${baseUrl}/api/v1/request`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body });
+  const res = await afetchJson<{ status?: number; media?: { status?: number } }>(`${baseUrl}/api/v1/request`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body });
   return { status: typeof res?.status === "number" ? res.status : 1, mediaStatus: res?.media?.status };
 }
 
 export async function overseerrReview(requestId: number, action: "approve" | "decline"): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  await fetchJson(`${baseUrl}/api/v1/request/${requestId}/${action}`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey } });
+  await afetchJson(`${baseUrl}/api/v1/request/${requestId}/${action}`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey } });
 }
 
 export async function overseerrComment(mediaId: number, message: string): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  await fetchJson(`${baseUrl}/api/v1/comment`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body: { message, mediaId } });
+  await afetchJson(`${baseUrl}/api/v1/comment`, { service: "overseerr", method: "POST", headers: { "X-Api-Key": apiKey }, body: { message, mediaId } });
 }
 
 // ── Overseerr — users (for portal↔Overseerr identity matching) ──
@@ -2142,7 +2160,7 @@ const USERS_TTL = 5 * 60 * 1000;
 export async function overseerrUsers(): Promise<OverseerrUser[]> {
   if (usersCache && Date.now() - usersCache.at < USERS_TTL) return usersCache.users;
   const { baseUrl, apiKey } = await creds("overseerr");
-  const data = await fetchJson<{ results: OverseerrUserApi[] }>(`${baseUrl}/api/v1/user?take=100`, {
+  const data = await afetchJson<{ results: OverseerrUserApi[] }>(`${baseUrl}/api/v1/user?take=100`, {
     service: "overseerr",
     headers: { "X-Api-Key": apiKey },
   });
@@ -2161,7 +2179,7 @@ interface OverseerrIssueApi {
 export async function overseerrIssues(): Promise<{ open: number; items: IssueItem[] }> {
   return cached("overseerr:issues", 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("overseerr");
-    const data = await fetchJson<{ pageInfo?: { results?: number }; results?: OverseerrIssueApi[] }>(
+    const data = await afetchJson<{ pageInfo?: { results?: number }; results?: OverseerrIssueApi[] }>(
       `${baseUrl}/api/v1/issue?take=20&filter=open&sort=added`,
       { service: "overseerr", headers: { "X-Api-Key": apiKey } },
     );
@@ -2173,7 +2191,7 @@ export async function overseerrIssues(): Promise<{ open: number; items: IssueIte
 export async function overseerrVersion(): Promise<string | null> {
   return cached("overseerr:version", 30 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("overseerr");
-    const d = await fetchJson<{ version?: string }>(`${baseUrl}/api/v1/status`, {
+    const d = await afetchJson<{ version?: string }>(`${baseUrl}/api/v1/status`, {
       service: "overseerr",
       headers: { "X-Api-Key": apiKey },
     });
@@ -2206,7 +2224,7 @@ function mapQuota(q: OverseerrQuotaApi): OverseerrQuota {
 export async function overseerrUserQuota(overseerrUserId: number): Promise<{ movie: OverseerrQuota; tv: OverseerrQuota }> {
   return cached(`overseerr:quota:${overseerrUserId}`, 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("overseerr");
-    const raw = await fetchJson<{ movie: OverseerrQuotaApi; tv: OverseerrQuotaApi }>(
+    const raw = await afetchJson<{ movie: OverseerrQuotaApi; tv: OverseerrQuotaApi }>(
       `${baseUrl}/api/v1/user/${overseerrUserId}/quota`,
       { service: "overseerr", headers: { "X-Api-Key": apiKey } },
     );
@@ -2224,7 +2242,7 @@ export interface OverseerrQuotaSettings {
 /** Write movie + TV quota settings for an Overseerr user, then bust the local cache. */
 export async function overseerrUpdateUserQuota(overseerrUserId: number, settings: OverseerrQuotaSettings): Promise<void> {
   const { baseUrl, apiKey } = await creds("overseerr");
-  await fetchJson(`${baseUrl}/api/v1/user/${overseerrUserId}/settings/main`, {
+  await afetchJson(`${baseUrl}/api/v1/user/${overseerrUserId}/settings/main`, {
     service: "overseerr",
     method: "POST",
     headers: { "X-Api-Key": apiKey },
@@ -2249,7 +2267,7 @@ interface ArrQueueRecord {
 
 export async function arrQueue(serviceId: "sonarr" | "radarr"): Promise<QueueItem[]> {
   const { baseUrl, apiKey } = await creds(serviceId);
-  const data = await fetchJson<{ records: ArrQueueRecord[] }>(`${baseUrl}/api/v3/queue?pageSize=20`, {
+  const data = await afetchJson<{ records: ArrQueueRecord[] }>(`${baseUrl}/api/v3/queue?pageSize=20`, {
     service: serviceId,
     headers: { "X-Api-Key": apiKey },
   });
@@ -2270,7 +2288,7 @@ async function nzbgetRpc<T>(method: string): Promise<T> {
   // apiKey is null when NZBGet auth is disabled — omit the Authorization header.
   const hdrs: Record<string, string> = { "Content-Type": "application/json" };
   if (c.apiKey) hdrs.Authorization = `Basic ${Buffer.from(c.apiKey).toString("base64")}`;
-  const res = await fetchJson<{ result: T }>(`${base}/jsonrpc`, {
+  const res = await afetchJson<{ result: T }>(`${base}/jsonrpc`, {
     service: "nzbget",
     method: "POST",
     headers: hdrs,
@@ -2332,7 +2350,7 @@ interface ArrDiskSpace {
 export async function arrDiskSpace(serviceId: "sonarr" | "radarr"): Promise<StorageMount[]> {
   return cached(`diskspace:${serviceId}`, 10 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds(serviceId);
-    const data = await fetchJson<ArrDiskSpace[]>(`${baseUrl}/api/v3/diskspace`, {
+    const data = await afetchJson<ArrDiskSpace[]>(`${baseUrl}/api/v3/diskspace`, {
       service: serviceId,
       headers: { "X-Api-Key": apiKey },
     });
@@ -2353,7 +2371,7 @@ interface ArrHealthRecord {
 export async function arrHealth(serviceId: "sonarr" | "radarr"): Promise<HealthIssue[]> {
   return cached(`health:${serviceId}`, 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds(serviceId);
-    const data = await fetchJson<ArrHealthRecord[]>(`${baseUrl}/api/v3/health`, {
+    const data = await afetchJson<ArrHealthRecord[]>(`${baseUrl}/api/v3/health`, {
       service: serviceId,
       headers: { "X-Api-Key": apiKey },
     });
@@ -2430,7 +2448,7 @@ export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<Upcom
     const { baseUrl, apiKey } = await creds(serviceId);
     const start = new Date().toISOString();
     const end = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
-    const data = await fetchJson<ArrCalendarRecord[]>(
+    const data = await afetchJson<ArrCalendarRecord[]>(
       `${baseUrl}/api/v3/calendar?start=${start}&end=${end}&includeSeries=true`,
       { service: serviceId, headers: { "X-Api-Key": apiKey } },
     );
@@ -2487,7 +2505,7 @@ interface ArrHistoryRecord {
 export async function arrHistory(serviceId: "sonarr" | "radarr"): Promise<DownloadEvent[]> {
   return cached(`history:${serviceId}`, 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds(serviceId);
-    const data = await fetchJson<{ records: ArrHistoryRecord[] }>(
+    const data = await afetchJson<{ records: ArrHistoryRecord[] }>(
       `${baseUrl}/api/v3/history?pageSize=30&sortKey=date&sortDirection=descending`,
       { service: serviceId, headers: { "X-Api-Key": apiKey } },
     );
@@ -2508,7 +2526,7 @@ export async function prometheusQuery(query: string): Promise<number | null> {
   const c = await getServiceCredentials("prometheus");
   if (!c) throw new IntegrationError("prometheus", "not configured");
   const base = c.baseUrl.replace(/\/$/, "");
-  const data = await fetchJson<{ data: { result: { value: [number, string] }[] } }>(
+  const data = await afetchJson<{ data: { result: { value: [number, string] }[] } }>(
     `${base}/api/v1/query?query=${encodeURIComponent(query)}`,
     { service: "prometheus", headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {} },
   );
@@ -2521,7 +2539,7 @@ export async function prometheusQueryAll(query: string): Promise<{ metric: Recor
   const c = await getServiceCredentials("prometheus");
   if (!c) return [];
   const base = c.baseUrl.replace(/\/$/, "");
-  const data = await fetchJson<{ data: { result: { metric: Record<string, string>; value: [number, string] }[] } }>(
+  const data = await afetchJson<{ data: { result: { metric: Record<string, string>; value: [number, string] }[] } }>(
     `${base}/api/v1/query?query=${encodeURIComponent(query)}`,
     { service: "prometheus", headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {} },
   );
@@ -2536,7 +2554,7 @@ export async function prometheusRange(query: string, points = 40, stepSec = 60):
     const base = c.baseUrl.replace(/\/$/, "");
     const now = Math.floor(Date.now() / 1000);
     const start = now - points * stepSec;
-    const data = await fetchJson<{ data: { result: { values: [number, string][] }[] } }>(
+    const data = await afetchJson<{ data: { result: { values: [number, string][] }[] } }>(
       `${base}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${now}&step=${stepSec}`,
       { service: "prometheus", headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {} },
     );
@@ -2554,7 +2572,7 @@ export async function prometheusInstances(): Promise<string[]> {
   const c = await getServiceCredentials("prometheus");
   if (!c) throw new IntegrationError("prometheus", "not configured");
   const base = c.baseUrl.replace(/\/$/, "");
-  const data = await fetchJson<{ data: string[] }>(
+  const data = await afetchJson<{ data: string[] }>(
     `${base}/api/v1/label/instance/values?match[]=node_uname_info`,
     { service: "prometheus", headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {} },
   );
@@ -2572,7 +2590,7 @@ export interface WizarrStats {
 export async function wizarrStats(): Promise<WizarrStats> {
   return cached("wizarr:stats", 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("wizarr");
-    const d = await fetchJson<{ users?: number; invites?: number; pending?: number; expired?: number }>(
+    const d = await afetchJson<{ users?: number; invites?: number; pending?: number; expired?: number }>(
       `${baseUrl}/api/status`,
       { service: "wizarr", headers: { "X-API-Key": apiKey } },
     );
@@ -2596,8 +2614,8 @@ export async function prowlarrStats(): Promise<ProwlarrStats> {
     // The indexer list is the primary signal (a real outage throws here → panel empties).
     // Stats are best-effort enrichment: if /indexerstats errors (e.g. wants date params on
     // some versions), still show indexer counts rather than blanking the whole panel.
-    const indexers = await fetchJson<{ enable?: boolean }[]>(`${baseUrl}/api/v1/indexer`, { service: "prowlarr", headers });
-    const stats = await fetchJson<{ indexers?: { numberOfQueries?: number; numberOfGrabs?: number; numberOfFailedGrabs?: number }[] }>(
+    const indexers = await afetchJson<{ enable?: boolean }[]>(`${baseUrl}/api/v1/indexer`, { service: "prowlarr", headers });
+    const stats = await afetchJson<{ indexers?: { numberOfQueries?: number; numberOfGrabs?: number; numberOfFailedGrabs?: number }[] }>(
       `${baseUrl}/api/v1/indexerstats`,
       { service: "prowlarr", headers },
     ).catch(() => ({ indexers: [] as { numberOfQueries?: number; numberOfGrabs?: number; numberOfFailedGrabs?: number }[] }));
@@ -2633,7 +2651,8 @@ export async function agregarrStatus(serviceId = "agregarr"): Promise<AgregarrSt
     const headers = { "X-Api-Key": apiKey };
     // The configured collections are the real count; sync/status.totalCollections is only the
     // *current run's* counter (0 when idle), so read /collections for the headline figure.
-    const list = await fetchJson<{ collectionConfigs?: { isActive?: boolean }[] }>(
+    const list = await authedFetchJson<{ collectionConfigs?: { isActive?: boolean }[] }>(
+      serviceId,
       `${baseUrl}/api/v1/collections`,
       { service: "agregarr", headers },
     );
@@ -2647,7 +2666,8 @@ export async function agregarrStatus(serviceId = "agregarr"): Promise<AgregarrSt
       nextSyncAt?: string;
       globalSyncError?: string | null;
     };
-    const sync = await fetchJson<AgSync>(
+    const sync = await authedFetchJson<AgSync>(
+      serviceId,
       `${baseUrl}/api/v1/collections/sync/status`,
       { service: "agregarr", headers },
     ).catch((): AgSync => ({}));
@@ -2680,8 +2700,8 @@ export async function bazarrWanted(): Promise<BazarrWanted> {
     // Settle independently: a Bazarr instance with only Sonarr (or only Radarr) wired up
     // errors on the other endpoint — that shouldn't blank the count we *can* read.
     const [ep, mv] = await Promise.allSettled([
-      fetchJson<{ total?: number }>(`${baseUrl}/api/episodes/wanted?${q}`, { service: "bazarr" }),
-      fetchJson<{ total?: number }>(`${baseUrl}/api/movies/wanted?${q}`, { service: "bazarr" }),
+      afetchJson<{ total?: number }>(`${baseUrl}/api/episodes/wanted?${q}`, { service: "bazarr" }),
+      afetchJson<{ total?: number }>(`${baseUrl}/api/movies/wanted?${q}`, { service: "bazarr" }),
     ]);
     // If both endpoints fail, treat the service as down so the panel shows its empty state.
     if (ep.status === "rejected" && mv.status === "rejected") throw ep.reason;
@@ -2708,9 +2728,9 @@ interface HydraIndexerStatus {
 
 // NZBHydra2's /api/stats/indexers is a POST taking an ApiHistoryRequest body — a GET (or a body
 // missing sortMode/column) returns HTTP 500. The apikey goes in both the query and the body, and
-// Content-Type must be set explicitly (fetchJson only sends Accept by default).
+// Content-Type must be set explicitly (afetchJson only sends Accept by default).
 async function nzbhydraIndexerStatuses(baseUrl: string, apiKey: string, service: string): Promise<HydraIndexerStatus[]> {
-  return fetchJson<HydraIndexerStatus[]>(`${baseUrl}/api/stats/indexers?apikey=${encodeURIComponent(apiKey)}`, {
+  return afetchJson<HydraIndexerStatus[]>(`${baseUrl}/api/stats/indexers?apikey=${encodeURIComponent(apiKey)}`, {
     service,
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2764,7 +2784,7 @@ export interface LazyLibrarianStats {
 export async function lazylibrarianStats(): Promise<LazyLibrarianStats> {
   return cached("lazylibrarian:stats", 10 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("lazylibrarian");
-    const data = await fetchJson<unknown>(`${baseUrl}/api?cmd=getAllBooks&apikey=${encodeURIComponent(apiKey)}`, {
+    const data = await afetchJson<unknown>(`${baseUrl}/api?cmd=getAllBooks&apikey=${encodeURIComponent(apiKey)}`, {
       service: "lazylibrarian",
     });
     // Success is a bare array; failure is an object ({Success:false,...}). Guard explicitly.
@@ -2825,7 +2845,7 @@ function fmtEtaSeconds(sec: number): string {
 
 export async function listenarrQueue(): Promise<QueueItem[]> {
   const { baseUrl, apiKey } = await creds("listenarr");
-  const data = await fetchJson<{ items?: ListenarrQueueRecord[] }>(`${baseUrl}/api/v1/download/queue`, {
+  const data = await afetchJson<{ items?: ListenarrQueueRecord[] }>(`${baseUrl}/api/v1/download/queue`, {
     service: "listenarr",
     headers: { "X-Api-Key": apiKey },
   });
@@ -2869,7 +2889,7 @@ export async function listenarrHistory(): Promise<DownloadEvent[]> {
     ] as const;
     const lists = await Promise.all(
       types.map(({ type }) =>
-        fetchJson<ListenarrHistoryRecord[]>(`${baseUrl}/api/v1/history/type/${type}`, {
+        afetchJson<ListenarrHistoryRecord[]>(`${baseUrl}/api/v1/history/type/${type}`, {
           service: "listenarr",
           headers: { "X-Api-Key": apiKey },
         }),
@@ -2899,7 +2919,7 @@ interface ListenarrHealthResponse {
 export async function listenarrHealth(): Promise<HealthIssue[]> {
   return cached("health:listenarr", 3 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("listenarr");
-    const d = await fetchJson<ListenarrHealthResponse>(`${baseUrl}/api/v1/system/health`, {
+    const d = await afetchJson<ListenarrHealthResponse>(`${baseUrl}/api/v1/system/health`, {
       service: "listenarr",
       headers: { "X-Api-Key": apiKey },
     });
@@ -2937,7 +2957,7 @@ export interface ListenarrStats {
 export async function listenarrStats(): Promise<ListenarrStats> {
   return cached("listenarr:stats", 10 * 60 * 1000, async () => {
     const { baseUrl, apiKey } = await creds("listenarr");
-    const data = await fetchJson<unknown>(`${baseUrl}/api/v1/library`, {
+    const data = await afetchJson<unknown>(`${baseUrl}/api/v1/library`, {
       service: "listenarr",
       headers: { "X-Api-Key": apiKey },
     });
@@ -2997,7 +3017,7 @@ async function qbitAuth(base: string, apiKey: string, insecureTls: boolean, forc
   }
   const { username, password } = splitQbitCreds(apiKey);
   const p = (async () => {
-    const res = await fetchRaw(`${base}/api/v2/auth/login`, {
+    const res = await afetchRaw(`${base}/api/v2/auth/login`, {
       service: "qbittorrent",
       method: "POST",
       headers: {
@@ -3033,11 +3053,11 @@ async function qbitGet<T>(base: string, apiKey: string, insecureTls: boolean, pa
   const cookie = await qbitAuth(base, apiKey, insecureTls);
   const hdrs = { Cookie: cookie, Referer: base, Origin: base };
   try {
-    return await fetchJsonRaw<T>(`${base}${path}`, { service: "qbittorrent", headers: hdrs, insecureTls });
+    return await afetchJson<T>(`${base}${path}`, { service: "qbittorrent", headers: hdrs, insecureTls });
   } catch (e) {
     if (e instanceof IntegrationError && (e.status === 403 || e.status === 401)) {
       const fresh = await qbitAuth(base, apiKey, insecureTls, true);
-      return await fetchJsonRaw<T>(`${base}${path}`, {
+      return await afetchJson<T>(`${base}${path}`, {
         service: "qbittorrent",
         headers: { Cookie: fresh, Referer: base, Origin: base },
         insecureTls,
@@ -3172,21 +3192,24 @@ function normalizeVersion(v: string | undefined | null): string | null {
   return (dev ? dev[1] : s) || null;
 }
 
-async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKind, insecureTls = false): Promise<string | null> {
+async function fetchServiceVersion(serviceId: string, base: string, apiKey: string, kind: ServiceKind, insecureTls = false): Promise<string | null> {
   const b = base.replace(/\/$/, "");
-  // Inject the service's TLS preference into every probe below without touching each call site:
-  // this local binding shadows the imported fetchJson for the rest of this function only, so a
-  // self-signed LAN host (e.g. Unraid) is reachable when its "allow self-signed TLS" toggle is on.
-  const fetchJson = <T,>(url: string, opts: HttpOpts): Promise<T> => fetchJsonRaw<T>(url, { ...opts, insecureTls });
+  // Inject the service's TLS preference (and any authentik forward-auth) into every probe below
+  // without touching each call site: these local bindings shadow the module afetch* for the rest
+  // of this function only. A self-signed LAN host (e.g. Unraid) is reachable when its "allow
+  // self-signed TLS" toggle is on, and a forward-auth'd service's stored outpost credential is
+  // applied when serviceId names a saved service (a blank id / add-mode probe is a passthrough).
+  const afetchJson = <T,>(url: string, opts: HttpOpts): Promise<T> => authedFetchJson<T>(serviceId, url, { ...opts, insecureTls });
+  const afetchRaw = (url: string, opts: HttpOpts): Promise<Response> => authedFetchRaw(serviceId, url, { ...opts, insecureTls });
   if (kind === "jellyfin") {
-    const d = await fetchJson<{ Version?: string }>(`${b}/System/Info`, {
+    const d = await afetchJson<{ Version?: string }>(`${b}/System/Info`, {
       service: "version-detect",
       headers: apiKey ? { Authorization: `MediaBrowser Token="${apiKey}"` } : {},
     });
     return normalizeVersion(d.Version);
   }
   if (kind === "overseerr") {
-    const d = await fetchJson<{ version?: string }>(`${b}/api/v1/status`, {
+    const d = await afetchJson<{ version?: string }>(`${b}/api/v1/status`, {
       service: "version-detect",
       headers: apiKey ? { "X-Api-Key": apiKey } : {},
     });
@@ -3194,7 +3217,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   }
   if (kind === "arr" || kind === "arr-v1") {
     const apiVer = kind === "arr-v1" ? "v1" : "v3";
-    const d = await fetchJson<{ version?: string }>(`${b}/api/${apiVer}/system/status`, {
+    const d = await afetchJson<{ version?: string }>(`${b}/api/${apiVer}/system/status`, {
       service: "version-detect",
       headers: apiKey ? { "X-Api-Key": apiKey } : {},
     });
@@ -3202,7 +3225,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   }
   if (kind === "bazarr") {
     // Bazarr has its own (non-*arr) API; auth via ?apikey= like Tautulli.
-    const d = await fetchJson<{ data?: { bazarr_version?: string } }>(
+    const d = await afetchJson<{ data?: { bazarr_version?: string } }>(
       `${b}/api/system/status?apikey=${encodeURIComponent(apiKey)}`,
       { service: "version-detect" },
     );
@@ -3210,7 +3233,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   }
   if (kind === "agregarr") {
     // Public status endpoint (no auth) exposes the version.
-    const d = await fetchJson<{ version?: string }>(`${b}/api/v1/status`, {
+    const d = await afetchJson<{ version?: string }>(`${b}/api/v1/status`, {
       service: "version-detect",
     });
     return normalizeVersion(d.version);
@@ -3218,7 +3241,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   if (kind === "wizarr") {
     // The auto-generated swagger spec's info.version holds the app version.
     // /api/swagger.json is accessible without auth (or with the API key).
-    const d = await fetchJson<{ info?: { version?: string } }>(`${b}/api/swagger.json`, {
+    const d = await afetchJson<{ info?: { version?: string } }>(`${b}/api/swagger.json`, {
       service: "version-detect",
       headers: apiKey ? { "X-API-Key": apiKey } : {},
     });
@@ -3227,18 +3250,18 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   if (kind === "audiobookshelf") {
     // Validate the token against an authenticated endpoint so a bad key fails the
     // connection test, then read the public /status endpoint for the server version.
-    await fetchJson<unknown>(`${b}/api/libraries`, {
+    await afetchJson<unknown>(`${b}/api/libraries`, {
       service: "version-detect",
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     });
-    const d = await fetchJson<{ serverVersion?: string }>(`${b}/status`, {
+    const d = await afetchJson<{ serverVersion?: string }>(`${b}/status`, {
       service: "version-detect",
     });
     return normalizeVersion(d.serverVersion) ?? "";
   }
   if (kind === "nzbget") {
     // JSON-RPC "version"; the "apiKey" is the "username:password" Basic-auth pair.
-    const d = await fetchJson<{ result?: string }>(`${b}/jsonrpc`, {
+    const d = await afetchJson<{ result?: string }>(`${b}/jsonrpc`, {
       service: "version-detect",
       method: "POST",
       headers: { Authorization: `Basic ${Buffer.from(apiKey).toString("base64")}`, "Content-Type": "application/json" },
@@ -3248,10 +3271,10 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   }
   if (kind === "qbittorrent") {
     // Login with form-encoded credentials (SID cookie), then GET plain-text version.
-    // The local fetchJson override (injecting insecureTls) doesn't work for the raw login
+    // The local afetchJson override (injecting insecureTls) doesn't work for the raw login
     // fetch, so we pass insecureTls explicitly via HttpOpts.
     const { username, password } = splitQbitCreds(apiKey);
-    const loginRes = await fetchRaw(`${b}/api/v2/auth/login`, {
+    const loginRes = await afetchRaw(`${b}/api/v2/auth/login`, {
       service: "version-detect",
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Referer: b, Origin: b },
@@ -3264,7 +3287,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     const cookieMatch = setCookie.match(/((?:QBT_SID_\w+|SID)=([^;]+))/);
     if (!cookieMatch) throw new IntegrationError("version-detect", "invalid qBittorrent credentials");
     const cookie = cookieMatch[1];
-    const verRes = await fetchRaw(`${b}/api/v2/app/version`, {
+    const verRes = await afetchRaw(`${b}/api/v2/app/version`, {
       service: "version-detect",
       headers: { Cookie: cookie, Referer: b, Origin: b },
       insecureTls,
@@ -3275,14 +3298,14 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   if (kind === "nzbhydra") {
     // Spring Boot actuator /info is empty in the default LSIO package; use the internal
     // updates API which exposes currentVersion as plain JSON.
-    const d = await fetchJson<{ currentVersion?: string }>(
+    const d = await afetchJson<{ currentVersion?: string }>(
       `${b}/internalapi/updates/infos?apikey=${encodeURIComponent(apiKey)}`,
       { service: "version-detect" },
     );
     return normalizeVersion(d.currentVersion) ?? "";
   }
   if (kind === "tautulli") {
-    const d = await fetchJson<{ response?: { data?: { tautulli_version?: string } } }>(
+    const d = await afetchJson<{ response?: { data?: { tautulli_version?: string } } }>(
       `${b}/api/v2?apikey=${encodeURIComponent(apiKey)}&cmd=get_tautulli_info`,
       { service: "version-detect" },
     );
@@ -3290,7 +3313,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   }
   if (kind === "gatus") {
     // Gatus exposes no version endpoint; hit the status endpoint to verify connectivity.
-    await fetchJson<unknown>(`${b}/api/v1/endpoints/statuses`, {
+    await afetchJson<unknown>(`${b}/api/v1/endpoints/statuses`, {
       service: "version-detect",
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     });
@@ -3305,10 +3328,10 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     // Unraid 7.x GraphQL API: POST /graphql with an `x-api-key` header. The version lives at
     // info.versions.core.unraid (7.2+ integrated API); the older Connect plugin exposed it
     // flat at info.versions.unraid, so we fall back to that when the nested query yields nothing.
-    // GraphQL surfaces field/auth errors as HTTP 400 (→ fetchJson throws → caught → null) or as
+    // GraphQL surfaces field/auth errors as HTTP 400 (→ afetchJson throws → caught → null) or as
     // 200 with null data, so a bad key / wrong schema degrades to null rather than a wrong value.
     const ask = (query: string) =>
-      fetchJson<{ data?: { info?: { versions?: { core?: { unraid?: string }; unraid?: string } } } }>(`${b}/graphql`, {
+      afetchJson<{ data?: { info?: { versions?: { core?: { unraid?: string }; unraid?: string } } } }>(`${b}/graphql`, {
         service: "version-detect",
         method: "POST",
         headers: { "Content-Type": "application/json", ...(apiKey ? { "x-api-key": apiKey } : {}) },
@@ -3323,7 +3346,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
     // LazyLibrarian always answers HTTP 200; auth failure is signalled only in the body
     // ({Success:false, Error:{Code:401}}), so check Success explicitly or a bad key would
     // falsely pass the connection test. Version fields are flat at top level, not under Data.
-    const d = await fetchJson<{ Success?: boolean; current_version?: string }>(
+    const d = await afetchJson<{ Success?: boolean; current_version?: string }>(
       `${b}/api?cmd=getVersion&apikey=${encodeURIComponent(apiKey)}`,
       { service: "version-detect" },
     );
@@ -3333,7 +3356,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   if (kind === "listenarr") {
     // Listenarr's own /api/v1 (not the shared *arr API): /system/info carries the app
     // version and rejects bad/missing keys with 401, so it doubles as the connection test.
-    const d = await fetchJson<{ version?: string }>(`${b}/api/v1/system/info`, {
+    const d = await afetchJson<{ version?: string }>(`${b}/api/v1/system/info`, {
       service: "version-detect",
       headers: apiKey ? { "X-Api-Key": apiKey } : {},
     });
@@ -3342,7 +3365,7 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   if (kind === "authentik") {
     // /api/v3/admin/version/ is admin-namespaced, so a 200 confirms the token is valid AND a
     // superuser (which AERIE requires for the apps/bindings reads). A non-superuser or bad token 403s.
-    const d = await fetchJson<{ version_current?: string }>(`${b}/api/v3/admin/version/`, {
+    const d = await afetchJson<{ version_current?: string }>(`${b}/api/v3/admin/version/`, {
       service: "version-detect",
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     });
@@ -3350,15 +3373,15 @@ async function fetchServiceVersion(base: string, apiKey: string, kind: ServiceKi
   }
   if (kind === "plex") {
     // /identity is unauthenticated and returns the server version as JSON (Accept: application/json
-    // is already set by fetchJson). Pass the token if available for future-proofing.
-    const d = await fetchJson<{ MediaContainer?: { version?: string } }>(`${b}/identity`, {
+    // is already set by afetchJson). Pass the token if available for future-proofing.
+    const d = await afetchJson<{ MediaContainer?: { version?: string } }>(`${b}/identity`, {
       service: "version-detect",
       headers: apiKey ? { "X-Plex-Token": apiKey } : {},
     });
     return normalizeVersion(d.MediaContainer?.version) ?? "";
   }
   // prometheus
-  const d = await fetchJson<{ data?: { version?: string } }>(`${b}/api/v1/status/buildinfo`, {
+  const d = await afetchJson<{ data?: { version?: string } }>(`${b}/api/v1/status/buildinfo`, {
     service: "version-detect",
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
   });
@@ -3372,7 +3395,7 @@ export async function detectVersion(serviceId: string): Promise<string | null> {
     if (!kind) return null;
     const c = await getServiceCredentials(serviceId);
     if (!c) return null;
-    return await fetchServiceVersion(c.baseUrl, c.apiKey ?? "", kind, c.insecureTls);
+    return await fetchServiceVersion(serviceId, c.baseUrl, c.apiKey ?? "", kind, c.insecureTls);
   } catch {
     return null;
   }
@@ -3383,7 +3406,9 @@ export async function probeVersion(baseUrl: string, apiKey: string, idHint: stri
   try {
     const kind = serviceKind(idHint);
     if (!kind) return null;
-    return await fetchServiceVersion(baseUrl, apiKey, kind, insecureTls);
+    // Transient (add-mode) probe: the service isn't saved, so there's no stored forward-auth to
+    // apply — pass an empty id, which authedFetch* treats as a passthrough.
+    return await fetchServiceVersion("", baseUrl, apiKey, kind, insecureTls);
   } catch {
     return null;
   }
@@ -3517,20 +3542,6 @@ function splitBeszelCreds(apiKey: string): { identity: string; password: string 
   return { identity: apiKey.slice(0, i), password: apiKey.slice(i + 1) };
 }
 
-/** Decode a JWT's `exp` claim (no signature check) → epoch ms; fall back to +30min. */
-function beszelTokenExpMs(token: string): number {
-  try {
-    const payload = token.split(".")[1];
-    if (payload) {
-      const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: number };
-      if (typeof json.exp === "number") return json.exp * 1000;
-    }
-  } catch {
-    /* unparsable — use the conservative fallback below */
-  }
-  return Date.now() + 30 * 60_000;
-}
-
 /** Authenticate as a Beszel superuser, caching the token until ~30s before expiry. */
 async function beszelAuth(base: string, apiKey: string, force = false): Promise<string> {
   if (!force) {
@@ -3541,12 +3552,12 @@ async function beszelAuth(base: string, apiKey: string, force = false): Promise<
   }
   const { identity, password } = splitBeszelCreds(apiKey);
   const p = (async () => {
-    const data = await fetchJson<{ token?: string }>(
+    const data = await afetchJson<{ token?: string }>(
       `${base}/api/collections/_superusers/auth-with-password`,
       { service: "beszel", method: "POST", headers: { "Content-Type": "application/json" }, body: { identity, password } },
     );
     if (!data.token) throw new IntegrationError("beszel", "auth returned no token");
-    beszelTokenCache.set(base, { token: data.token, expMs: beszelTokenExpMs(data.token) });
+    beszelTokenCache.set(base, { token: data.token, expMs: jwtExpMs(data.token) });
     return data.token;
   })();
   beszelAuthInflight.set(base, p);
@@ -3561,11 +3572,11 @@ async function beszelAuth(base: string, apiKey: string, force = false): Promise<
 async function beszelGet<T>(base: string, apiKey: string, path: string): Promise<T> {
   const token = await beszelAuth(base, apiKey);
   try {
-    return await fetchJson<T>(`${base}${path}`, { service: "beszel", headers: { Authorization: token } });
+    return await afetchJson<T>(`${base}${path}`, { service: "beszel", headers: { Authorization: token } });
   } catch (e) {
     if (e instanceof IntegrationError && e.status === 401) {
       const fresh = await beszelAuth(base, apiKey, true);
-      return await fetchJson<T>(`${base}${path}`, { service: "beszel", headers: { Authorization: fresh } });
+      return await afetchJson<T>(`${base}${path}`, { service: "beszel", headers: { Authorization: fresh } });
     }
     throw e;
   }

@@ -134,6 +134,29 @@ services:
     expect(result!.services[0].internalUrl).toBe("http://plex:32400");
   });
 
+  it("parses a forwardAuth block and resolves its ${ENV_VAR} fields", () => {
+    process.env.MY_KEY = "fa-password";
+    mockExists.mockReturnValue(true);
+    mockRead.mockReturnValue(`
+services:
+  - id: traefik
+    name: Traefik
+    cat: infra
+    icon: dns
+    host: traefik.example.com
+    forwardAuth:
+      method: bearer
+      tokenUrl: https://auth.example.com/application/o/token/
+      clientId: cid
+      username: svc
+      password: "\${MY_KEY}"
+      scope: openid
+`);
+    const result = loadServiceConfigFile();
+    expect(result).not.toBeNull();
+    expect(result!.services[0].forwardAuth).toMatchObject({ method: "bearer", clientId: "cid", password: "fa-password" });
+  });
+
   it("defaults services to empty array when not specified", () => {
     mockExists.mockReturnValue(true);
     mockRead.mockReturnValue(`

@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 // The route resolves credentials from the registry (server-only, DB-backed). Stub it so the
 // test exercises only URL construction + the SSRF origin guard, with no DB.
 vi.mock("@/lib/integrations/registry", () => ({
-  getServiceCredentials: vi.fn(),
+  getServiceSecret: vi.fn(), getServiceCredentials: vi.fn(),
 }));
 
 import { GET, isPlainPath } from "@/app/api/artwork/route";

@@ -36,6 +36,19 @@ export const serviceSchema = z.object({
   logoSlug: z.string().optional(),
   /** API key/token, typically a ${ENV_VAR} reference resolved at load time. */
   apiKey: z.string().optional(),
+  /** authentik forward-auth config when this service sits behind a reverse-proxy outpost.
+   *  Loose here (fields are typically ${ENV_VAR} refs); apply.ts validates each entry with
+   *  parseForwardAuthConfig and skips any that's incomplete (e.g. an unresolved env ref). */
+  forwardAuth: z
+    .object({
+      method: z.enum(["basic", "bearer"]),
+      tokenUrl: z.string().optional(),
+      clientId: z.string().optional(),
+      username: z.string().optional(),
+      password: z.string().optional(),
+      scope: z.string().optional(),
+    })
+    .optional(),
   monitoringKey: z.string().nullish(),
   /** optional LogQL stream selector for the admin Loki logs viewer (e.g. {container="sonarr"}). */
   lokiQuery: z.string().nullish(),

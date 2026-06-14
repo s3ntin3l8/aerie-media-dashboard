@@ -3,10 +3,11 @@
 // AERIE — admin mutations (server actions). Admin-guarded.
 // ============================================================
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
+import { parseForwardAuthConfig, type ForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import { getSessionUser } from "@/lib/session";
 import { setDeploymentSetting, getDeploymentSetting } from "@/lib/integrations/registry";
 import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId } from "@/lib/integrations/clients";
@@ -47,12 +48,38 @@ export async function setServiceSecret(serviceId: string, plaintext: string) {
   await requireAdmin();
   await ensureDb();
   if (!plaintext) {
-    await db.delete(schema.serviceSecrets).where(eq(schema.serviceSecrets.serviceId, serviceId));
+    await db
+      .delete(schema.serviceSecrets)
+      .where(and(eq(schema.serviceSecrets.serviceId, serviceId), eq(schema.serviceSecrets.kind, "apiKey")));
   } else {
     const enc = encrypt(plaintext);
     await db
       .insert(schema.serviceSecrets)
       .values({ serviceId, kind: "apiKey", iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [schema.serviceSecrets.serviceId, schema.serviceSecrets.kind],
+        set: { iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() },
+      });
+  }
+  revalidatePath("/admin");
+}
+
+/** Store (encrypted) or clear a service's authentik forward-auth config (a separate
+ *  `forwardAuth`-kind secret, so it coexists with the service's own apiKey). */
+export async function setServiceForwardAuth(serviceId: string, config: ForwardAuthConfig | null) {
+  await requireAdmin();
+  await ensureDb();
+  if (!config) {
+    await db
+      .delete(schema.serviceSecrets)
+      .where(and(eq(schema.serviceSecrets.serviceId, serviceId), eq(schema.serviceSecrets.kind, "forwardAuth")));
+  } else {
+    const json = JSON.stringify(config);
+    if (!parseForwardAuthConfig(json)) throw new Error("Invalid forward-auth config");
+    const enc = encrypt(json);
+    await db
+      .insert(schema.serviceSecrets)
+      .values({ serviceId, kind: "forwardAuth", iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: [schema.serviceSecrets.serviceId, schema.serviceSecrets.kind],
         set: { iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() },

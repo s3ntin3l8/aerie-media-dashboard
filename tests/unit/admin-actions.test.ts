@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { decrypt } from "@/lib/crypto";
 
 // requireAdmin() reads the session; next/cache + the heavy clients module aren't needed here.
 vi.mock("@/lib/session", () => ({ getSessionUser: vi.fn() }));
@@ -21,7 +22,7 @@ import { getSessionUser } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import * as C from "@/lib/integrations/clients";
 import {
-  upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceActive,
+  upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceForwardAuth, setServiceActive,
   serviceExists, deleteService, detectServiceVersion, setMetricsSource, setQueueSource,
   setBeszelSystem, setPrometheusInstance, setUserOverseerrQuota,
   dismissTraefikHost, restoreTraefikHost,
@@ -88,6 +89,35 @@ describe("service CRUD + secrets", () => {
     await setServiceSecret("radarr", "");
     rows = await db.select().from(schema.serviceSecrets).where(eq(schema.serviceSecrets.serviceId, "radarr"));
     expect(rows).toHaveLength(0);
+  });
+
+  const faRows = (id: string) =>
+    db.select().from(schema.serviceSecrets).where(and(eq(schema.serviceSecrets.serviceId, id), eq(schema.serviceSecrets.kind, "forwardAuth")));
+
+  it("setServiceForwardAuth stores an encrypted forwardAuth secret then clears it", async () => {
+    const cfg = { method: "bearer" as const, tokenUrl: "https://auth.test/application/o/token/", clientId: "cid", username: "svc", password: "pw", scope: "openid" };
+    await setServiceForwardAuth("radarr", cfg);
+    let rows = await faRows("radarr");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ciphertext).not.toBe(JSON.stringify(cfg)); // encrypted at rest, not plaintext
+    expect(JSON.parse(decrypt({ iv: rows[0].iv, authTag: rows[0].authTag, ciphertext: rows[0].ciphertext }))).toMatchObject(cfg);
+
+    await setServiceForwardAuth("radarr", null);
+    rows = await faRows("radarr");
+    expect(rows).toHaveLength(0);
+  });
+
+  it("forwardAuth coexists with the apiKey, and clearing the apiKey leaves it intact", async () => {
+    await setServiceSecret("radarr", "my-key");
+    await setServiceForwardAuth("radarr", { method: "basic", username: "svc", password: "pw" });
+    expect(await db.select().from(schema.serviceSecrets).where(eq(schema.serviceSecrets.serviceId, "radarr"))).toHaveLength(2);
+    // Clearing the apiKey must only drop the apiKey row, not the forwardAuth one.
+    await setServiceSecret("radarr", "");
+    expect(await faRows("radarr")).toHaveLength(1);
+  });
+
+  it("setServiceForwardAuth rejects an invalid config", async () => {
+    await expect(setServiceForwardAuth("radarr", { method: "bearer", username: "x" } as never)).rejects.toThrow(/Invalid/);
   });
 
   it("setVisibility upserts a row for a seeded group", async () => {

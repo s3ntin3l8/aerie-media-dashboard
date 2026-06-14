@@ -34,10 +34,13 @@ and aggregators can even coexist; each is classified independently.
 2. **Host-based routing on your Traefik routers** — correlation is still by the hostname in each
    router rule (`` Host(`sonarr.example.com`) ``) matching the AERIE service's **Host** field.
 3. **Reachable past forward-auth.** The aggregator ships with **no built-in auth** and is meant to
-   sit behind a forward-auth proxy. AERIE's call is server-side, so point it at an **internal URL**
-   that bypasses SSO (a Docker-network address or a LAN IP) — the same rule as every other
-   integration (see [`../EMBEDDING.md`](../EMBEDDING.md)). A public, forward-auth-protected URL
-   would bounce AERIE's request to the login page.
+   sit behind a forward-auth proxy. You have two ways to let AERIE's server-side call through:
+   - **Internal URL that bypasses SSO** — point it at a Docker-network address or LAN IP that
+     doesn't traverse the outpost (the same rule as every other integration; see
+     [`../EMBEDDING.md`](../EMBEDDING.md)). Simplest when such an address exists.
+   - **Authenticate *through* authentik forward-auth** — when only the public,
+     forward-auth-protected URL is reachable, configure AERIE's **Forward-auth** field (below) so it
+     authenticates to the outpost instead of being bounced to the login page.
 
 ## Setup in AERIE
 
@@ -51,6 +54,23 @@ and aggregators can even coexist; each is classified independently.
    `Basic` header. A secret without a `:` is ignored for auth.
 4. **(Optional) self-signed TLS.** If you reach it over HTTPS with a self-signed cert, enable
    **Skip TLS verification** on the service (LAN hosts only).
+5. **(Optional) authentik forward-auth.** If the only reachable URL is behind authentik
+   forward-auth, fill the **Forward-auth** field on the service (Admin → Services). It's **separate**
+   from the API key above, so the aggregator's optional basicAuth (or any app's own key) can coexist
+   with it. Pick one flow:
+   - **Bearer JWT** (recommended for a long-running poller): AERIE mints a short-lived token from
+     authentik's token endpoint (`https://<authentik>/application/o/token/`,
+     `grant_type=client_credentials`) and sends `Authorization: Bearer`. Needs the **proxy
+     provider's client_id** (authentik admin → the domain-level provider) plus a **service account**
+     username + app password that passes the application's policy. The token is cached in-process and
+     re-minted on expiry or a 401.
+   - **HTTP Basic**: AERIE sends the service-account `username:password`; authentik's outpost runs
+     the token exchange. No client_id needed; simplest, but the long-lived password reaches the
+     outpost on each session.
+
+   The **forward-auth credential owns the `Authorization` header** — if a service behind the outpost
+   *also* needs its own API key, that key must ride a non-`Authorization` header (e.g. `X-Api-Key`,
+   which the `*arr` clients already use).
 
 Within ~12 s (the snapshot poll) the route badges appear on services whose host matches a router
 in the aggregator snapshot — and the **"Discovered via Traefik"** panel populates from any host

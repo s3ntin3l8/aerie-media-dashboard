@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { setVisibility, upsertService, setServiceSecret, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
+import { setVisibility, upsertService, setServiceSecret, setServiceForwardAuth, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar } from "@/components/primitives";
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
@@ -856,6 +856,22 @@ export function Admin() {
     });
     // Only write the secret when the admin actually entered one (blank = keep).
     if (form.apiKey && form.apiKey.trim()) await setServiceSecret(id, form.apiKey.trim());
+    // Forward-auth (authentik) — a separate `forwardAuth`-kind secret, so it coexists with
+    // the API key. "remove" clears it; a method + app password writes it; an unset method or
+    // blank password keeps the current config (like the API key, blank = keep).
+    try {
+      if (form.forwardAuthMethod === "remove") {
+        await setServiceForwardAuth(id, null);
+      } else if (form.forwardAuthMethod && form.forwardAuthPassword.trim()) {
+        const cfg =
+          form.forwardAuthMethod === "bearer"
+            ? { method: "bearer" as const, tokenUrl: form.forwardAuthTokenUrl.trim(), clientId: form.forwardAuthClientId.trim(), username: form.forwardAuthUsername.trim(), password: form.forwardAuthPassword, scope: form.forwardAuthScope.trim() || undefined }
+            : { method: "basic" as const, username: form.forwardAuthUsername.trim(), password: form.forwardAuthPassword };
+        await setServiceForwardAuth(id, cfg);
+      }
+    } catch {
+      return { error: "Invalid forward-auth config — check the token URL, client id and account fields" };
+    }
     // Visibility after the service row exists (FK); admin group is always on.
     for (const g of groups) await setVisibility(id, g.name, g.name === adminGroup ? true : Boolean(vis[g.name]));
 
