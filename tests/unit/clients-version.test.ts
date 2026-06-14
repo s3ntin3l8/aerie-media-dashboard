@@ -132,6 +132,39 @@ describe("serviceKind — via detectVersion and probeVersion", () => {
       );
     });
 
+    it("detects raw Traefik version via /api/version", async () => {
+      mockFetchJson.mockResolvedValue({ Version: "3.7.1" });
+      const result = await probeVersion("http://traefik:8080", "", "traefik");
+      expect(result).toBe("3.7.1");
+      expect(mockFetchJson).toHaveBeenCalledWith(
+        expect.stringContaining("/api/version"),
+        expect.objectContaining({ service: "version-detect" }),
+      );
+    });
+
+    it("traefik aggregator: falls back to /api/snapshot when /api/version is absent → connected, no version", async () => {
+      mockFetchJson
+        .mockRejectedValueOnce(new Error("[version-detect] HTTP 404"))
+        .mockResolvedValueOnce({ httpRouters: [] });
+      const result = await probeVersion("http://aggregator:8080", "", "traefik-viewer");
+      expect(result).toBe(""); // reachable, no version field
+      const urls = mockFetchJson.mock.calls.map((c) => c[0] as string);
+      expect(urls.some((u) => u.includes("/api/version"))).toBe(true);
+      expect(urls.some((u) => u.includes("/api/snapshot"))).toBe(true);
+    });
+
+    it("traefik aggregator: surfaces a top-level `version` from /api/snapshot when present", async () => {
+      mockFetchJson
+        .mockRejectedValueOnce(new Error("404"))
+        .mockResolvedValueOnce({ version: "1.4.0", httpRouters: [] });
+      expect(await probeVersion("http://aggregator:8080", "", "traefik-aggregator")).toBe("1.4.0");
+    });
+
+    it("traefik: returns null when both probes fail (→ 'could not connect')", async () => {
+      mockFetchJson.mockRejectedValue(new Error("unreachable"));
+      expect(await probeVersion("http://traefik:8080", "", "traefik-viewer")).toBeNull();
+    });
+
     it("strips leading v from version via normalizeVersion", async () => {
       mockFetchJson.mockResolvedValue({ version: "v1.2.3" });
       const result = await probeVersion("http://svc:8080", "key", "sonarr");

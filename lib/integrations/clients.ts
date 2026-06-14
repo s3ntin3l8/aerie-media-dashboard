@@ -3079,6 +3079,7 @@ type ServiceKind =
   | "arr-v1" // Prowlarr/Lidarr/Readarr — /api/v1
   | "bazarr" // own Flask API — /api/system/status?apikey=
   | "agregarr" // /api/v1/status (public)
+  | "traefik" // raw Traefik /api/version, or the aggregator /api/snapshot (connectivity probe)
   | "wizarr" // /api/swagger.json info.version (X-API-Key)
   | "audiobookshelf" // /api/libraries (Bearer; no version field)
   | "nzbhydra" // /internalapi/updates/infos?apikey= → currentVersion
@@ -3118,6 +3119,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("unraid")) return "unraid";
   if (l.includes("lazylib")) return "lazylibrarian";
   if (l.includes("plex")) return "plex";
+  if (l.includes("traefik")) return "traefik"; // traefik / traefik-viewer / traefik-aggregator / raw instances
   return null;
 }
 
@@ -3256,6 +3258,21 @@ async function fetchServiceVersion(serviceId: string, base: string, apiKey: stri
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     });
     return "";
+  }
+  if (kind === "traefik") {
+    // Two shapes: a raw Traefik exposes GET /api/version ({ Version }); the aggregator doesn't, so
+    // fall back to /api/snapshot (the merged endpoint AERIE already reads) as a connectivity probe.
+    // Both go through the local afetchJson → forward-auth + insecureTls aware, so this validates the
+    // real outpost path. "" = connected without a version (the aggregator may surface one later via a
+    // top-level `version` field). An optional basicAuth front uses "user:password".
+    const headers: Record<string, string> = apiKey && apiKey.includes(":") ? { Authorization: `Basic ${Buffer.from(apiKey).toString("base64")}` } : {};
+    try {
+      const v = await afetchJson<{ Version?: string; version?: string }>(`${b}/api/version`, { service: "version-detect", headers });
+      return normalizeVersion(v.Version ?? v.version) ?? "";
+    } catch {
+      const snap = await afetchJson<{ version?: string }>(`${b}/api/snapshot`, { service: "version-detect", headers });
+      return normalizeVersion(snap.version) ?? "";
+    }
   }
   if (kind === "beszel") {
     // Authenticate via PocketBase superuser and verify the connection; no version endpoint.
