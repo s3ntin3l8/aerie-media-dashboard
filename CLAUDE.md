@@ -223,18 +223,21 @@ forward-auth middleware in `docs/EMBEDDING.md`.
 
 ### Testing changes against the live deployment (this host)
 
-`docker-compose.override.yml` adds `build: .` to the `aerie` service (taking precedence over the
-base file's placeholder `image:`), so `docker compose` builds from the working tree. To test
-working-tree changes end-to-end:
+Deployment runs the **published edge image** from GHCR, not a local build: every push to `main`
+triggers CI's `docker-publish` job, which builds and pushes `ghcr.io/s3ntin3l8/aerie:edge`. The
+local (gitignored) `docker-compose.override.yml` pins `image: ghcr.io/s3ntin3l8/aerie:edge`, so
+deploying a merged change is just pulling the fresh image once CI is green:
 
 ```bash
-docker compose down
-docker compose build      # uses the override's build: . (the Dockerfile)
-docker compose up -d
+docker compose pull      # fetch the latest :edge image CI built from main
+docker compose up -d     # recreate the container on the new image
 ```
 
-Then open **https://media.dev-01.in.s3ntin3l8.de/** to verify (the running container is
-`dashboard-aerie-1`). The portal is behind **Authentik SSO**, so the agent can't drive the
-authenticated UI headlessly — sign in in the browser first, then Chrome MCP can interact. The
-LAN dev server on `:3939` hot-reloads the working tree but its OIDC callback isn't registered,
-which is why a Docker rebuild is the way to test auth'd pages.
+To test **working-tree** changes *before* merging, uncomment `build: .` in the override (it takes
+precedence over `image:`) and build locally instead: `docker compose build && docker compose up -d`.
+
+Then open **https://media.example.com/** to verify (the running container is `dashboard-aerie-1`).
+The portal is behind **Authentik SSO**, so the agent can't drive the authenticated UI headlessly —
+sign in in the browser first, then Chrome MCP can interact. The LAN dev server on `:3939`
+hot-reloads the working tree but its OIDC callback isn't registered, which is why a Docker image
+(pulled edge or a local build) is the way to test auth'd pages.
