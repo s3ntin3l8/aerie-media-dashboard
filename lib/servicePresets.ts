@@ -73,6 +73,9 @@ export const SERVICE_PRESETS: Record<string, ServicePreset> = {
   gatus:         { cat: "monitor",    icon: "monitor_heart", logoSlug: "gatus", secret: OPTIONAL_APIKEY },
   prometheus:    { cat: "infra",      icon: "query_stats",   logoSlug: "prometheus", secret: OPTIONAL_APIKEY },
   grafana:       { cat: "infra",      icon: "monitoring",    logoSlug: "grafana" },
+  // Loki: log aggregation. The HTTP API can run open or behind auth, so the secret is optional.
+  // A stored value is sent as a Bearer token, or as HTTP Basic when it contains a ":" (user:pass).
+  loki:          { cat: "monitor",    icon: "receipt_long",  logoSlug: "loki", secret: { kind: "apiKey", optional: true, label: "Auth token", hint: "optional — Bearer token, or user:password for Basic", placeholder: "token or user:password (optional)" } },
   portainer:     { cat: "infra",      icon: "dns",           logoSlug: "portainer" },
   traefik:       { cat: "infra",      icon: "router",        logoSlug: "traefik", secret: { ...USERPASS_USER, optional: true } },
   // The traefik-dashboard-aggregator: one upstream that merges every Traefik node's /api into a

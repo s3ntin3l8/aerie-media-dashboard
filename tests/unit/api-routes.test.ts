@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
 // so the tests exercise only the handler logic (auth gating, config-missing empties, success
 // shaping, and the catch → empty fallbacks).
 vi.mock("@/lib/session", () => ({ getSessionUser: vi.fn() }));
-vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getServiceSecret: vi.fn() }));
+vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getServiceSecret: vi.fn(), getServiceConfigs: vi.fn() }));
 vi.mock("@/lib/integrations/clients", () => ({
   tautulliStreamHistory: vi.fn(),
   gatusHealth: vi.fn(),
@@ -14,13 +14,16 @@ vi.mock("@/lib/integrations/clients", () => ({
   overseerrSearch: vi.fn(),
   traefikRoutes: vi.fn(),
   authentikApps: vi.fn(),
+  lokiTail: vi.fn(),
+  lokiSelectorFor: vi.fn(),
 }));
 
 import { getSessionUser } from "@/lib/session";
-import { getServiceCredentials, getServiceSecret } from "@/lib/integrations/registry";
-import { tautulliStreamHistory, gatusHealth, beszelSystems, prometheusInstances, overseerrSearch, traefikRoutes, authentikApps } from "@/lib/integrations/clients";
+import { getServiceCredentials, getServiceSecret, getServiceConfigs } from "@/lib/integrations/registry";
+import { tautulliStreamHistory, gatusHealth, beszelSystems, prometheusInstances, overseerrSearch, traefikRoutes, authentikApps, lokiTail, lokiSelectorFor } from "@/lib/integrations/clients";
 
 import { GET as historyGET } from "@/app/api/history/route";
+import { GET as lokiGET } from "@/app/api/loki/logs/route";
 import { GET as gatusGET } from "@/app/api/gatus-endpoints/route";
 import { GET as beszelGET } from "@/app/api/beszel/systems/route";
 import { GET as promGET } from "@/app/api/prometheus/instances/route";
@@ -130,6 +133,36 @@ describe("admin-gated proxy routes", () => {
 
     vi.mocked(authentikApps).mockRejectedValue(new Error("down"));
     expect(await (await authentikGET()).json()).toEqual([]);
+  });
+});
+
+describe("GET /api/loki/logs", () => {
+  it("403s for non-admins", async () => {
+    vi.mocked(getSessionUser).mockResolvedValue(user("U", "u@x") as never);
+    expect((await lokiGET(req("serviceId=sonarr"))).status).toBe(403);
+  });
+
+  it("400s without a serviceId", async () => {
+    vi.mocked(getSessionUser).mockResolvedValue(admin as never);
+    expect((await lokiGET(req(""))).status).toBe(400);
+  });
+
+  it("404s for an unknown service", async () => {
+    vi.mocked(getSessionUser).mockResolvedValue(admin as never);
+    vi.mocked(getServiceConfigs).mockResolvedValue([{ id: "radarr" }] as never);
+    expect((await lokiGET(req("serviceId=sonarr"))).status).toBe(404);
+  });
+
+  it("resolves the selector and returns the tail; [] on throw", async () => {
+    vi.mocked(getSessionUser).mockResolvedValue(admin as never);
+    vi.mocked(getServiceConfigs).mockResolvedValue([{ id: "sonarr", lokiQuery: null }] as never);
+    vi.mocked(lokiSelectorFor).mockReturnValue('{container="sonarr"}');
+    vi.mocked(lokiTail).mockResolvedValue([{ tsNs: "1", ts: "t", line: "hello" }] as never);
+    expect(await (await lokiGET(req("serviceId=sonarr"))).json()).toEqual([{ tsNs: "1", ts: "t", line: "hello" }]);
+    expect(lokiSelectorFor).toHaveBeenCalledWith({ id: "sonarr", lokiQuery: null });
+
+    vi.mocked(lokiTail).mockRejectedValue(new Error("loki down"));
+    expect(await (await lokiGET(req("serviceId=sonarr"))).json()).toEqual([]);
   });
 });
 

@@ -14,6 +14,7 @@ import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
 import { PageHeader, RouteBadges, MetaBadges } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
+import { LogsModal } from "@/components/modals/LogsModal";
 import { serviceRequiresKey, matchPreset } from "@/lib/servicePresets";
 import type { TraefikRoute } from "@/lib/types";
 import { Toast } from "@/components/modals/Toast";
@@ -94,10 +95,15 @@ function discoveredPrefill(r: TraefikRoute): Partial<ServiceForm> {
 
 function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void; onAddDiscovered: (prefill: Partial<ServiceForm>) => void }) {
   // Admin sees the FULL list (incl. inactive); every other surface gets active-only via useData().services.
-  const { allServices: services, traefikDiscovered = [], traefikDismissed = [], traefikInstances = [] } = useData();
+  const { allServices: services, traefikDiscovered = [], traefikDismissed = [], traefikInstances = [], lokiConfigured = false } = useData();
   const { favorites, toggleFavorite } = usePortal();
   const patchData = usePatchData();
   const [, startActiveTransition] = useTransition();
+  // The service whose log tail is open in the Loki viewer (admin-only; gated on lokiConfigured).
+  const [logsFor, setLogsFor] = useState<Service | null>(null);
+  const logsModalEl = lokiConfigured && logsFor ? (
+    <LogsModal open serviceId={logsFor.id} serviceName={logsFor.name} logoSlug={logsFor.logoSlug} onClose={() => setLogsFor(null)} />
+  ) : null;
   const cols = "1.6fr 1fr 0.6fr 0.6fr 0.7fr 1.1fr 0.5fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
@@ -278,6 +284,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   if (isMobile) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {logsModalEl}
         {discoveredEl}
         {nodesEl}
         <select
@@ -370,6 +377,16 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                 >
                   <Icon name="edit" size={18} />Edit
                 </button>
+                {lokiConfigured && (
+                  <button
+                    onClick={() => setLogsFor(s)}
+                    className="btn btn-ghost btn-sm"
+                    style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6 }}
+                    title="View logs"
+                  >
+                    <Icon name="receipt_long" size={18} />Logs
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -380,6 +397,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
 
   return (
     <>
+    {logsModalEl}
     {discoveredEl}
     {nodesEl}
     <div className="aerie-x-scroll">
@@ -446,6 +464,11 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                 <button onClick={() => onOpenService(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Open">
                   <Icon name="open_in_full" size={15} />
                 </button>
+                {lokiConfigured && (
+                  <button onClick={() => setLogsFor(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="View logs">
+                    <Icon name="receipt_long" size={15} />
+                  </button>
+                )}
                 <button onClick={() => onEdit(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit">
                   <Icon name="edit" size={15} />
                 </button>
@@ -757,7 +780,7 @@ const isIconName = (s: string) => /^[a-z_]+$/.test(s);
 
 export function Admin() {
   const router = useRouter();
-  const { groups, visibility, adminGroup } = useData();
+  const { groups, visibility, adminGroup, lokiConfigured = false } = useData();
   const refresh = useRefresh();
   const patchData = usePatchData();
   const isMobile = useIsMobile();
@@ -828,6 +851,7 @@ export function Admin() {
       version: form.version || null,
       note: form.note || null,
       monitoringKey: form.monitoringKey || null,
+      lokiQuery: form.lokiQuery || null,
       insecureTls: form.insecureTls,
     });
     // Only write the secret when the admin actually entered one (blank = keep).
@@ -837,8 +861,8 @@ export function Admin() {
 
     // Optimistically update the local snapshot so the service appears immediately.
     const optimisticService: Service = editing
-      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined }
-      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined }
+      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
     // Dedupe by id: in add mode the service may already be in the snapshot from a prior
     // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).
     patchData((s) => ({
@@ -940,6 +964,7 @@ export function Admin() {
           mode={svcModal.mode}
           service={svcModal.service}
           prefill={svcModal.prefill}
+          lokiConfigured={lokiConfigured}
           groups={groups}
           adminGroup={adminGroup}
           initialVisibility={svcModal.mode === "edit" && svcModal.service ? visForService(svcModal.service.id) : addDefaults()}

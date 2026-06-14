@@ -32,6 +32,7 @@ export interface ServiceForm {
   note: string;
   apiKey: string;
   monitoringKey: string;
+  lokiQuery: string;
 }
 
 interface GatusEndpoint { key: string; name: string; group?: string }
@@ -96,12 +97,15 @@ export function ServiceModal({
   onSaveAndTest,
   onTestSaved,
   prefill,
+  lokiConfigured = false,
 }: {
   open: boolean;
   mode: "add" | "edit";
   service?: Service | null;
   /** Add-mode: seed the blank form (e.g. host/scheme/name from a discovered Traefik router). */
   prefill?: Partial<ServiceForm>;
+  /** True when an active Loki source exists → show the optional per-service log selector field. */
+  lokiConfigured?: boolean;
   groups: { name: string }[];
   adminGroup: string;
   initialVisibility: Record<string, boolean>;
@@ -137,6 +141,7 @@ export function ServiceModal({
     note: "",
     apiKey: "",
     monitoringKey: "",
+    lokiQuery: "",
   });
   // stored internalUrl is a full URL ("http://host:port"); split for the two-input form
   const splitInternal = (u?: string): { scheme: "https" | "http"; rest: string } => {
@@ -167,6 +172,7 @@ export function ServiceModal({
         note: service.note || "",
         apiKey: "", // blank = keep existing secret (never pre-fill it)
         monitoringKey: service.monitoringKey ?? "",
+        lokiQuery: service.lokiQuery ?? "",
       };
     }
     return { ...blank(), ...(prefill ?? {}) };
@@ -381,6 +387,17 @@ export function ServiceModal({
             <Field label="Internal note" hint="shown to admins only">
               <input className="input" style={fieldInput} value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="What is this service for?" />
             </Field>
+            {lokiConfigured && (
+              <Field label="Loki query" hint="optional — log selector for the admin Logs viewer">
+                <input
+                  className="input"
+                  style={{ ...fieldInput, fontFamily: "var(--font-mono)" }}
+                  value={f.lokiQuery}
+                  onChange={(e) => set("lokiQuery", e.target.value)}
+                  placeholder={`{container="${(editing ? service?.id : f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")) || "service"}"}`}
+                />
+              </Field>
+            )}
           </div>
         </section>
 

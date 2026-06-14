@@ -37,6 +37,8 @@ export const serviceSchema = z.object({
   /** API key/token, typically a ${ENV_VAR} reference resolved at load time. */
   apiKey: z.string().optional(),
   monitoringKey: z.string().nullish(),
+  /** optional LogQL stream selector for the admin Loki logs viewer (e.g. {container="sonarr"}). */
+  lokiQuery: z.string().nullish(),
 });
 
 export const fileSchema = z.object({
