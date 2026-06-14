@@ -11,28 +11,30 @@ vi.mock("@/lib/integrations/http", () => ({
     constructor(service: string, message: string) { super(`[${service}] ${message}`); this.service = service; }
   },
 }));
-vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigsByLogo: vi.fn() }));
+vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigs: vi.fn(), getServiceConfigsByLogo: vi.fn(), configMatchesLogo: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { encryptionKey: "0".repeat(64), authSecret: "test", configFile: "/dev/null", databaseUrl: "file::memory:" }, authConfigured: false }));
 
 import { fetchJson, fetchRaw } from "@/lib/integrations/http";
-import { getServiceCredentials, getServiceConfigsByLogo } from "@/lib/integrations/registry";
+import { getServiceCredentials, getServiceConfigs, configMatchesLogo } from "@/lib/integrations/registry";
 import { clearCache, traefikRoutes, hostsFromRule, parseCertMetric } from "@/lib/integrations/clients";
 
 const mockJson = vi.mocked(fetchJson);
 const mockRaw = vi.mocked(fetchRaw);
 
-// Resolve raw Traefik instances for the "traefik" logo; no aggregator (so traefikRoutes() uses the
-// per-instance scrape path). traefikRoutes() queries both logos, so the mock must be slug-aware.
+// Raw Traefik instances (logo "traefik"). raw-vs-aggregator is auto-detected per-source by probing
+// /api/snapshot; the default fetchJson returns [] for that URL → these probe as raw and use the
+// per-instance scrape path.
 const wireInstances = (instances: { id: string; name: string; active: boolean }[]) =>
-  vi.mocked(getServiceConfigsByLogo).mockImplementation(async (slug: string) =>
-    (slug === "traefik" ? instances.map((i) => ({ ...i, logoSlug: "traefik" })) : []) as never,
+  vi.mocked(getServiceConfigs).mockResolvedValue(
+    instances.map((i) => ({ ...i, logoSlug: "traefik" })) as never,
   );
 
 beforeEach(() => {
   vi.clearAllMocks();
   clearCache();
+  vi.mocked(configMatchesLogo).mockImplementation((c: { logoSlug: string | null }, slug: string) => c.logoSlug === slug);
   vi.mocked(getServiceCredentials).mockResolvedValue({ baseUrl: "http://traefik:8080", apiKey: "user:pass", insecureTls: false } as never);
-  // One active Traefik instance by default; aggregation resolves instances via the logo helper.
+  // One active Traefik instance by default.
   wireInstances([{ id: "traefik", name: "traefik", active: true }]);
 });
 
@@ -116,8 +118,8 @@ describe("traefikRoutes", () => {
   });
 
   it("throws when not configured and when the routers call fails", async () => {
-    // No active Traefik instance (and no aggregator) → "not configured".
-    vi.mocked(getServiceConfigsByLogo).mockResolvedValue([] as never);
+    // No active Traefik source → "not configured".
+    vi.mocked(getServiceConfigs).mockResolvedValue([] as never);
     await expect(traefikRoutes()).rejects.toThrow();
     wireInstances([{ id: "traefik", name: "traefik", active: true }]);
 

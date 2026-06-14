@@ -41,7 +41,11 @@ const AGG_SNAPSHOT = {
   httpRouters: [
     { name: "sonarr@docker", rule: "Host(`sonarr.test`)", host: "sonarr.test", instance: "node-01", serviceStatus: "ok", middlewares: ["authentik@docker"], tls: true, status: "enabled", authentik: { application: "Sonarr" } },
     { name: "radarr@docker", rule: "Host(`radarr.test`)", host: "radarr.test", instance: "node-02", serviceStatus: "down", middlewares: [], tls: true, status: "error" },
-    { name: "grafana@docker", rule: "Host(`grafana.lan`)", host: "grafana.lan", instance: "node-99", serviceStatus: "ok", middlewares: [], tls: true, status: "enabled" }, // unmatched → discovered
+    // Three unmatched hosts, arriving out of alphabetical order, all on node-99 (scoped out of node
+    // health) → exercise traefikDiscovered's alphabetical sort.
+    { name: "grafana@docker", rule: "Host(`grafana.lan`)", host: "grafana.lan", instance: "node-99", serviceStatus: "ok", middlewares: [], tls: true, status: "enabled" },
+    { name: "zebra@docker", rule: "Host(`zebra.lan`)", host: "zebra.lan", instance: "node-99", serviceStatus: "ok", middlewares: [], tls: true, status: "enabled" },
+    { name: "alpha@docker", rule: "Host(`alpha.lan`)", host: "alpha.lan", instance: "node-99", serviceStatus: "ok", middlewares: [], tls: true, status: "enabled" },
   ],
   middlewares: [{ name: "authentik", fullName: "authentik@docker", type: "forwardauth", usedByRouters: ["sonarr@docker"] }],
   certificates: [{ domain: "sonarr.test", sans: [], resolver: "letsencrypt", issuer: "Let's Encrypt", keyType: "EC256", notAfter: (Math.floor(Date.now() / 1000) + 20 * 86400) * 1000 }],
@@ -90,5 +94,11 @@ describe("getSnapshot — aggregator source", () => {
   it("still lists the unmatched host under traefikDiscovered", async () => {
     const snap = await getSnapshot();
     expect(snap.traefikDiscovered.map((r) => r.hosts[0])).toContain("grafana.lan");
+  });
+
+  it("sorts traefikDiscovered alphabetically by host (stable across 2+ sources/nodes)", async () => {
+    const snap = await getSnapshot();
+    // grafana/zebra/alpha arrive out of order in the snapshot → must come back sorted.
+    expect(snap.traefikDiscovered.map((r) => r.hosts[0])).toEqual(["alpha.lan", "grafana.lan", "zebra.lan"]);
   });
 });

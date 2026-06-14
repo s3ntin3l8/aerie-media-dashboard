@@ -108,10 +108,10 @@ describe("admin-gated proxy routes", () => {
     expect((await traefikGET()).status).toBe(403);
 
     vi.mocked(getSessionUser).mockResolvedValue(admin as never);
-    vi.mocked(getServiceCredentials).mockResolvedValue(null as never);
+    // Unconfigured: traefikRoutes() throws "not configured" → caught → [].
+    vi.mocked(traefikRoutes).mockRejectedValue(new Error("not configured"));
     expect(await (await traefikGET()).json()).toEqual([]);
 
-    vi.mocked(getServiceCredentials).mockResolvedValue({ baseUrl: "http://t", apiKey: "u:p" } as never);
     vi.mocked(traefikRoutes).mockResolvedValue([{ router: "sonarr@docker", serviceId: "" }] as never);
     expect(await (await traefikGET()).json()).toEqual([{ router: "sonarr@docker", serviceId: "" }]);
 

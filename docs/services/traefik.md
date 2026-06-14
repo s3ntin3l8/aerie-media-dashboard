@@ -24,13 +24,15 @@ present) instead of a hardcoded string, and the lock icon's tooltip shows the TL
 ## Multiple Traefik instances
 
 You can add **more than one** Traefik service (e.g. one per host — `traefik-unraid`,
-`traefik-dockerhost`). AERIE recognises every service whose **logo is `traefik`** as an
-instance (the id can be anything), reads each active one, and **merges** their routers into a
-single correlated set. A discovered host is attributed to its source instance (shown as
-`via <instance>` in the panel when more than one Traefik is configured). If one instance is
-unreachable, the others still resolve — only when *every* instance fails does the insight
-drop out. Because the credential is optional, a renamed instance with no key shows a neutral
-**"No key"** (not a warning).
+`traefik-dockerhost`). AERIE recognises every service whose **logo is `traefik`** (or
+`traefik-aggregator`) as a source (the id can be anything), reads each active one, and **merges**
+their routers into a single correlated set. Each source is classified independently by probing
+`/api/snapshot`: a [traefik-dashboard-aggregator](traefik-aggregator.md) is read via that merged
+endpoint, a raw Traefik via its `routers + services + metrics` API — so raw instances and an
+aggregator can coexist. A discovered host is attributed to its source (shown as `via <source>` in
+the panel when more than one Traefik is configured). If one source is unreachable, the others still
+resolve — only when *every* source fails does the insight drop out. Because the credential is
+optional, a renamed instance with no key shows a neutral **"No key"** (not a warning).
 
 ## Where it shows up
 

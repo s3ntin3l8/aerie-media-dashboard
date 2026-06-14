@@ -278,12 +278,12 @@ export async function getSnapshot(): Promise<Snapshot> {
   // Traefik's API can run open or behind basicAuth, so (like Gatus/Prometheus) gate on the row
   // being active rather than on a stored secret — a baseUrl is enough to read its API.
   // Multi-instance: any active service whose logo is "traefik" counts (ids may be renamed,
-  // e.g. traefik-unraid / traefik-dockerhost), and traefikRoutes() aggregates across them. An
-  // active traefik-dashboard-aggregator (logo "traefik-aggregator") is an equivalent source.
+  // e.g. traefik-unraid / traefik-dockerhost), and traefikRoutes() aggregates across them. A
+  // traefik-dashboard-aggregator is an equivalent source — but its logo is cosmetic (dashboard-icons
+  // has no "traefik-aggregator" icon, so users pick the "traefik" logo), so raw-vs-aggregator and the
+  // aggregator-only node-health are resolved per-source by probing /api/snapshot inside traefikRoutes()
+  // / traefikInstances(), not from the logo here.
   const traefikOn = configs.some((c) => c.active && (configMatchesLogo(c, "traefik") || configMatchesLogo(c, "traefik-aggregator")));
-  // Node-health (and the richer route detail) is aggregator-only — gate that extra fetch on an
-  // active aggregator specifically, not the raw per-instance Traefik.
-  const traefikAggregatorOn = configs.some((c) => c.active && configMatchesLogo(c, "traefik-aggregator"));
   // Authentik's API requires a token, so gate on a stored secret (like Beszel).
   const authentikOn = await has("authentik");
   // Loki: an active source (by logo "loki") gates the admin per-service "Logs" button. The log
@@ -421,7 +421,9 @@ export async function getSnapshot(): Promise<Snapshot> {
       ? perf("live:metrics(alt)", safe(metricsSource === "beszel" ? prometheusMetrics : beszelMetrics))
       : Promise.resolve(null),
     traefikOn ? perf("live:traefikRoutes", safe(traefikRoutes)) : Promise.resolve(null),
-    traefikAggregatorOn ? perf("live:traefikInstances", safe(traefikInstances)) : Promise.resolve(null),
+    // Node-health runs for any active Traefik source; it returns [] for genuinely-raw sources
+    // (only those that probe as an aggregator contribute nodes).
+    traefikOn ? perf("live:traefikInstances", safe(traefikInstances)) : Promise.resolve(null),
     authentikOn ? perf("live:authentikApps", safe(authentikApps)) : Promise.resolve(null),
   ]);
   if (PERF) console.log(`[perf] wave-1 (all upstreams Promise.all): ${Date.now() - tWave}ms`);
@@ -485,7 +487,9 @@ export async function getSnapshot(): Promise<Snapshot> {
     const existing = discoveredByHost.get(key);
     if (!existing || (r.tls && !existing.tls)) discoveredByHost.set(key, r);
   }
-  const traefikDiscovered = [...discoveredByHost.values()];
+  const traefikDiscovered = [...discoveredByHost.values()].sort((a, b) =>
+    a.hosts[0].localeCompare(b.hosts[0]),
+  );
 
   const services: Service[] = configs.map((c) => ({
     id: c.id,

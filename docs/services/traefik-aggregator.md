@@ -19,9 +19,12 @@ same badges light up, just fed from the aggregator.
 - The aggregator already resolves **Authentik** forward-auth, so the SSO signal is exact rather
   than the middleware-name heuristic the raw path falls back to.
 
-If **any** active service with logo `traefik-aggregator` exists, AERIE uses it as the Traefik
-source. Otherwise it falls back to scraping each raw `traefik` instance — so you use one or the
-other, not both at once.
+AERIE **auto-detects** which kind each Traefik source is: for every active service with a `traefik`
+or `traefik-aggregator` logo it probes `GET /api/snapshot`, and if that returns a valid merged
+snapshot it reads the aggregator path, otherwise it falls back to scraping that source's raw Traefik
+API. So the **logo is purely cosmetic** — you can give the aggregator the ordinary `traefik` logo
+(there is no `traefik-aggregator` dashboard-icon) and it's still recognised correctly. Raw instances
+and aggregators can even coexist; each is classified independently.
 
 ## Requirements
 
@@ -38,9 +41,10 @@ other, not both at once.
 
 ## Setup in AERIE
 
-1. **Admin → Services → Add service.** Name it `traefik-aggregator` — the preset fills in the
-   category/icon. Set **Host** (and ideally the **internal URL**) to the aggregator address AERIE
-   should reach server-side, e.g. `traefik-aggregator:8080` (Docker network) or its LAN IP.
+1. **Admin → Services → Add service.** Any name/logo works — the aggregator is detected by its
+   `/api/snapshot` endpoint, not by name or logo (the `traefik` logo is a fine cosmetic choice). Set
+   **Host** (and ideally the **internal URL**) to the aggregator address AERIE should reach
+   server-side, e.g. `traefik-aggregator:8080` (Docker network) or its LAN IP.
 2. **Mark it active.** No API key is needed — the aggregator has no auth.
 3. **(Optional) basicAuth.** If you front the aggregator with HTTP basicAuth, put the credentials
    in the secret field as `username:password` (the preset hints this format). AERIE sends them as a

@@ -122,11 +122,16 @@ on the `Snapshot` type.
   integration is documented under `docs/services/` (see its `README.md` index).
   **Traefik has two interchangeable sources for `traefikRoutes()`** (like the metrics source below):
   the per-instance scrape of each raw Traefik (`/api/http/routers` + `/api/http/services` +
-  `/metrics`, logo `traefik`), **or** the [traefik-dashboard-aggregator](https://github.com/s3ntin3l8/traefik-dashboard-aggregator)
-  — one upstream merging every node, read from its `/api/snapshot` (logo `traefik-aggregator`,
-  via `traefikRoutesFromAggregator()`). An active aggregator is preferred and short-circuits the
-  per-instance path; both emit the same `TraefikRoute[]`, so correlation downstream is identical.
-  See `docs/services/traefik-aggregator.md`.
+  `/metrics`), **or** the [traefik-dashboard-aggregator](https://github.com/s3ntin3l8/traefik-dashboard-aggregator)
+  — one upstream merging every node, read from its `/api/snapshot` (via `traefikRoutesFromAggregator()`).
+  Every active service with a `traefik` **or** `traefik-aggregator` logo is a candidate, and each is
+  **auto-detected per-source** by probing `/api/snapshot` (`traefikIsAggregator()`, cached 60s): a
+  valid merged snapshot → aggregator path, otherwise → raw scrape. The logo is *cosmetic* (it picks a
+  dashboard-icon; there is no `traefik-aggregator` icon, so an aggregator usually carries the plain
+  `traefik` logo) and never decides the source kind. Both paths emit the same `TraefikRoute[]`, so
+  correlation downstream is identical; raw instances and aggregators can coexist. Node health
+  (`traefikInstances()` → `Snapshot.traefikInstances`) comes only from sources that probe as
+  aggregators. See `docs/services/traefik-aggregator.md`.
   **Prometheus and Beszel are interchangeable sources for `Snapshot.metrics`** (the System Status
   cards): `getSnapshot()` resolves an active source from the `metricsSource` deployment setting and
   calls only that one. Beszel's hub is PocketBase, so `beszelMetrics()` authenticates as a **superuser**
