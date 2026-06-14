@@ -433,12 +433,12 @@ export async function getSnapshot(): Promise<Snapshot> {
   // reading we have no real health data → an honest "unknown" status
   // (beats of -1 render as a neutral "no data" baseline). We never
   // fabricate an "up / 100%" reading for an unmonitored service.
-  const healthFor = (id: string, name: string, monitoringKey: string | null): Pick<Service, "status" | "ms" | "uptime" | "beats" | "lastIncidentAt" | "msHistory"> => {
+  const healthFor = (id: string, name: string, monitoringKey: string | null): Pick<Service, "status" | "ms" | "uptime" | "uptime24h" | "beats" | "lastIncidentAt" | "msHistory"> => {
     if (health) {
       const h: ServiceHealth | undefined = monitoringKey
         ? health.find((x) => x.key === monitoringKey)
         : health.find((x) => x.key === id || x.name.toLowerCase() === name.toLowerCase());
-      if (h) return { status: h.status, ms: h.ms, uptime: h.uptime, beats: padBeats(h.beats), lastIncidentAt: h.lastIncidentAt, msHistory: h.msHistory };
+      if (h) return { status: h.status, ms: h.ms, uptime: h.uptime, uptime24h: h.uptime24h, beats: padBeats(h.beats), lastIncidentAt: h.lastIncidentAt, msHistory: h.msHistory };
     }
     return { status: "unknown", ms: 0, uptime: 0, beats: new Array(30).fill(-1), msHistory: [] };
   };

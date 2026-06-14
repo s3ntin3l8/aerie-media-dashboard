@@ -9,7 +9,7 @@ import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
 import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
-import { PageHeader, StatTile, RouteBadges } from "@/components/views/shared";
+import { PageHeader, StatTile, RouteHealthBadge, CertCell, SsoCell } from "@/components/views/shared";
 import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
 
 const HEALTH_STATUS_ORDER: Record<string, number> = { up: 0, degraded: 1, down: 2, unknown: 3 };
@@ -210,6 +210,9 @@ export function Status() {
   const monitored = list.filter((s) => s.status !== "unknown");
   const avgMsText = monitored.length ? `${Math.round(monitored.reduce((a, s) => a + s.ms, 0) / monitored.length)}ms` : "—";
   const avgUpText = monitored.length ? `${(monitored.reduce((a, s) => a + s.uptime, 0) / monitored.length).toFixed(2)}%` : "—";
+  // 24h average only over monitored services that actually report a 24h figure (Gatus may omit it).
+  const monitored24h = monitored.filter((s) => s.uptime24h != null);
+  const avgUp24hText = monitored24h.length ? `${(monitored24h.reduce((a, s) => a + (s.uptime24h ?? 0), 0) / monitored24h.length).toFixed(2)}%` : "—";
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
@@ -235,6 +238,7 @@ export function Status() {
         <div className="aerie-page-pad" style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
           <div className="aerie-stat-row">
             <StatTile label="Services up" value={`${up}/${list.length}`} color="var(--originator-own)" icon="check_circle" />
+            <StatTile label="Avg uptime 24h" value={avgUp24hText} color="var(--on-surface)" icon="schedule" />
             <StatTile label="Avg uptime 30d" value={avgUpText} color="var(--on-surface)" icon="trending_up" />
             <StatTile label="Avg response" value={avgMsText} color="var(--primary)" icon="bolt" />
             <StatTile label="Incidents" value={deg + down} color={deg + down ? "var(--amber)" : "var(--on-surface)"} icon="warning" />
@@ -279,11 +283,19 @@ export function Status() {
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
                         {s.lastIncidentAt ? `incident ${timeAgo(s.lastIncidentAt)}` : s.host}
                       </span>
-                      {s.route && <RouteBadges route={s.route} />}
+                      {s.route && <RouteHealthBadge route={s.route} />}
                     </div>
                   </div>
                   <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
                     <Heartbeat beats={s.beats} h={24} barW={5} />
+                  </div>
+                  {/* Cert + SSO get their own reserved columns (a muted "—" when a service carries
+                      no Traefik/Authentik data) so they line up across rows like response/uptime. */}
+                  <div style={{ flex: "0 0 78px", display: "flex", justifyContent: "flex-end" }}>
+                    <CertCell route={s.route} reserve />
+                  </div>
+                  <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }}>
+                    <SsoCell route={s.route} reserve />
                   </div>
                   {/* Always reserve this column (even when empty) so heartbeats stay aligned
                       across monitored and unmonitored rows. */}

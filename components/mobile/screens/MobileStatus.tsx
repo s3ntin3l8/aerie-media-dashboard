@@ -4,6 +4,7 @@ import { Eyebrow, StatusDot, Heartbeat } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { MiniStat } from "@/components/mobile/mcommon";
+import { CertCell, SsoCell } from "@/components/views/shared";
 
 export function MobileStatus() {
   const services = useVisibleServices("status");
@@ -12,6 +13,11 @@ export function MobileStatus() {
     services.length > 0
       ? services.reduce((a, s) => a + s.uptime, 0) / services.length
       : 0;
+  const reporting24h = services.filter((s) => s.uptime24h != null);
+  const avgUp24hText =
+    reporting24h.length > 0
+      ? (reporting24h.reduce((a, s) => a + (s.uptime24h ?? 0), 0) / reporting24h.length).toFixed(2) + "%"
+      : "—";
   const avgMs =
     services.length > 0
       ? Math.round(services.reduce((a, s) => a + s.ms, 0) / services.length)
@@ -96,6 +102,12 @@ export function MobileStatus() {
           value={`${up}/${services.length}`}
           icon="check_circle"
           color="var(--originator-own)"
+        />
+        <MiniStat
+          label="Avg uptime 24h"
+          value={avgUp24hText}
+          icon="schedule"
+          color="var(--primary)"
         />
         <MiniStat
           label="Avg uptime 30d"
@@ -183,13 +195,29 @@ export function MobileStatus() {
                   </div>
                   <div
                     style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 10,
-                      color: "var(--on-surface-variant)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
                       marginTop: 2,
                     }}
                   >
-                    {s.host}
+                    <span
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10,
+                        color: "var(--on-surface-variant)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        minWidth: 0,
+                      }}
+                    >
+                      {s.host}
+                    </span>
+                    {/* Compact cert + SSO icon rail (full detail on tap/hover) — the mobile
+                        counterpart to the desktop Cert/SSO columns. */}
+                    <CertCell route={s.route} iconOnly />
+                    <SsoCell route={s.route} iconOnly />
                   </div>
                   <div style={{ marginTop: 6 }}>
                     <Heartbeat beats={s.beats} h={15} barW={3.5} gap={1.5} />
