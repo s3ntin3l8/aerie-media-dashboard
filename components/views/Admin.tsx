@@ -100,6 +100,8 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   const [, startActiveTransition] = useTransition();
   const cols = "1.6fr 1fr 0.6fr 0.6fr 0.7fr 1.1fr 0.5fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
+  // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
+  const [discoveredOpen, setDiscoveredOpen] = useState(false);
 
   // Optimistically flip active in the snapshot (so the row dims + the service drops from
   // every user surface instantly), then persist; revert on failure.
@@ -172,11 +174,18 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   // Dismiss hides a host you never want to add (persisted; restorable below).
   const discoveredEl = (traefikDiscovered.length > 0 || traefikDismissed.length > 0) ? (
     <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)", padding: 14, marginBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <button
+        type="button"
+        onClick={() => setDiscoveredOpen((v) => !v)}
+        aria-expanded={discoveredOpen}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: 0, border: "none", background: "transparent", color: "inherit", cursor: "pointer", marginBottom: discoveredOpen ? 10 : 0 }}
+      >
         <Icon name="travel_explore" size={16} color="var(--primary)" />
         <Eyebrow>Discovered via Traefik</Eyebrow>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{traefikDiscovered.length}</span>
-      </div>
+        <Icon name="expand_more" size={18} color="var(--on-surface-variant)" style={{ marginLeft: "auto", transform: discoveredOpen ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
+      </button>
+      {discoveredOpen && (<>
       <div style={{ display: "flex", flexDirection: "column" }}>
         {traefikDiscovered.map((r, i) => (
           <div key={r.router} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
@@ -215,6 +224,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
           </div>
         </details>
       )}
+      </>)}
     </div>
   ) : null;
 
