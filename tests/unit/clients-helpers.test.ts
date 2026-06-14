@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/integrations/http", () => ({
   fetchJson: vi.fn(),
+  fetchRaw: vi.fn(),
   IntegrationError: class IntegrationError extends Error {
     service: string;
     status?: number;
@@ -42,7 +43,7 @@ vi.mock("@/lib/env", () => ({
   authConfigured: false,
 }));
 
-import { fetchJson } from "@/lib/integrations/http";
+import { fetchJson, fetchRaw } from "@/lib/integrations/http";
 import { getServiceCredentials } from "@/lib/integrations/registry";
 import {
   gatusHealth,
@@ -64,6 +65,7 @@ import {
 } from "@/lib/integrations/clients";
 
 const mockFetchJson = vi.mocked(fetchJson);
+const mockFetchRaw = vi.mocked(fetchRaw);
 const mockGetCreds = vi.mocked(getServiceCredentials);
 
 function makeTautulliSession(overrides: Record<string, unknown> = {}) {
@@ -135,7 +137,10 @@ describe("clients — private helpers via exported functions", () => {
   });
 
   describe("gatusHealth — beat mapping & uptime", () => {
-    it("maps Gatus results to ServiceHealth with correct uptime and beats", async () => {
+    // Helper for the dedicated /uptimes/30d endpoint: ratio body (0–1) with a 200.
+    const rawUptime = (ratio: string) => ({ ok: true, text: async () => ratio }) as unknown as Response;
+
+    it("uses the real 30-day uptime from /uptimes/30d, not the recent results window", async () => {
       mockGetCreds.mockResolvedValue({ baseUrl: "http://gatus", apiKey: "key", insecureTls: false });
       mockFetchJson.mockResolvedValue([
         {
@@ -148,17 +153,44 @@ describe("clients — private helpers via exported functions", () => {
           ],
         },
       ]);
+      // Recent window would be 66.67%; the 30d endpoint reports 99.75% — the displayed value
+      // must follow the 30d endpoint (the label says "30d"), independent of the window ratio.
+      mockFetchRaw.mockResolvedValue(rawUptime("0.9975"));
       const [result] = await gatusHealth();
+      expect(mockFetchRaw).toHaveBeenCalledWith(
+        "http://gatus/api/v1/endpoints/plex/uptimes/30d",
+        expect.objectContaining({ service: "gatus" }),
+      );
+      expect(result.uptime).toBeCloseTo(99.75, 2);
+      // Heartbeat / latency / status / incident still come from the recent results window.
       expect(result.status).toBe("down");
       expect(result.beats).toEqual([1, 1, 0]);
-      expect(result.uptime).toBeCloseTo(66.67, 1);
       expect(result.ms).toBe(120);
       expect(result.msHistory).toEqual([50, 60, 120]);
       expect(result.lastIncidentAt).toBe("2025-01-01T00:03:00Z");
     });
 
+    it("falls back to the recent-window uptime when /uptimes/30d fails", async () => {
+      mockGetCreds.mockResolvedValue({ baseUrl: "http://gatus", apiKey: "key", insecureTls: false });
+      mockFetchJson.mockResolvedValue([
+        {
+          name: "plex",
+          key: "plex",
+          results: [
+            { status: 200, success: true, duration: 50_000_000, timestamp: "2025-01-01T00:01:00Z" },
+            { status: 200, success: true, duration: 60_000_000, timestamp: "2025-01-01T00:02:00Z" },
+            { status: 500, success: false, duration: 120_000_000, timestamp: "2025-01-01T00:03:00Z" },
+          ],
+        },
+      ]);
+      mockFetchRaw.mockResolvedValue({ ok: false, status: 404, text: async () => "" } as unknown as Response);
+      const [result] = await gatusHealth();
+      expect(result.uptime).toBeCloseTo(66.67, 1);
+    });
+
     it("returns no incident when all results are successful", async () => {
       mockGetCreds.mockResolvedValue({ baseUrl: "http://gatus", apiKey: "key", insecureTls: false });
+      mockFetchRaw.mockResolvedValue(rawUptime("1"));
       mockFetchJson.mockResolvedValue([
         {
           name: "svc",
@@ -175,6 +207,7 @@ describe("clients — private helpers via exported functions", () => {
 
     it("returns 'down' status when last result failed", async () => {
       mockGetCreds.mockResolvedValue({ baseUrl: "http://gatus", apiKey: "key", insecureTls: false });
+      mockFetchRaw.mockResolvedValue(rawUptime("0.5"));
       mockFetchJson.mockResolvedValue([
         {
           name: "svc",

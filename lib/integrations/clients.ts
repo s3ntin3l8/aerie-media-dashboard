@@ -91,6 +91,27 @@ interface GatusEndpoint {
   results?: GatusResult[];
 }
 
+/** True 30-day uptime (%) for one Gatus endpoint, via the dedicated /uptimes/30d API.
+ *  The /statuses `results` array only spans the last ~50 checks (Gatus's default page size),
+ *  so it can't back a "30d" figure — this hits the endpoint that aggregates the full window.
+ *  Returns null on any failure so the caller can fall back to the recent-window figure.
+ *  Cached ~5 min: getSnapshot() polls every few seconds, but a 30-day uptime barely moves. */
+async function gatusUptime30d(base: string, key: string, apiKey: string | null, insecureTls: boolean): Promise<number | null> {
+  return cached(`gatus:uptime30d:${key}`, 5 * 60_000, async () => {
+    const res = await fetchRaw(`${base}/api/v1/endpoints/${encodeURIComponent(key)}/uptimes/30d`, {
+      service: "gatus",
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      insecureTls,
+    });
+    if (!res.ok) throw new IntegrationError("gatus", `HTTP ${res.status} for uptimes/30d`, res.status);
+    const raw = parseFloat((await res.text()).trim());
+    if (!Number.isFinite(raw)) throw new IntegrationError("gatus", "non-numeric uptimes/30d body");
+    // Gatus returns a ratio 0–1; ×100 → percent. Defensive: tolerate a future already-percent value.
+    const pct = raw > 1 ? raw : raw * 100;
+    return Math.max(0, Math.min(100, pct));
+  }).catch(() => null);
+}
+
 export async function gatusHealth(): Promise<ServiceHealth[]> {
   const c = await getServiceCredentials("gatus");
   if (!c) throw new IntegrationError("gatus", "not configured");
@@ -98,14 +119,19 @@ export async function gatusHealth(): Promise<ServiceHealth[]> {
   const data = await fetchJson<GatusEndpoint[]>(`${base}/api/v1/endpoints/statuses`, {
     service: "gatus",
     headers: c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {},
+    insecureTls: c.insecureTls,
   });
-  return data.map((ep) => {
+  return Promise.all(data.map(async (ep) => {
     const results = ep.results ?? [];
     const last = results[results.length - 1];
     const beats = results.slice(-30).map((r) => (r.success ? 1 : 0));
     const msHistory = results.slice(-30).map((r) => Math.round(r.duration / 1e6));
     const okCount = results.filter((r) => r.success).length;
-    const uptime = results.length ? (okCount / results.length) * 100 : 100;
+    // Recent-window uptime from the (short) results array — only a fallback now.
+    const windowUptime = results.length ? (okCount / results.length) * 100 : 100;
+    // Real 30-day uptime from the dedicated API; fall back to the recent window if unavailable.
+    const real = ep.key ? await gatusUptime30d(base, ep.key, c.apiKey, c.insecureTls) : null;
+    const uptime = real ?? windowUptime;
     const ms = last ? Math.round(last.duration / 1e6) : 0;
     const status: ServiceStatus = !last ? "up" : last.success ? "up" : "down";
     // Most recent failure in the window → "last incident" age. Undefined when all-clear.
@@ -114,7 +140,7 @@ export async function gatusHealth(): Promise<ServiceHealth[]> {
       if (!results[i].success) { lastIncidentAt = results[i].timestamp; break; }
     }
     return { key: ep.name.toLowerCase(), name: ep.name, group: ep.group, status, ms, uptime, beats, msHistory, lastIncidentAt };
-  });
+  }));
 }
 
 // ── Traefik — per-service route, forward-auth & TLS-cert expiry ──
