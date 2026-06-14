@@ -18,6 +18,7 @@ import "server-only";
 import { z } from "zod";
 import { fetchJson, fetchRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceSecret } from "./registry";
+import { createAuthCache } from "./tokenCache";
 
 const forwardAuthSchema = z.discriminatedUnion("method", [
   z.object({
@@ -60,10 +61,10 @@ export async function getForwardAuthConfig(serviceId: string): Promise<ForwardAu
   return parseForwardAuthConfig(await getServiceSecret(serviceId, "forwardAuth"));
 }
 
-// ── Bearer JWT cache (mirrors beszelAuth in clients.ts) ──
-interface CachedToken { token: string; expMs: number; }
-const tokenCache = new Map<string, CachedToken>();
-const tokenInflight = new Map<string, Promise<string>>();
+// ── Bearer JWT cache (shared single-flight cache, keyed by service id) ──
+const bearerCache = createAuthCache<{ token: string; expMs: number }>({
+  fresh: (v) => Date.now() < v.expMs - 30_000,
+});
 
 /** Decode a JWT's `exp` claim (no signature check) → epoch ms; fall back to +fallbackMs. */
 export function jwtExpMs(token: string, fallbackMs = 30 * 60_000): number {
@@ -85,12 +86,6 @@ async function mintBearer(
   cfg: Extract<ForwardAuthConfig, { method: "bearer" }>,
   force = false,
 ): Promise<string> {
-  if (!force) {
-    const hit = tokenCache.get(serviceId);
-    if (hit && Date.now() < hit.expMs - 30_000) return hit.token;
-    const inflight = tokenInflight.get(serviceId);
-    if (inflight) return inflight;
-  }
   // The token endpoint expects application/x-www-form-urlencoded; fetchJson JSON-stringifies
   // its body (see http.ts), so this path uses fetchRaw with a URLSearchParams body.
   const body = new URLSearchParams({
@@ -100,25 +95,23 @@ async function mintBearer(
     password: cfg.password,
     scope: cfg.scope || "openid",
   }).toString();
-  const p = (async () => {
-    const res = await fetchRaw(cfg.tokenUrl, {
-      service: "forward-auth",
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body,
-    });
-    if (!res.ok) throw new IntegrationError("forward-auth", `token endpoint HTTP ${res.status}`, res.status);
-    const data = (await res.json()) as { access_token?: string };
-    if (!data.access_token) throw new IntegrationError("forward-auth", "token endpoint returned no access_token");
-    tokenCache.set(serviceId, { token: data.access_token, expMs: jwtExpMs(data.access_token) });
-    return data.access_token;
-  })();
-  tokenInflight.set(serviceId, p);
-  try {
-    return await p;
-  } finally {
-    tokenInflight.delete(serviceId);
-  }
+  const { token } = await bearerCache.get(
+    serviceId,
+    async () => {
+      const res = await fetchRaw(cfg.tokenUrl, {
+        service: "forward-auth",
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+        body,
+      });
+      if (!res.ok) throw new IntegrationError("forward-auth", `token endpoint HTTP ${res.status}`, res.status);
+      const data = (await res.json()) as { access_token?: string };
+      if (!data.access_token) throw new IntegrationError("forward-auth", "token endpoint returned no access_token");
+      return { token: data.access_token, expMs: jwtExpMs(data.access_token) };
+    },
+    force,
+  );
+  return token;
 }
 
 /** The Authorization header that gets a request through this service's forward-auth outpost. */
@@ -164,6 +157,5 @@ export async function authedFetchRaw(serviceId: string, url: string, opts: HttpO
 
 /** Drop cached bearer tokens. Tests use this between cases; do not call from request paths. */
 export function clearForwardAuthCache(): void {
-  tokenCache.clear();
-  tokenInflight.clear();
+  bearerCache.clear();
 }

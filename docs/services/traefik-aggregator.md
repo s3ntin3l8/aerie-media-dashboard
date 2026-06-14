@@ -68,9 +68,11 @@ and aggregators can even coexist; each is classified independently.
      the token exchange. No client_id needed; simplest, but the long-lived password reaches the
      outpost on each session.
 
-   The **forward-auth credential owns the `Authorization` header** — if a service behind the outpost
-   *also* needs its own API key, that key must ride a non-`Authorization` header (e.g. `X-Api-Key`,
-   which the `*arr` clients already use).
+   The **forward-auth credential owns the `Authorization` header** — so it only clashes with a
+   service whose *own* auth also uses `Authorization` (e.g. nzbget's HTTP Basic) when that service is
+   itself placed behind the outpost. The common cases coexist fine: `X-Api-Key` (the `*arr` suite,
+   Overseerr), query-param (Tautulli, Bazarr), and cookie (qBittorrent) auth are all separate from
+   `Authorization`.
 
 Within ~12 s (the snapshot poll) the route badges appear on services whose host matches a router
 in the aggregator snapshot — and the **"Discovered via Traefik"** panel populates from any host

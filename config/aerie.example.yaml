@@ -211,9 +211,10 @@ services:
     # `forwardAuth` works on ANY service that sits BEHIND authentik forward-auth (Sonarr,
     # Radarr, Overseerr, …), not just Traefik — AERIE authenticates THROUGH the outpost
     # rather than circumventing it. NOTE: forward-auth owns the Authorization header, so it
-    # conflicts with services that use Authorization for their OWN auth (nzbget Basic,
-    # beszel/loki Bearer); X-Api-Key (*arr/Overseerr) and cookie (qBittorrent) services coexist.
-    # Two flows (pick one):
+    # only conflicts with a service whose OWN auth also uses Authorization (e.g. nzbget's
+    # HTTP Basic) AND that you actually place behind the outpost. The common cases coexist
+    # fine: X-Api-Key (*arr/Overseerr), query-param (Tautulli/Bazarr), and cookie
+    # (qBittorrent) auth are all separate from Authorization. Two flows (pick one):
     #   • bearer — mint a short-lived JWT from authentik's token endpoint
     #     (grant_type=client_credentials). Needs the proxy provider's client_id.
     #   • basic  — send the service-account user:password; the outpost runs the exchange.
