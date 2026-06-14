@@ -17,6 +17,7 @@ Per-service setup for every upstream AERIE integrates with. Common rules apply t
 | [download-clients.md](download-clients.md) | NZBGet, qBittorrent |
 | [monitoring.md](monitoring.md) | Gatus, Prometheus ([detail](../PROMETHEUS.md)), Beszel |
 | [traefik.md](traefik.md) | Traefik (read-only route / SSO / TLS-cert insight) |
+| [traefik-aggregator.md](traefik-aggregator.md) | Traefik Dashboard Aggregator (one `/api/snapshot` source for the same insight) |
 | [authentik.md](authentik.md) | Authentik (read-only per-app group access) |
 
 Related: [`../AUTH.md`](../AUTH.md) (signing in via OIDC / local admin) ·

@@ -249,8 +249,9 @@ export async function getSnapshot(): Promise<Snapshot> {
   // Traefik's API can run open or behind basicAuth, so (like Gatus/Prometheus) gate on the row
   // being active rather than on a stored secret — a baseUrl is enough to read its API.
   // Multi-instance: any active service whose logo is "traefik" counts (ids may be renamed,
-  // e.g. traefik-unraid / traefik-dockerhost), and traefikRoutes() aggregates across them.
-  const traefikOn = configs.some((c) => c.active && configMatchesLogo(c, "traefik"));
+  // e.g. traefik-unraid / traefik-dockerhost), and traefikRoutes() aggregates across them. An
+  // active traefik-dashboard-aggregator (logo "traefik-aggregator") is an equivalent source.
+  const traefikOn = configs.some((c) => c.active && (configMatchesLogo(c, "traefik") || configMatchesLogo(c, "traefik-aggregator")));
   // Authentik's API requires a token, so gate on a stored secret (like Beszel).
   const authentikOn = await has("authentik");
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored

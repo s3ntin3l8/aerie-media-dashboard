@@ -266,6 +266,92 @@ async function traefikRoutesUncached(baseUrlRaw: string, apiKey: string | null, 
   return routes;
 }
 
+// ── Traefik Dashboard Aggregator — same insight, one merged source ──
+// github.com/s3ntin3l8/traefik-dashboard-aggregator polls every Traefik node and serves a single
+// pre-merged snapshot at GET /api/snapshot. We map its httpRouters[] + certificates[] onto the
+// same TraefikRoute[] the per-instance scraper produces, so snapshot.ts correlation is unchanged.
+interface AggRouter {
+  name: string;
+  rule?: string;
+  host?: string;
+  serviceStatus?: string; // ok | degraded | down
+  middlewares?: string[];
+  tls?: boolean;
+  status?: string; // enabled | warning | error | disabled
+  authentik?: unknown; // present when an authentik forward-auth guards this router
+}
+interface AggCertificate {
+  domain?: string;
+  sans?: string[];
+  notAfter?: number; // Unix MILLISECONDS (0 when absent); AERIE cert.notAfter is Unix seconds
+}
+interface AggSnapshot {
+  httpRouters?: AggRouter[];
+  certificates?: AggCertificate[];
+}
+
+/** Map the aggregator's router status (enabled|warning|error|disabled) into AERIE's vocabulary,
+ *  folding the aggregator-only "error" into "warning". */
+function normAggStatus(s?: string): TraefikRoute["status"] {
+  if (s === "error") return "warning";
+  return normRouterStatus(s);
+}
+
+/** Map the aggregator's per-router serviceStatus (ok|degraded|down) into AERIE's serverStatus. */
+function aggServiceStatus(s?: string): TraefikRoute["serverStatus"] {
+  return s === "ok" ? "up" : s === "degraded" ? "mixed" : s === "down" ? "down" : "unknown";
+}
+
+async function traefikRoutesFromAggregatorUncached(baseUrlRaw: string, apiKey: string | null, insecureTls?: boolean): Promise<TraefikRoute[]> {
+  const base = baseUrlRaw.replace(/\/$/, "");
+  const headers: Record<string, string> = {};
+  // The aggregator has no built-in auth; an optional basicAuth front uses "user:password".
+  if (apiKey && apiKey.includes(":")) headers.Authorization = `Basic ${Buffer.from(apiKey).toString("base64")}`;
+  const snap = await fetchJson<AggSnapshot>(`${base}/api/snapshot`, { service: "traefik", headers, insecureTls });
+
+  // Reshape certificates into the {domains, notAfter(seconds)} list certForHost expects.
+  const certs = (snap.certificates ?? []).flatMap((c) => {
+    const ms = c.notAfter ?? 0;
+    if (!ms) return []; // 0 = absent/unparseable upstream
+    const domains = [c.domain, ...(c.sans ?? [])].filter((d): d is string => !!d).map((d) => d.toLowerCase());
+    return domains.length ? [{ domains: [...new Set(domains)], notAfter: Math.round(ms / 1000) }] : [];
+  });
+
+  const routes: TraefikRoute[] = [];
+  for (const r of snap.httpRouters ?? []) {
+    // Prefer parsing the rule (handles multi-host unions); fall back to the aggregator's single host.
+    const hosts = hostsFromRule(r.rule ?? "");
+    if (!hosts.length && r.host) hosts.push(r.host.toLowerCase());
+    if (!hosts.length) continue; // only host-routed routers correlate to a service
+    const middlewares = r.middlewares ?? [];
+    let cert: TraefikRoute["cert"];
+    for (const h of hosts) { cert = certForHost(h, certs); if (cert) break; }
+    routes.push({
+      serviceId: "", // correlated to an AERIE service id in getSnapshot()
+      router: r.name,
+      rule: r.rule ?? "",
+      hosts,
+      status: normAggStatus(r.status),
+      tls: r.tls === true,
+      // The aggregator already resolves authentik; fall back to the middleware-name heuristic.
+      forwardAuth: r.authentik != null || middlewares.some((mw) => /auth|forward|authentik/i.test(mw)),
+      middlewares,
+      serverStatus: aggServiceStatus(r.serviceStatus),
+      cert,
+    });
+  }
+  return routes;
+}
+
+/** Routes from one aggregator instance (its /api/snapshot), tagged with its source service id. */
+export async function traefikRoutesFromAggregator(serviceId: string): Promise<TraefikRoute[]> {
+  const c = await getServiceCredentials(serviceId);
+  if (!c) throw new IntegrationError("traefik", `not configured (${serviceId})`);
+  // Same slow-changing data as the raw API → cache to spare the aggregator on every 12s poll.
+  const routes = await cached(`traefik:agg:${serviceId}`, 30_000, () => traefikRoutesFromAggregatorUncached(c.baseUrl, c.apiKey, c.insecureTls));
+  return routes.map((r) => ({ ...r, via: serviceId }));
+}
+
 /** Routes from a single Traefik instance, tagged with its source service id. */
 export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[]> {
   const c = await getServiceCredentials(serviceId);
@@ -275,10 +361,22 @@ export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[
   return routes.map((r) => ({ ...r, via: serviceId }));
 }
 
-/** Aggregate routes across every active Traefik instance (any service whose logo is "traefik").
- *  A single instance failing only drops its own routes — the others still resolve; only when EVERY
- *  instance fails does this throw (so the facade degrades the panel). */
+/** Aggregate routes across every active Traefik source. Prefers the traefik-dashboard-aggregator
+ *  (any active service whose logo is "traefik-aggregator") — one /api/snapshot call already merges
+ *  all nodes — and otherwise falls back to scraping each raw Traefik instance (logo "traefik").
+ *  A single source failing only drops its own routes; only when EVERY source fails does this throw
+ *  (so the facade degrades the panel). */
 export async function traefikRoutes(): Promise<TraefikRoute[]> {
+  const aggregators = (await getServiceConfigsByLogo("traefik-aggregator")).filter((c) => c.active);
+  if (aggregators.length) {
+    const settled = await Promise.allSettled(aggregators.map((c) => traefikRoutesFromAggregator(c.id)));
+    const ok = settled.filter((r): r is PromiseFulfilledResult<TraefikRoute[]> => r.status === "fulfilled");
+    if (!ok.length) {
+      const firstErr = settled.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+      throw firstErr?.reason ?? new IntegrationError("traefik", "no routes");
+    }
+    return ok.flatMap((r) => r.value);
+  }
   const active = (await getServiceConfigsByLogo("traefik")).filter((c) => c.active);
   if (!active.length) throw new IntegrationError("traefik", "not configured");
   const settled = await Promise.allSettled(active.map((c) => traefikRoutesFor(c.id)));
