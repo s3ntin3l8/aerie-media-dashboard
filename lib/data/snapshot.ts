@@ -8,6 +8,7 @@
 import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, TraefikInstance, AuthentikAccess, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, configMatchesLogo, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
+import { isTraefikSource } from "@/lib/servicePresets";
 import {
   gatusHealth,
   traefikRoutes,
@@ -277,13 +278,12 @@ export async function getSnapshot(): Promise<Snapshot> {
   const promOn = configs.some((c) => c.id === "prometheus" && c.active);
   // Traefik's API can run open or behind basicAuth, so (like Gatus/Prometheus) gate on the row
   // being active rather than on a stored secret — a baseUrl is enough to read its API.
-  // Multi-instance: any active service whose logo is "traefik" counts (ids may be renamed,
-  // e.g. traefik-unraid / traefik-dockerhost), and traefikRoutes() aggregates across them. A
-  // traefik-dashboard-aggregator is an equivalent source — but its logo is cosmetic (dashboard-icons
-  // has no "traefik-aggregator" icon, so users pick the "traefik" logo), so raw-vs-aggregator and the
-  // aggregator-only node-health are resolved per-source by probing /api/snapshot inside traefikRoutes()
-  // / traefikInstances(), not from the logo here.
-  const traefikOn = configs.some((c) => c.active && (configMatchesLogo(c, "traefik") || configMatchesLogo(c, "traefik-aggregator")));
+  // Multi-instance: any active service that reads as a Traefik counts — by logo OR id/name (see
+  // isTraefikSource), so renamed instances (traefik-unraid / traefik-dockerhost) and a
+  // traefik-dashboard-aggregator are all sources, and the cosmetic icon never gates discovery.
+  // raw-vs-aggregator and the aggregator-only node-health are resolved per-source by probing
+  // /api/snapshot inside traefikRoutes() / traefikInstances(), not from the logo here.
+  const traefikOn = configs.some((c) => c.active && isTraefikSource(c));
   // Authentik's API requires a token, so gate on a stored secret (like Beszel).
   const authentikOn = await has("authentik");
   // Loki: an active source (by logo "loki") gates the admin per-service "Logs" button. The log

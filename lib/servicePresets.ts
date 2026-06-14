@@ -94,6 +94,14 @@ export function matchPreset(nameOrId: string): ServicePreset | null {
   return SERVICE_PRESETS[key] ?? null;
 }
 
+/** True when a service is a Traefik source (raw instance or dashboard-aggregator). The logo is
+ *  cosmetic (any traefik icon — "traefik", "traefik-proxy", … — or none), so candidacy also accepts
+ *  the id/name signal: changing the icon never drops a source from discovery. raw-vs-aggregator is
+ *  then resolved per-source by probing /api/snapshot (see traefikIsAggregator in clients.ts). */
+export function isTraefikSource(c: { id: string; name: string; logoSlug?: string | null }): boolean {
+  return /traefik/i.test(c.logoSlug ?? "") || /traefik/i.test(c.id) || /traefik/i.test(c.name);
+}
+
 /** True when a service's type is expected to have a stored key/credential.
  *  Services flagged `optional` (no-auth / optional auth) return false; unknown/custom
  *  services default to true (assume a key is wanted). A `logoSlug` fallback lets renamed

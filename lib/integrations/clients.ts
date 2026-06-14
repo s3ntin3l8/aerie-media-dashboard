@@ -6,7 +6,8 @@
 // ============================================================
 import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
-import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo, getServiceConfigs, configMatchesLogo } from "./registry";
+import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo, getServiceConfigs } from "./registry";
+import { isTraefikSource } from "../servicePresets";
 import { env } from "@/lib/env";
 import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute, TraefikInstance, AuthentikAccess, LokiLine } from "@/lib/types";
 
@@ -436,15 +437,13 @@ function isAggregatorSnapshot(s: AggSnapshot): boolean {
   return Array.isArray(s.httpRouters) || Array.isArray(s.instances);
 }
 
-/** Active Traefik sources: any active service whose logo is "traefik" or "traefik-aggregator". The
- *  logo is cosmetic (dashboard-icons) and can't express "this is an aggregator" — "traefik-aggregator"
- *  isn't even a real icon — so both logos are candidates and the raw-vs-aggregator split is decided
- *  per-source by probing /api/snapshot (see traefikIsAggregator). */
+/** Active Traefik sources: any active service that reads as a Traefik (logo/id/name contains
+ *  "traefik" — see isTraefikSource). The logo is cosmetic (dashboard-icons) and can't express
+ *  "this is an aggregator" — "traefik-aggregator" isn't even a real icon — so the raw-vs-aggregator
+ *  split is decided per-source by probing /api/snapshot (see traefikIsAggregator). */
 async function activeTraefikConfigs() {
   const configs = await getServiceConfigs();
-  return configs.filter(
-    (c) => c.active && (configMatchesLogo(c, "traefik") || configMatchesLogo(c, "traefik-aggregator")),
-  );
+  return configs.filter((c) => c.active && isTraefikSource(c));
 }
 
 /** Auto-detect: a source is an aggregator iff GET /api/snapshot returns a valid merged snapshot.
@@ -482,7 +481,7 @@ export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[
   return routes.map((r) => ({ ...r, via: serviceId }));
 }
 
-/** Aggregate routes across every active Traefik source (logo "traefik" or "traefik-aggregator").
+/** Aggregate routes across every active Traefik source (logo/id/name contains "traefik").
  *  Each source is classified by probing /api/snapshot: an aggregator (one call already merges all
  *  nodes) reads via traefikRoutesFromAggregator, a raw Traefik via traefikRoutesFor. A single source
  *  failing only drops its own routes; only when EVERY source fails does this throw (so the facade

@@ -15,7 +15,7 @@ import { statusColor, statusWord, uptimeText } from "@/lib/display";
 import { PageHeader, RouteBadges, MetaBadges } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { LogsModal } from "@/components/modals/LogsModal";
-import { serviceRequiresKey, matchPreset } from "@/lib/servicePresets";
+import { serviceRequiresKey, matchPreset, isTraefikSource } from "@/lib/servicePresets";
 import type { TraefikRoute } from "@/lib/types";
 import { Toast } from "@/components/modals/Toast";
 import { useIsMobile } from "@/components/mobile/useIsMobile";
@@ -151,7 +151,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   }
 
   // More than one Traefik instance configured → attribute each discovered host to its source.
-  const multiTraefik = services.filter((s) => s.logoSlug === "traefik").length > 1;
+  const multiTraefik = services.filter(isTraefikSource).length > 1;
   const traefikName = (id?: string) => services.find((s) => s.id === id)?.name ?? id ?? "traefik";
 
   // Optimistically drop a discovered host from the panel (and remember it) while the action persists.
