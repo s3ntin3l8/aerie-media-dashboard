@@ -7,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
-import { parseForwardAuthConfig, type ForwardAuthConfig } from "@/lib/integrations/forwardAuth";
+import { parseForwardAuthConfig, getForwardAuthConfig, type ForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import { getSessionUser } from "@/lib/session";
 import { setDeploymentSetting, getDeploymentSetting } from "@/lib/integrations/registry";
 import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId } from "@/lib/integrations/clients";
@@ -81,6 +81,28 @@ export async function setServiceForwardAuth(serviceId: string, config: ForwardAu
       set: { iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() },
     });
   revalidatePath("/admin");
+}
+
+/** A forward-auth config as entered in the Admin edit form: same shape as ForwardAuthConfig but
+ *  the password may be blank, meaning "keep the currently stored password". */
+export type ForwardAuthInput =
+  | { method: "basic"; username: string; password: string }
+  | { method: "bearer"; tokenUrl: string; clientId: string; username: string; password: string; scope?: string };
+
+/** Write a service's forward-auth config from the edit form, preserving the stored password when
+ *  the admin leaves the password field blank (so editing a non-secret field — username, token URL —
+ *  doesn't require re-typing the secret). Throws if the password is blank and nothing is stored. */
+export async function mergeServiceForwardAuth(serviceId: string, input: ForwardAuthInput) {
+  await requireAdmin();
+  await ensureDb();
+  let password = input.password;
+  if (!password.trim()) {
+    const existing = await getForwardAuthConfig(serviceId);
+    if (!existing) throw new Error("Forward-auth password is required");
+    password = existing.password;
+  }
+  const config = { ...input, password } as ForwardAuthConfig;
+  await setServiceForwardAuth(serviceId, config);
 }
 
 /** Remove a service's stored authentik forward-auth config. */

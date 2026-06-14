@@ -167,6 +167,10 @@ export function ServiceModal({
   const init = (): ServiceForm => {
     if (editing && service) {
       const internal = splitInternal(service.internalUrl);
+      // Seed the forward-auth controls from the stored (non-secret) config so the dropdown opens
+      // on the real method and the account fields reflect what's configured. The password is never
+      // surfaced — it stays blank ("keep current") unless the admin re-enters it.
+      const fa = service.forwardAuthConfig;
       return {
         ...blank(),
         name: service.name,
@@ -188,6 +192,12 @@ export function ServiceModal({
         apiKey: "", // blank = keep existing secret (never pre-fill it)
         monitoringKey: service.monitoringKey ?? "",
         lokiQuery: service.lokiQuery ?? "",
+        forwardAuthMethod: fa?.method ?? "",
+        forwardAuthTokenUrl: fa?.tokenUrl ?? "",
+        forwardAuthClientId: fa?.clientId ?? "",
+        forwardAuthUsername: fa?.username ?? "",
+        forwardAuthScope: fa?.scope ?? "",
+        // forwardAuthPassword stays "" (blank = keep existing secret, never pre-filled)
       };
     }
     return { ...blank(), ...(prefill ?? {}) };
@@ -506,7 +516,7 @@ export function ServiceModal({
                 Separate from the API key above, so a service can carry both. */}
             <Field
               label="Forward-auth"
-              hint={editing ? "authentik outpost — leave method unset to keep current" : "authentik outpost — optional"}
+              hint={service?.forwardAuthConfig ? "authentik outpost — edit fields and save (password kept unless re-entered)" : editing ? "authentik outpost — leave method unset to keep current" : "authentik outpost — optional"}
             >
               <select
                 className="input"
@@ -514,7 +524,7 @@ export function ServiceModal({
                 value={f.forwardAuthMethod}
                 onChange={(e) => set("forwardAuthMethod", e.target.value as ServiceForm["forwardAuthMethod"])}
               >
-                <option value="">Not behind forward-auth{editing ? " (keep current)" : ""}</option>
+                <option value="">{service?.forwardAuthConfig ? "Leave unchanged" : "Not behind forward-auth"}</option>
                 <option value="bearer">Bearer JWT (client-credentials)</option>
                 <option value="basic">HTTP Basic (service account)</option>
                 {editing && <option value="remove">Remove forward-auth</option>}

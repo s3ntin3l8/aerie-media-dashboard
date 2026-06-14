@@ -22,7 +22,7 @@ import { getSessionUser } from "@/lib/session";
 import { revalidatePath } from "next/cache";
 import * as C from "@/lib/integrations/clients";
 import {
-  upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceForwardAuth, clearServiceForwardAuth, setServiceActive,
+  upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceForwardAuth, mergeServiceForwardAuth, clearServiceForwardAuth, setServiceActive,
   serviceExists, deleteService, detectServiceVersion, setMetricsSource, setQueueSource,
   setBeszelSystem, setPrometheusInstance, setUserOverseerrQuota,
   dismissTraefikHost, restoreTraefikHost,
@@ -118,6 +118,28 @@ describe("service CRUD + secrets", () => {
 
   it("setServiceForwardAuth rejects an invalid config", async () => {
     await expect(setServiceForwardAuth("radarr", { method: "bearer", username: "x" } as never)).rejects.toThrow(/Invalid/);
+  });
+
+  it("mergeServiceForwardAuth keeps the stored password when the password field is blank", async () => {
+    await setServiceForwardAuth("radarr", { method: "basic", username: "old", password: "secret-pw" });
+    // Edit a non-secret field (username) without re-entering the password.
+    await mergeServiceForwardAuth("radarr", { method: "basic", username: "new", password: "" });
+    const [row] = await faRows("radarr");
+    expect(JSON.parse(decrypt({ iv: row.iv, authTag: row.authTag, ciphertext: row.ciphertext }))).toMatchObject({
+      method: "basic", username: "new", password: "secret-pw",
+    });
+  });
+
+  it("mergeServiceForwardAuth uses the entered password when provided", async () => {
+    await setServiceForwardAuth("radarr", { method: "basic", username: "u", password: "old-pw" });
+    await mergeServiceForwardAuth("radarr", { method: "basic", username: "u", password: "new-pw" });
+    const [row] = await faRows("radarr");
+    expect(JSON.parse(decrypt({ iv: row.iv, authTag: row.authTag, ciphertext: row.ciphertext })).password).toBe("new-pw");
+  });
+
+  it("mergeServiceForwardAuth throws when password is blank and nothing is stored", async () => {
+    await clearServiceForwardAuth("radarr");
+    await expect(mergeServiceForwardAuth("radarr", { method: "basic", username: "u", password: "" })).rejects.toThrow(/required/);
   });
 
   it("setVisibility upserts a row for a seeded group", async () => {

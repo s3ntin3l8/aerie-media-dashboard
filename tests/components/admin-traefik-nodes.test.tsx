@@ -101,6 +101,28 @@ describe("Admin — Traefik nodes panel", () => {
   });
 });
 
+describe("Admin — key badge for key-optional Traefik sources", () => {
+  const seedSvcs = (svcs: Record<string, unknown>[]) =>
+    vi.mocked(useData).mockReturnValue({
+      services: svcs, allServices: svcs, groups: [], visibility: [], adminGroup: "admins", users: [],
+    } as never);
+
+  it("shows the neutral 'No key' badge for a Traefik source recognized only by id/name (not a preset key)", () => {
+    // id/name match /traefik/i but normalize to no preset, and no logoSlug → strict matchPreset
+    // would flag it as needing a key; isTraefikSource keeps it key-optional → neutral "No key".
+    seedSvcs([mkSvc({ id: "traefik-viewer", name: "Traefik Viewer", host: "traefik.test", hasSecret: false })]);
+    render(<Admin />);
+    expect(screen.getByText("No key")).toBeInTheDocument();
+    expect(screen.queryByText("Not set")).not.toBeInTheDocument();
+  });
+
+  it("still warns ('Not set') for a non-Traefik service missing a required key", () => {
+    seedSvcs([mkSvc({ id: "sonarr", name: "Sonarr", host: "sonarr.test", hasSecret: false })]);
+    render(<Admin />);
+    expect(screen.getByText("Not set")).toBeInTheDocument();
+  });
+});
+
 describe("Admin — discovered Traefik dismiss / restore", () => {
   const discovered = (over: Record<string, unknown> = {}) => ({
     serviceId: "", router: "grafana@docker", rule: "Host(`grafana.lan`)", hosts: ["grafana.lan"],

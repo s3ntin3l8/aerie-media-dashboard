@@ -52,6 +52,16 @@ export interface Service {
    *  itself never leaves the server; only this boolean is surfaced (drives the Admin "configured"
    *  indicator). */
   hasSecret?: boolean;
+  /** Non-secret forward-auth config (method + account), surfaced so the Admin edit form can
+   *  reflect what's stored instead of defaulting to "keep current". The password is NEVER
+   *  included — it stays encrypted server-side. Absent when no forward-auth config is stored. */
+  forwardAuthConfig?: {
+    method: "basic" | "bearer";
+    username: string;
+    tokenUrl?: string;
+    clientId?: string;
+    scope?: string;
+  };
   /** Traefik router correlated to this service by host (read-only admin insight). Absent when
    *  Traefik isn't configured, or no router/cert covers this service's host. */
   route?: TraefikRoute;
