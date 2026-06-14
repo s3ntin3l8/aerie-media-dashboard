@@ -151,7 +151,10 @@ describe("Admin — discovered Traefik routers", () => {
     } as never);
     render(<Admin />);
 
+    // The discovery card is collapsed by default — expand it via the header toggle.
     expect(screen.getByText("Discovered via Traefik")).toBeInTheDocument();
+    expect(screen.queryByText("grafana.lan")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Discovered via Traefik"));
     expect(screen.getByText("grafana.lan")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTitle("Add grafana.lan as a service"));
