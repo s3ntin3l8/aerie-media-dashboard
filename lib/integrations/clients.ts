@@ -6,7 +6,7 @@
 // ============================================================
 import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
-import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo } from "./registry";
+import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo, getServiceConfigs, configMatchesLogo } from "./registry";
 import { env } from "@/lib/env";
 import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute, TraefikInstance, AuthentikAccess, LokiLine } from "@/lib/types";
 
@@ -431,13 +431,45 @@ export async function traefikRoutesFromAggregator(serviceId: string): Promise<Tr
   return routes.map((r) => ({ ...r, via: serviceId }));
 }
 
-/** Traefik node health across every active aggregator (logo "traefik-aggregator"). Aggregator-only —
- *  the raw per-instance path has no node-health data, so this returns [] when none is configured.
- *  Degrades per-source like traefikRoutes(): a single failing aggregator drops only its own nodes. */
+/** A merged aggregator snapshot, distinguished from a raw Traefik (which has no /api/snapshot). */
+function isAggregatorSnapshot(s: AggSnapshot): boolean {
+  return Array.isArray(s.httpRouters) || Array.isArray(s.instances);
+}
+
+/** Active Traefik sources: any active service whose logo is "traefik" or "traefik-aggregator". The
+ *  logo is cosmetic (dashboard-icons) and can't express "this is an aggregator" — "traefik-aggregator"
+ *  isn't even a real icon — so both logos are candidates and the raw-vs-aggregator split is decided
+ *  per-source by probing /api/snapshot (see traefikIsAggregator). */
+async function activeTraefikConfigs() {
+  const configs = await getServiceConfigs();
+  return configs.filter(
+    (c) => c.active && (configMatchesLogo(c, "traefik") || configMatchesLogo(c, "traefik-aggregator")),
+  );
+}
+
+/** Auto-detect: a source is an aggregator iff GET /api/snapshot returns a valid merged snapshot.
+ *  Cached per service id (60s) so a raw instance isn't re-probed on every 12s poll; a successful
+ *  probe also warms aggregatorSnapshot()'s 30s cache, so the route fetch reuses it (one request). */
+async function traefikIsAggregator(serviceId: string): Promise<boolean> {
+  return cached(`traefik:kind:${serviceId}`, 60_000, async () => {
+    try {
+      return isAggregatorSnapshot(await aggregatorSnapshot(serviceId));
+    } catch {
+      return false; // 404/HTML/parse-fail → raw Traefik (or unreachable on that path)
+    }
+  });
+}
+
+/** Traefik node health, derived from whichever active sources turn out to be aggregators (the raw
+ *  per-instance path has no node-health data, so it contributes nothing and this is [] when no
+ *  aggregator is present). Degrades per-source like traefikRoutes(): a failing source drops only its
+ *  own nodes. */
 export async function traefikInstances(): Promise<TraefikInstance[]> {
-  const aggregators = (await getServiceConfigsByLogo("traefik-aggregator")).filter((c) => c.active);
-  if (!aggregators.length) return [];
-  const settled = await Promise.allSettled(aggregators.map(async (c) => aggInstances(await aggregatorSnapshot(c.id))));
+  const sources = await activeTraefikConfigs();
+  if (!sources.length) return [];
+  const settled = await Promise.allSettled(
+    sources.map(async (c) => ((await traefikIsAggregator(c.id)) ? aggInstances(await aggregatorSnapshot(c.id)) : [])),
+  );
   return settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 }
 
@@ -450,25 +482,19 @@ export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[
   return routes.map((r) => ({ ...r, via: serviceId }));
 }
 
-/** Aggregate routes across every active Traefik source. Prefers the traefik-dashboard-aggregator
- *  (any active service whose logo is "traefik-aggregator") — one /api/snapshot call already merges
- *  all nodes — and otherwise falls back to scraping each raw Traefik instance (logo "traefik").
- *  A single source failing only drops its own routes; only when EVERY source fails does this throw
- *  (so the facade degrades the panel). */
+/** Aggregate routes across every active Traefik source (logo "traefik" or "traefik-aggregator").
+ *  Each source is classified by probing /api/snapshot: an aggregator (one call already merges all
+ *  nodes) reads via traefikRoutesFromAggregator, a raw Traefik via traefikRoutesFor. A single source
+ *  failing only drops its own routes; only when EVERY source fails does this throw (so the facade
+ *  degrades the panel). */
 export async function traefikRoutes(): Promise<TraefikRoute[]> {
-  const aggregators = (await getServiceConfigsByLogo("traefik-aggregator")).filter((c) => c.active);
-  if (aggregators.length) {
-    const settled = await Promise.allSettled(aggregators.map((c) => traefikRoutesFromAggregator(c.id)));
-    const ok = settled.filter((r): r is PromiseFulfilledResult<TraefikRoute[]> => r.status === "fulfilled");
-    if (!ok.length) {
-      const firstErr = settled.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
-      throw firstErr?.reason ?? new IntegrationError("traefik", "no routes");
-    }
-    return ok.flatMap((r) => r.value);
-  }
-  const active = (await getServiceConfigsByLogo("traefik")).filter((c) => c.active);
-  if (!active.length) throw new IntegrationError("traefik", "not configured");
-  const settled = await Promise.allSettled(active.map((c) => traefikRoutesFor(c.id)));
+  const sources = await activeTraefikConfigs();
+  if (!sources.length) throw new IntegrationError("traefik", "not configured");
+  const settled = await Promise.allSettled(
+    sources.map(async (c) =>
+      (await traefikIsAggregator(c.id)) ? traefikRoutesFromAggregator(c.id) : traefikRoutesFor(c.id),
+    ),
+  );
   const ok = settled.filter((r): r is PromiseFulfilledResult<TraefikRoute[]> => r.status === "fulfilled");
   if (!ok.length) {
     const firstErr = settled.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;

@@ -11,19 +11,21 @@ vi.mock("@/lib/integrations/http", () => ({
     constructor(service: string, message: string) { super(`[${service}] ${message}`); this.service = service; }
   },
 }));
-vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigsByLogo: vi.fn() }));
+vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn(), getServiceConfigs: vi.fn(), getServiceConfigsByLogo: vi.fn(), configMatchesLogo: vi.fn() }));
 vi.mock("@/lib/env", () => ({ env: { encryptionKey: "0".repeat(64), authSecret: "test", configFile: "/dev/null", databaseUrl: "file::memory:" }, authConfigured: false }));
 
 import { fetchJson } from "@/lib/integrations/http";
-import { getServiceCredentials, getServiceConfigsByLogo } from "@/lib/integrations/registry";
+import { getServiceCredentials, getServiceConfigs } from "@/lib/integrations/registry";
 import { clearCache, traefikRoutes, traefikInstances } from "@/lib/integrations/clients";
 
 const mockJson = vi.mocked(fetchJson);
 
-// Resolve aggregator services for the "traefik-aggregator" logo, none for raw "traefik".
-const wireConfigs = (aggregators: { id: string; name: string; active: boolean }[]) =>
-  vi.mocked(getServiceConfigsByLogo).mockImplementation(async (slug: string) =>
-    (slug === "traefik-aggregator" ? aggregators.map((a) => ({ ...a, logoSlug: "traefik-aggregator" })) : []) as never,
+// Wire the active Traefik sources. Raw-vs-aggregator is auto-detected per-source by probing
+// /api/snapshot (not from the logo), so a source defaults to the cosmetic "traefik" logo here —
+// it's still treated as an aggregator because the mocked /api/snapshot returns a valid snapshot.
+const wireConfigs = (sources: { id: string; name: string; active: boolean; logoSlug?: string }[]) =>
+  vi.mocked(getServiceConfigs).mockResolvedValue(
+    sources.map((s) => ({ ...s, logoSlug: s.logoSlug ?? "traefik" })) as never,
   );
 
 const futureMs = (days: number) => (Math.floor(Date.now() / 1000) + days * 86400) * 1000;
@@ -50,11 +52,15 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   clearCache();
+  const { configMatchesLogo } = await import("@/lib/integrations/registry");
+  vi.mocked(configMatchesLogo).mockImplementation(
+    (c: { logoSlug: string | null }, slug: string) => c.logoSlug === slug,
+  );
   vi.mocked(getServiceCredentials).mockResolvedValue({ baseUrl: "http://aggregator:8080", apiKey: null, insecureTls: false } as never);
-  wireConfigs([{ id: "traefik-aggregator", name: "traefik-aggregator", active: true }]);
+  wireConfigs([{ id: "traefik-aggregator", name: "traefik-aggregator", active: true, logoSlug: "traefik-aggregator" }]);
   mockJson.mockImplementation(async (url: string) => {
     if (url.includes("/api/snapshot")) return snapshot() as never;
     return [] as never;
@@ -125,12 +131,39 @@ describe("traefikRoutes via the aggregator", () => {
     await expect(traefikRoutes()).rejects.toThrow();
   });
 
-  it("never falls back to the raw per-instance scrape while an aggregator is active", async () => {
+  it("never reads the raw per-instance API for a source that probes as an aggregator", async () => {
     await traefikRoutes();
     // Only /api/snapshot is read — no /api/http/routers or /api/http/services calls.
     const urls = mockJson.mock.calls.map((c) => c[0] as string);
     expect(urls.every((u) => u.includes("/api/snapshot"))).toBe(true);
     expect(urls.some((u) => u.includes("/api/http/routers"))).toBe(false);
+  });
+
+  it("detects an aggregator by endpoint even when its logo is the cosmetic 'traefik' (regression)", async () => {
+    // The bug: a configured aggregator named/logo'd "traefik" was treated as a raw instance and
+    // scraped at /api/http/routers (which serves the SPA HTML), so discovery yielded nothing.
+    wireConfigs([{ id: "traefik-viewer", name: "traefik-viewer", active: true, logoSlug: "traefik" }]);
+    const routes = await traefikRoutes();
+    expect(routes).toHaveLength(3);
+    expect(routes.every((r) => r.via === "traefik-viewer")).toBe(true);
+    const urls = mockJson.mock.calls.map((c) => c[0] as string);
+    expect(urls.some((u) => u.includes("/api/snapshot"))).toBe(true);
+    expect(urls.some((u) => u.includes("/api/http/routers"))).toBe(false);
+  });
+
+  it("falls back to the raw per-instance scrape when /api/snapshot is absent (real Traefik)", async () => {
+    wireConfigs([{ id: "traefik", name: "traefik", active: true, logoSlug: "traefik" }]);
+    mockJson.mockImplementation(async (url: string) => {
+      if (url.includes("/api/snapshot")) throw new Error("HTTP 404"); // raw Traefik has no aggregator endpoint
+      if (url.includes("/api/http/routers")) return [{ name: "sonarr@docker", rule: "Host(`sonarr.lan`)", service: "sonarr", provider: "docker", middlewares: [], status: "enabled" }] as never;
+      if (url.includes("/api/http/services")) return [] as never;
+      return [] as never;
+    });
+    const routes = await traefikRoutes();
+    expect(routes).toHaveLength(1);
+    expect(routes[0]).toMatchObject({ router: "sonarr@docker", hosts: ["sonarr.lan"], via: "traefik" });
+    const urls = mockJson.mock.calls.map((c) => c[0] as string);
+    expect(urls.some((u) => u.includes("/api/http/routers"))).toBe(true);
   });
 });
 
@@ -146,17 +179,18 @@ describe("traefikInstances", () => {
     expect(nodes.find((n) => n.name === "node-02")!.status).toBe("degraded");
   });
 
-  it("returns [] when no aggregator is configured", async () => {
-    vi.mocked(getServiceConfigsByLogo).mockResolvedValue([] as never);
+  it("returns [] when no Traefik source is configured", async () => {
+    vi.mocked(getServiceConfigs).mockResolvedValue([] as never);
     expect(await traefikInstances()).toEqual([]);
   });
 
-  it("keeps a healthy aggregator's nodes when another aggregator fails", async () => {
+  it("keeps a healthy aggregator's nodes when another source fails", async () => {
     wireConfigs([
       { id: "agg-ok", name: "agg ok", active: true },
       { id: "agg-bad", name: "agg bad", active: true },
     ]);
-    // agg-bad has no credentials → aggregatorSnapshot throws → that source drops out (allSettled).
+    // agg-bad has no credentials → aggregatorSnapshot throws → it probes as non-aggregator (and
+    // would contribute no nodes anyway), so only agg-ok's nodes remain.
     vi.mocked(getServiceCredentials).mockImplementation(async (id: string) =>
       id === "agg-bad" ? null : ({ baseUrl: "http://aggregator:8080", apiKey: null, insecureTls: false }) as never,
     );
