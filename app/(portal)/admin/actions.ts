@@ -76,6 +76,7 @@ export interface ServiceInput {
   version?: string | null;
   note?: string | null;
   monitoringKey?: string | null;
+  lokiQuery?: string | null;
   insecureTls?: boolean;
   active?: boolean;
   keepAlive?: boolean;
@@ -100,6 +101,7 @@ export async function upsertService(input: ServiceInput) {
     version: input.version ?? null,
     note: input.note ?? null,
     monitoringKey: input.monitoringKey ?? null,
+    lokiQuery: input.lokiQuery?.trim() || null,
     insecureTls: input.insecureTls ?? false,
     active: input.active ?? true,
     keepAlive: input.keepAlive ?? false,

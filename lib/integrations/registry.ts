@@ -29,6 +29,8 @@ export interface ServiceConfig {
   note: string | null;
   sortOrder: number;
   monitoringKey: string | null;
+  /** optional LogQL stream selector for the admin Loki logs viewer; null → inferred {container="<id>"} */
+  lokiQuery: string | null;
   /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts) */
   insecureTls: boolean;
   /** false → fully disabled: hidden from every end-user surface and never polled (config kept) */
@@ -57,6 +59,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       note: r.note,
       sortOrder: r.sortOrder,
       monitoringKey: r.monitoringKey ?? null,
+      lokiQuery: r.lokiQuery ?? null,
       insecureTls: r.insecureTls,
       active: r.active,
       keepAlive: r.keepAlive,

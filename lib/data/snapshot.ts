@@ -163,6 +163,9 @@ export interface Snapshot {
   /** Authentik service has a stored token + is active (drives the access-badge visibility). Per-service
    *  access detail rides on each `Service.authentik`. */
   authentikConfigured: boolean;
+  /** An active Loki source exists (by logo "loki") — drives whether Admin shows the per-service
+   *  "Logs" button. The logs themselves are fetched on-demand (admin-only), never on the snapshot. */
+  lokiConfigured: boolean;
 }
 
 export async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -283,6 +286,9 @@ export async function getSnapshot(): Promise<Snapshot> {
   const traefikAggregatorOn = configs.some((c) => c.active && configMatchesLogo(c, "traefik-aggregator"));
   // Authentik's API requires a token, so gate on a stored secret (like Beszel).
   const authentikOn = await has("authentik");
+  // Loki: an active source (by logo "loki") gates the admin per-service "Logs" button. The log
+  // tail is fetched on-demand via /api/loki/logs, so this is only a cheap config check (no network).
+  const lokiOn = configs.some((c) => c.active && configMatchesLogo(c, "loki"));
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
   const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn, qbitOn] = await Promise.all([
@@ -499,6 +505,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     version: (c.id === "overseerr" && osVersion) ? osVersion : (c.version ?? ""),
     note: c.note ?? "",
     monitoringKey: c.monitoringKey ?? undefined,
+    lokiQuery: c.lokiQuery ?? undefined,
     hasSecret: configuredIds.has(c.id),
     route: routeFor(c),
     authentik: accessFor(c),
@@ -649,6 +656,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     traefikDismissed: [...traefikDismissed],
     traefikInstances: traefikInstancesScoped,
     authentikConfigured: authentikOn,
+    lokiConfigured: lokiOn,
   };
   lastSnapshot = snapshot;
   return snapshot;

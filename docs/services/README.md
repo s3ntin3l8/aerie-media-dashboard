@@ -16,6 +16,7 @@ Per-service setup for every upstream AERIE integrates with. Common rules apply t
 | [arr-suite.md](arr-suite.md) | Sonarr, Radarr, Lidarr, Readarr, Whisparr, Listenarr, LazyLibrarian, Prowlarr, NZBHydra2, Bazarr, Agregarr, Wizarr |
 | [download-clients.md](download-clients.md) | NZBGet, qBittorrent |
 | [monitoring.md](monitoring.md) | Gatus, Prometheus ([detail](../PROMETHEUS.md)), Beszel |
+| [loki.md](loki.md) | Loki (admin-only, read-only per-service log viewer) |
 | [traefik.md](traefik.md) | Traefik (read-only route / SSO / TLS-cert insight) |
 | [traefik-aggregator.md](traefik-aggregator.md) | Traefik Dashboard Aggregator (one `/api/snapshot` source for the same insight) |
 | [authentik.md](authentik.md) | Authentik (read-only per-app group access) |
@@ -30,5 +31,5 @@ Secret-format quick reference:
 - **`username:password`** pair (one field, split on first `:`): NZBGet (optional), qBittorrent.
 - **`email:password`** superuser pair: Beszel.
 - **Optional / no key**: Gatus, Prometheus, NZBGet (auth disabled), Plex token, Traefik API
-  (open or basicAuth).
+  (open or basicAuth), Loki (open, or Bearer / `user:password`).
 - **Bearer token**: Audiobookshelf, Authentik (superuser API token).

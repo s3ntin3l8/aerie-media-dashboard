@@ -66,6 +66,10 @@ services:
     embeddable: true
     note: "TV automation"
     apiKey: ${SONARR_API_KEY}
+    # lokiQuery: optional LogQL selector for the admin-only Logs viewer (Admin → Services → Logs).
+    # Only used when a Loki source is configured (see below). Omit to use the inferred default
+    # {container="<id>"} — set this when the container/label name differs from the service id.
+    lokiQuery: '{container="sonarr"}'
 
   - id: radarr
     name: Radarr
@@ -167,6 +171,24 @@ services:
     # readable without per-system sharing (matches the Homepage widget):
     #   docker exec beszel /beszel superuser upsert you@example.com 'your-password'
     apiKey: ${BESZEL_CREDENTIALS}   # e.g. you@example.com:your-password
+
+  - id: loki
+    name: Loki
+    cat: monitor
+    icon: receipt_long
+    host: loki.aerie.tv
+    # internalUrl: server-side API calls go to your Loki HTTP endpoint (keep it off the public
+    # proxy with a LAN address). Falls back to https://<host> when omitted.
+    internalUrl: http://loki.lan:3100
+    embeddable: false
+    note: "Service logs · admin"
+    # Loki powers the admin-only per-service Logs viewer (Admin → Services → Logs). It does NOT
+    # drive a panel — each service's recent log tail is fetched on-demand via a LogQL selector
+    # ({container="<id>"} by default, or the per-service `lokiQuery` above). Auth is optional:
+    #   • a single Bearer token, OR
+    #   • "username:password" → sent as HTTP Basic (split on the first ":").
+    # Leave the key unset for an open Loki.
+    apiKey: ${LOKI_TOKEN}   # optional — Bearer token or user:password
 
   # ── Infra ──────────────────────────────────────────────────
   - id: authentik

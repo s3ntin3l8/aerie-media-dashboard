@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `loki_query` text;

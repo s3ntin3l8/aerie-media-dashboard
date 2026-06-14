@@ -24,6 +24,8 @@ export const services = sqliteTable("services", {
   note: text("note"),
   sortOrder: integer("sort_order").notNull().default(0),
   monitoringKey: text("monitoring_key"),
+  /** optional LogQL stream selector for the admin Loki logs viewer; blank → inferred {container="<id>"} */
+  lokiQuery: text("loki_query"),
   /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts, e.g. Unraid) */
   insecureTls: integer("insecure_tls", { mode: "boolean" }).notNull().default(false),
   /** false → service is fully disabled: hidden from every end-user surface and never polled (config kept) */

@@ -46,6 +46,8 @@ export interface Service {
   msHistory?: number[];
   note: string;
   monitoringKey?: string;
+  /** optional LogQL stream selector for the admin Loki logs viewer; absent → inferred {container="<id>"} */
+  lokiQuery?: string;
   /** true → an API key/credential is stored (encrypted) for this service. The secret value
    *  itself never leaves the server; only this boolean is surfaced (drives the Admin "configured"
    *  indicator). */
@@ -147,6 +149,21 @@ export interface TraefikInstance {
   counts?: { routers: number; services: number; middlewares: number; warnings: number };
   /** the configured AERIE service ids this node routes (the scoping result) */
   serves?: string[];
+}
+
+/** One log line returned by the admin Loki logs viewer. Read-only; derived live from Loki's
+ *  `GET /loki/api/v1/query_range`. Never persisted. */
+export interface LokiLine {
+  /** ISO timestamp of the entry */
+  ts: string;
+  /** raw nanosecond timestamp (the sort key Loki returns) */
+  tsNs: string;
+  /** the log line text */
+  line: string;
+  /** best-effort severity parsed from the line text */
+  level?: "error" | "warn" | "info" | "debug";
+  /** the Loki stream labels this line came from */
+  labels?: Record<string, string>;
 }
 
 export interface NowPlaying {

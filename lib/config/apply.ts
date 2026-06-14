@@ -47,6 +47,7 @@ export async function applyServiceConfig(db: DB, cfg: ServiceConfigFile): Promis
           version: s.version ?? null,
           note: s.note ?? null,
           monitoringKey: s.monitoringKey ?? null,
+          lokiQuery: s.lokiQuery ?? null,
           sortOrder: base + i,
         })),
       )
