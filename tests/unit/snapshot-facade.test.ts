@@ -112,6 +112,24 @@ describe("getSnapshot — facade aggregation", () => {
     }
   });
 
+  it("surfaces stored forward-auth config (non-secret fields) without the password", async () => {
+    const registry = await import("@/lib/integrations/registry");
+    const cfg = { method: "bearer", tokenUrl: "https://auth.test/application/o/token/", clientId: "cid", username: "svc", password: "super-secret", scope: "openid" };
+    vi.mocked(registry.getServiceSecret).mockImplementation(async (id: string, kind?: string) =>
+      kind === "forwardAuth" ? (id === "sonarr" ? JSON.stringify(cfg) : null) : "key",
+    );
+    try {
+      const snap = await getSnapshot();
+      const fa = snap.services.find((s) => s.id === "sonarr")?.forwardAuthConfig;
+      expect(fa).toMatchObject({ method: "bearer", tokenUrl: cfg.tokenUrl, clientId: "cid", username: "svc", scope: "openid" });
+      expect(fa).not.toHaveProperty("password"); // the secret never leaves the server
+      // services with no stored forward-auth carry no config
+      expect(snap.services.find((s) => s.id === "radarr")?.forwardAuthConfig).toBeUndefined();
+    } finally {
+      vi.mocked(registry.getServiceSecret).mockImplementation(async (_id: string, kind?: string) => (kind === "forwardAuth" ? null : "key"));
+    }
+  });
+
   it("returns well-formed (empty) collections and resolves the metrics/queue sources", async () => {
     const snap = await getSnapshot();
     for (const key of ["library", "libraryAll", "recent", "recentAll", "queue", "upcoming", "downloads", "nowPlaying", "requests"] as const) {

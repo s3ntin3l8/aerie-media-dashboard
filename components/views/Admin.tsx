@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { setVisibility, upsertService, setServiceSecret, setServiceForwardAuth, clearServiceForwardAuth, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
+import { setVisibility, upsertService, setServiceSecret, mergeServiceForwardAuth, clearServiceForwardAuth, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar } from "@/components/primitives";
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
@@ -64,7 +64,10 @@ function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
       </span>
     );
   }
-  if (serviceRequiresKey(service.id, service.logoSlug)) {
+  // A Traefik source is key-optional (its API runs open / behind basic-auth at the operator's
+  // choice). Recognize it the same lenient way the data layer does (isTraefikSource: id/name/logo)
+  // so a renamed or custom-logo instance gets the neutral "No key" badge, not a spurious warning.
+  if (!isTraefikSource(service) && serviceRequiresKey(service.id, service.logoSlug)) {
     return (
       <span style={{ ...base, color: "var(--warning)" }}>
         <Icon name="warning" size={12} />Not set
@@ -91,6 +94,16 @@ function discoveredPrefill(r: TraefikRoute): Partial<ServiceForm> {
     icon: p?.icon ?? "dns",
     logoSlug: p?.logoSlug ?? "",
   };
+}
+
+// Optimistic (non-secret) forward-auth config for the local snapshot after a save, mirroring what
+// the server stores. "remove" clears it; an unset method keeps the prior value (server keeps it too).
+function optimisticForwardAuth(form: ServiceForm, prior: Service["forwardAuthConfig"]): Service["forwardAuthConfig"] {
+  if (form.forwardAuthMethod === "remove") return undefined;
+  if (form.forwardAuthMethod === "bearer")
+    return { method: "bearer", username: form.forwardAuthUsername.trim(), tokenUrl: form.forwardAuthTokenUrl.trim() || undefined, clientId: form.forwardAuthClientId.trim() || undefined, scope: form.forwardAuthScope.trim() || undefined };
+  if (form.forwardAuthMethod === "basic") return { method: "basic", username: form.forwardAuthUsername.trim() };
+  return prior;
 }
 
 function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void; onAddDiscovered: (prefill: Partial<ServiceForm>) => void }) {
@@ -857,17 +870,18 @@ export function Admin() {
     // Only write the secret when the admin actually entered one (blank = keep).
     if (form.apiKey && form.apiKey.trim()) await setServiceSecret(id, form.apiKey.trim());
     // Forward-auth (authentik) — a separate `forwardAuth`-kind secret, so it coexists with
-    // the API key. "remove" clears it; a method + app password writes it; an unset method or
-    // blank password keeps the current config (like the API key, blank = keep).
+    // the API key. "remove" clears it; a basic/bearer method writes it (the server preserves the
+    // stored password when the password field is left blank, so non-secret edits don't need it);
+    // an unset method leaves the current config untouched.
     try {
       if (form.forwardAuthMethod === "remove") {
         await clearServiceForwardAuth(id);
-      } else if (form.forwardAuthMethod && form.forwardAuthPassword.trim()) {
+      } else if (form.forwardAuthMethod) {
         const cfg =
           form.forwardAuthMethod === "bearer"
             ? { method: "bearer" as const, tokenUrl: form.forwardAuthTokenUrl.trim(), clientId: form.forwardAuthClientId.trim(), username: form.forwardAuthUsername.trim(), password: form.forwardAuthPassword, scope: form.forwardAuthScope.trim() || undefined }
             : { method: "basic" as const, username: form.forwardAuthUsername.trim(), password: form.forwardAuthPassword };
-        await setServiceForwardAuth(id, cfg);
+        await mergeServiceForwardAuth(id, cfg);
       }
     } catch {
       return { error: "Invalid forward-auth config — check the token URL, client id and account fields" };
@@ -877,7 +891,7 @@ export function Admin() {
 
     // Optimistically update the local snapshot so the service appears immediately.
     const optimisticService: Service = editing
-      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined }
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined, forwardAuthConfig: optimisticForwardAuth(form, svcModal!.service!.forwardAuthConfig) }
       : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
     // Dedupe by id: in add mode the service may already be in the snapshot from a prior
     // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).

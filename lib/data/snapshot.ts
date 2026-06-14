@@ -9,6 +9,7 @@ import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, TraefikInstance, AuthentikAccess, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
 import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, configMatchesLogo, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import { isTraefikSource } from "@/lib/servicePresets";
+import { getForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import {
   gatusHealth,
   traefikRoutes,
@@ -449,6 +450,23 @@ export async function getSnapshot(): Promise<Snapshot> {
   );
   const configuredIds = new Set(secretChecks.filter(([, has]) => has).map(([id]) => id));
 
+  // Non-secret forward-auth config per service (method + account, never the password), so the
+  // Admin edit form can reflect what's stored instead of defaulting to "keep current".
+  const faConfigs = new Map(
+    await Promise.all(
+      configs.map(async (c) => {
+        const fa = await getForwardAuthConfig(c.id);
+        if (!fa) return [c.id, undefined] as const;
+        // Surface only the non-secret fields — the password never leaves the server.
+        const rest: Service["forwardAuthConfig"] =
+          fa.method === "bearer"
+            ? { method: "bearer", username: fa.username, tokenUrl: fa.tokenUrl, clientId: fa.clientId, scope: fa.scope }
+            : { method: "basic", username: fa.username };
+        return [c.id, rest] as const;
+      }),
+    ),
+  );
+
   // Correlate Traefik routers to services by host (the only reliable join). First match wins.
   const routeByHost = new Map<string, TraefikRoute>();
   for (const r of traefikRoutesData ?? []) {
@@ -511,6 +529,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     monitoringKey: c.monitoringKey ?? undefined,
     lokiQuery: c.lokiQuery ?? undefined,
     hasSecret: configuredIds.has(c.id),
+    forwardAuthConfig: faConfigs.get(c.id),
     route: routeFor(c),
     authentik: accessFor(c),
     ...healthFor(c.id, c.name, c.monitoringKey),
