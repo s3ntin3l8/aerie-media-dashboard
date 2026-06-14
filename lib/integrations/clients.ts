@@ -8,7 +8,7 @@ import "server-only";
 import { fetchJson, fetchJson as fetchJsonRaw, fetchRaw, IntegrationError, type HttpOpts } from "./http";
 import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo } from "./registry";
 import { env } from "@/lib/env";
-import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute, AuthentikAccess } from "@/lib/types";
+import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute, TraefikInstance, AuthentikAccess } from "@/lib/types";
 
 async function creds(serviceId: string): Promise<{ baseUrl: string; apiKey: string }> {
   const c = await getServiceCredentials(serviceId);
@@ -196,7 +196,10 @@ export function parseCertMetric(text: string): { domains: string[]; notAfter: nu
   return out;
 }
 
-function certForHost(host: string, certs: { domains: string[]; notAfter: number }[]): TraefikRoute["cert"] {
+// The cert list carries optional richer fields (issuer/resolver/keyType/notBefore) the aggregator
+// path supplies; the raw /metrics path leaves them undefined and they're simply omitted.
+type CertEntry = { domains: string[]; notAfter: number; issuer?: string; resolver?: string; keyType?: string; notBefore?: number };
+function certForHost(host: string, certs: CertEntry[]): TraefikRoute["cert"] {
   const h = host.toLowerCase();
   const matches = certs.filter((c) =>
     c.domains.some((d) =>
@@ -207,7 +210,15 @@ function certForHost(host: string, certs: { domains: string[]; notAfter: number 
   );
   if (!matches.length) return undefined;
   const best = matches.reduce((a, b) => (b.notAfter < a.notAfter ? b : a));
-  return { notAfter: best.notAfter, daysRemaining: Math.floor((best.notAfter * 1000 - Date.now()) / 86_400_000), domains: best.domains };
+  return {
+    notAfter: best.notAfter,
+    daysRemaining: Math.floor((best.notAfter * 1000 - Date.now()) / 86_400_000),
+    domains: best.domains,
+    ...(best.issuer ? { issuer: best.issuer } : {}),
+    ...(best.resolver ? { resolver: best.resolver } : {}),
+    ...(best.keyType ? { keyType: best.keyType } : {}),
+    ...(best.notBefore ? { notBefore: best.notBefore } : {}),
+  };
 }
 
 function aggServerStatus(serverStatus?: Record<string, string>): TraefikRoute["serverStatus"] {
@@ -266,6 +277,170 @@ async function traefikRoutesUncached(baseUrlRaw: string, apiKey: string | null, 
   return routes;
 }
 
+// ── Traefik Dashboard Aggregator — same insight, one merged source ──
+// github.com/s3ntin3l8/traefik-dashboard-aggregator polls every Traefik node and serves a single
+// pre-merged snapshot at GET /api/snapshot. We map its httpRouters[] + certificates[] onto the
+// same TraefikRoute[] the per-instance scraper produces, so snapshot.ts correlation is unchanged.
+interface AggRouter {
+  name: string;
+  rule?: string;
+  host?: string;
+  serviceStatus?: string; // ok | degraded | down
+  middlewares?: string[];
+  tls?: boolean;
+  status?: string; // enabled | warning | error | disabled
+  instance?: string; // the Traefik node this router lives on
+  authentik?: unknown; // present when an authentik forward-auth guards this router
+}
+interface AggCertificate {
+  domain?: string;
+  sans?: string[];
+  resolver?: string;
+  issuer?: string;
+  issuerCN?: string;
+  keyType?: string;
+  notBefore?: number; // Unix MILLISECONDS
+  notAfter?: number; // Unix MILLISECONDS (0 when absent); AERIE cert.notAfter is Unix seconds
+}
+interface AggMiddleware {
+  name?: string; // short name, e.g. "authentik"
+  fullName?: string; // provider-qualified, e.g. "authentik@docker"
+  type?: string; // e.g. "forwardauth", "headers", "ratelimit"
+  usedByRouters?: string[];
+}
+interface AggInstance {
+  name: string;
+  role?: string; // "gateway" | ""
+  url?: string;
+  status?: string; // ok | degraded | unreachable
+  version?: string;
+  lastScrape?: number; // Unix MILLISECONDS
+  counts?: { routers?: number; services?: number; middlewares?: number; warnings?: number };
+}
+interface AggSnapshot {
+  httpRouters?: AggRouter[];
+  certificates?: AggCertificate[];
+  middlewares?: AggMiddleware[];
+  instances?: AggInstance[];
+}
+
+/** Map the aggregator's router status (enabled|warning|error|disabled) into AERIE's vocabulary,
+ *  folding the aggregator-only "error" into "warning". */
+function normAggStatus(s?: string): TraefikRoute["status"] {
+  if (s === "error") return "warning";
+  return normRouterStatus(s);
+}
+
+/** Map the aggregator's per-router serviceStatus (ok|degraded|down) into AERIE's serverStatus. */
+function aggServiceStatus(s?: string): TraefikRoute["serverStatus"] {
+  return s === "ok" ? "up" : s === "degraded" ? "mixed" : s === "down" ? "down" : "unknown";
+}
+
+/** Fetch + cache the aggregator's merged snapshot. Routes and node health both derive from this,
+ *  so the concurrent snapshot-wave reads share one 30s-cached fetch (cached() coalesces inflight). */
+async function aggregatorSnapshot(serviceId: string): Promise<AggSnapshot> {
+  const c = await getServiceCredentials(serviceId);
+  if (!c) throw new IntegrationError("traefik", `not configured (${serviceId})`);
+  return cached(`traefik:agg:${serviceId}`, 30_000, () => {
+    const base = c.baseUrl.replace(/\/$/, "");
+    const headers: Record<string, string> = {};
+    // The aggregator has no built-in auth; an optional basicAuth front uses "user:password".
+    if (c.apiKey && c.apiKey.includes(":")) headers.Authorization = `Basic ${Buffer.from(c.apiKey).toString("base64")}`;
+    return fetchJson<AggSnapshot>(`${base}/api/snapshot`, { service: "traefik", headers, insecureTls: c.insecureTls });
+  });
+}
+
+/** Map an aggregator snapshot's httpRouters[]+certificates[]+middlewares[] → TraefikRoute[], enriched
+ *  with the serving node, per-middleware type, and richer cert detail (aggregator-only fields). */
+function aggRoutes(snap: AggSnapshot): TraefikRoute[] {
+  // Reshape certificates into the cert list certForHost expects, carrying richer detail (ms→s).
+  const certs = (snap.certificates ?? []).flatMap((c) => {
+    const ms = c.notAfter ?? 0;
+    if (!ms) return []; // 0 = absent/unparseable upstream
+    const domains = [c.domain, ...(c.sans ?? [])].filter((d): d is string => !!d).map((d) => d.toLowerCase());
+    if (!domains.length) return [];
+    return [{
+      domains: [...new Set(domains)],
+      notAfter: Math.round(ms / 1000),
+      issuer: c.issuer || c.issuerCN || undefined,
+      resolver: c.resolver || undefined,
+      keyType: c.keyType || undefined,
+      notBefore: c.notBefore ? Math.round(c.notBefore / 1000) : undefined,
+    }];
+  });
+
+  // Resolve middleware name → type. The router chain references short names ("authentik") or
+  // provider-qualified ones ("authentik@docker"); index both forms.
+  const mwType = new Map<string, string>();
+  for (const m of snap.middlewares ?? []) {
+    if (!m.type) continue;
+    if (m.name) mwType.set(m.name, m.type);
+    if (m.fullName) mwType.set(m.fullName, m.type);
+  }
+
+  const routes: TraefikRoute[] = [];
+  for (const r of snap.httpRouters ?? []) {
+    // Prefer parsing the rule (handles multi-host unions); fall back to the aggregator's single host.
+    const hosts = hostsFromRule(r.rule ?? "");
+    if (!hosts.length && r.host) hosts.push(r.host.toLowerCase());
+    if (!hosts.length) continue; // only host-routed routers correlate to a service
+    const middlewares = r.middlewares ?? [];
+    const middlewareDetail = middlewares.map((name) => ({ name, type: mwType.get(name) ?? "" })).filter((m) => m.type);
+    let cert: TraefikRoute["cert"];
+    for (const h of hosts) { cert = certForHost(h, certs); if (cert) break; }
+    routes.push({
+      serviceId: "", // correlated to an AERIE service id in getSnapshot()
+      router: r.name,
+      rule: r.rule ?? "",
+      hosts,
+      status: normAggStatus(r.status),
+      tls: r.tls === true,
+      // The aggregator already resolves authentik; fall back to the middleware-name heuristic.
+      forwardAuth: r.authentik != null || middlewares.some((mw) => /auth|forward|authentik/i.test(mw)),
+      middlewares,
+      ...(middlewareDetail.length ? { middlewareDetail } : {}),
+      ...(r.instance ? { instance: r.instance } : {}),
+      serverStatus: aggServiceStatus(r.serviceStatus),
+      cert,
+    });
+  }
+  return routes;
+}
+
+/** Map an aggregator snapshot's instances[] → TraefikInstance[] (node health; lastScrape ms→s). */
+function aggInstances(snap: AggSnapshot): TraefikInstance[] {
+  return (snap.instances ?? []).map((i) => ({
+    name: i.name,
+    ...(i.role ? { role: i.role } : {}),
+    status: i.status === "ok" || i.status === "degraded" || i.status === "unreachable" ? i.status : "unknown",
+    ...(i.version ? { version: i.version } : {}),
+    ...(i.lastScrape ? { lastScrape: Math.round(i.lastScrape / 1000) } : {}),
+    ...(i.url ? { url: i.url } : {}),
+    ...(i.counts ? { counts: {
+      routers: i.counts.routers ?? 0,
+      services: i.counts.services ?? 0,
+      middlewares: i.counts.middlewares ?? 0,
+      warnings: i.counts.warnings ?? 0,
+    } } : {}),
+  }));
+}
+
+/** Routes from one aggregator instance (its /api/snapshot), tagged with its source service id. */
+export async function traefikRoutesFromAggregator(serviceId: string): Promise<TraefikRoute[]> {
+  const routes = aggRoutes(await aggregatorSnapshot(serviceId));
+  return routes.map((r) => ({ ...r, via: serviceId }));
+}
+
+/** Traefik node health across every active aggregator (logo "traefik-aggregator"). Aggregator-only —
+ *  the raw per-instance path has no node-health data, so this returns [] when none is configured.
+ *  Degrades per-source like traefikRoutes(): a single failing aggregator drops only its own nodes. */
+export async function traefikInstances(): Promise<TraefikInstance[]> {
+  const aggregators = (await getServiceConfigsByLogo("traefik-aggregator")).filter((c) => c.active);
+  if (!aggregators.length) return [];
+  const settled = await Promise.allSettled(aggregators.map(async (c) => aggInstances(await aggregatorSnapshot(c.id))));
+  return settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+}
+
 /** Routes from a single Traefik instance, tagged with its source service id. */
 export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[]> {
   const c = await getServiceCredentials(serviceId);
@@ -275,10 +450,22 @@ export async function traefikRoutesFor(serviceId: string): Promise<TraefikRoute[
   return routes.map((r) => ({ ...r, via: serviceId }));
 }
 
-/** Aggregate routes across every active Traefik instance (any service whose logo is "traefik").
- *  A single instance failing only drops its own routes — the others still resolve; only when EVERY
- *  instance fails does this throw (so the facade degrades the panel). */
+/** Aggregate routes across every active Traefik source. Prefers the traefik-dashboard-aggregator
+ *  (any active service whose logo is "traefik-aggregator") — one /api/snapshot call already merges
+ *  all nodes — and otherwise falls back to scraping each raw Traefik instance (logo "traefik").
+ *  A single source failing only drops its own routes; only when EVERY source fails does this throw
+ *  (so the facade degrades the panel). */
 export async function traefikRoutes(): Promise<TraefikRoute[]> {
+  const aggregators = (await getServiceConfigsByLogo("traefik-aggregator")).filter((c) => c.active);
+  if (aggregators.length) {
+    const settled = await Promise.allSettled(aggregators.map((c) => traefikRoutesFromAggregator(c.id)));
+    const ok = settled.filter((r): r is PromiseFulfilledResult<TraefikRoute[]> => r.status === "fulfilled");
+    if (!ok.length) {
+      const firstErr = settled.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+      throw firstErr?.reason ?? new IntegrationError("traefik", "no routes");
+    }
+    return ok.flatMap((r) => r.value);
+  }
   const active = (await getServiceConfigsByLogo("traefik")).filter((c) => c.active);
   if (!active.length) throw new IntegrationError("traefik", "not configured");
   const settled = await Promise.allSettled(active.map((c) => traefikRoutesFor(c.id)));

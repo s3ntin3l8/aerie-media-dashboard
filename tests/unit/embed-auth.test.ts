@@ -58,6 +58,17 @@ describe("embedAuthSummary — auth label", () => {
   it("Authentik 'everyone' renders as everyone", () => {
     expect(embedAuthSummary(svc({ authentik: access({ everyone: true }) }), "Ada", false).authText).toBe("forward-auth · everyone");
   });
+
+  it("prefers resolved middleware types and notes the serving node in the tooltip", () => {
+    const r = embedAuthSummary(svc({ route: route({
+      forwardAuth: true,
+      middlewares: ["authentik@docker"],
+      middlewareDetail: [{ name: "authentik@docker", type: "forwardauth" }],
+      instance: "node-01",
+    }) }), "Ada", false);
+    expect(r.authTitle).toContain("middlewares: authentik@docker (forwardauth)");
+    expect(r.authTitle).toContain("served by node: node-01");
+  });
 });
 
 describe("embedAuthSummary — lock colour + cert tooltip", () => {
@@ -82,5 +93,15 @@ describe("embedAuthSummary — lock colour + cert tooltip", () => {
     const http = embedAuthSummary(svc({ scheme: "http" }), "a", false);
     expect(http.lockColor).toBe("var(--amber)");
     expect(http.lockTitle).toBe("HTTP — not encrypted");
+  });
+
+  it("appends issuer/resolver/keyType to the cert tooltip when the aggregator supplies them", () => {
+    const t = embedAuthSummary(svc({ route: route({ cert: {
+      notAfter: 1_900_000_000, daysRemaining: 20, domains: ["x.test"],
+      issuer: "Let's Encrypt", resolver: "letsencrypt", keyType: "EC256",
+    } }) }), "a", false).lockTitle;
+    expect(t).toContain("issuer Let's Encrypt");
+    expect(t).toContain("resolver letsencrypt");
+    expect(t).toContain("EC256");
   });
 });

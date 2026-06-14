@@ -94,7 +94,7 @@ function discoveredPrefill(r: TraefikRoute): Partial<ServiceForm> {
 
 function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void; onAddDiscovered: (prefill: Partial<ServiceForm>) => void }) {
   // Admin sees the FULL list (incl. inactive); every other surface gets active-only via useData().services.
-  const { allServices: services, traefikDiscovered = [], traefikDismissed = [] } = useData();
+  const { allServices: services, traefikDiscovered = [], traefikDismissed = [], traefikInstances = [] } = useData();
   const { favorites, toggleFavorite } = usePortal();
   const patchData = usePatchData();
   const [, startActiveTransition] = useTransition();
@@ -102,6 +102,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
   const [discoveredOpen, setDiscoveredOpen] = useState(false);
+  const [nodesOpen, setNodesOpen] = useState(false);
 
   // Optimistically flip active in the snapshot (so the row dims + the service drops from
   // every user surface instantly), then persist; revert on failure.
@@ -228,10 +229,57 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
     </div>
   ) : null;
 
+  // Traefik node health from the aggregator, already scoped server-side to only the nodes that route
+  // a configured service. Collapsed by default; renders nothing without an aggregator source.
+  const nodeStatusColor = (st: string) =>
+    st === "ok" ? "var(--originator-own)" : st === "degraded" ? "var(--amber)" : st === "unreachable" ? "var(--error)" : "var(--on-surface-variant)";
+  const nodesEl = traefikInstances.length > 0 ? (
+    <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)", padding: 14, marginBottom: 12 }}>
+      <button
+        type="button"
+        onClick={() => setNodesOpen((v) => !v)}
+        aria-expanded={nodesOpen}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: 0, border: "none", background: "transparent", color: "inherit", cursor: "pointer", marginBottom: nodesOpen ? 10 : 0 }}
+      >
+        <Icon name="lan" size={16} color="var(--primary)" />
+        <Eyebrow>Traefik nodes</Eyebrow>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{traefikInstances.length}</span>
+        <Icon name="expand_more" size={18} color="var(--on-surface-variant)" style={{ marginLeft: "auto", transform: nodesOpen ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
+      </button>
+      {nodesOpen && (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {traefikInstances.map((n, i) => {
+            const color = nodeStatusColor(n.status);
+            const served = (n.serves ?? []).map(traefikName);
+            return (
+              <div key={n.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1, minWidth: 0 }}>{n.name}</span>
+                {n.role && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)", opacity: 0.8 }}>{n.role}</span>}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "var(--font-mono)", fontSize: 10, lineHeight: 1.4, padding: "1px 6px", borderRadius: 9999, color, border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`, background: `color-mix(in srgb, ${color} 12%, transparent)`, whiteSpace: "nowrap" }}>
+                  {n.status}
+                </span>
+                {n.version && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>v{n.version}</span>}
+                {n.counts && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)", opacity: 0.8 }} title={`${n.counts.routers} routers · ${n.counts.services} services · ${n.counts.middlewares} middlewares · ${n.counts.warnings} warnings`}>
+                    {n.counts.routers}r/{n.counts.services}s{n.counts.warnings ? ` · ${n.counts.warnings}⚠` : ""}
+                  </span>
+                )}
+                <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)", flexShrink: 0 }} title={`serves: ${served.join(", ")}`}>
+                  {served.length} {served.length === 1 ? "service" : "services"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   if (isMobile) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {discoveredEl}
+        {nodesEl}
         <select
           value={`${sort.col}:${sort.dir}`}
           onChange={(e) => {
@@ -333,6 +381,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   return (
     <>
     {discoveredEl}
+    {nodesEl}
     <div className="aerie-x-scroll">
       <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>

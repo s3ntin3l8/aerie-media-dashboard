@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { padBeats, safe } from "@/lib/data/snapshot";
+import { padBeats, safe, scopeTraefikInstances } from "@/lib/data/snapshot";
+import type { TraefikInstance, TraefikRoute } from "@/lib/types";
 
 describe("padBeats", () => {
   it("pads a short array to 30 elements with leading 1s", () => {
@@ -63,5 +64,28 @@ describe("safe", () => {
   it("returns null for a string reject", async () => {
     const result = await safe(() => Promise.reject("string error"));
     expect(result).toBeNull();
+  });
+});
+
+describe("scopeTraefikInstances", () => {
+  const node = (name: string, status: TraefikInstance["status"] = "ok"): TraefikInstance => ({ name, status });
+  const svc = (id: string, instance?: string) => ({ id, route: instance ? ({ instance } as TraefikRoute) : undefined });
+
+  it("keeps only nodes that route a configured service, attaching the served ids", () => {
+    const instances = [node("node-01"), node("node-02"), node("node-99")];
+    const services = [svc("sonarr", "node-01"), svc("lidarr", "node-01"), svc("radarr", "node-02"), svc("plex" /* no route */)];
+    const scoped = scopeTraefikInstances(instances, services);
+    // node-99 serves nothing configured → dropped.
+    expect(scoped.map((n) => n.name)).toEqual(["node-01", "node-02"]);
+    expect(scoped.find((n) => n.name === "node-01")!.serves).toEqual(["sonarr", "lidarr"]);
+    expect(scoped.find((n) => n.name === "node-02")!.serves).toEqual(["radarr"]);
+  });
+
+  it("returns [] when no service has a correlated route instance", () => {
+    expect(scopeTraefikInstances([node("node-01")], [svc("plex"), svc("jellyfin")])).toEqual([]);
+  });
+
+  it("returns [] when there are no instances (no aggregator source)", () => {
+    expect(scopeTraefikInstances([], [svc("sonarr", "node-01")])).toEqual([]);
   });
 });
