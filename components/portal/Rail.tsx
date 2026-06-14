@@ -330,7 +330,7 @@ export function Rail() {
           </div>
         </RailTip>
       </div>
-      <nav style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 4 }}>
+      <nav style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 4 }}>
         {RAIL_NAV_ITEMS.filter((item) => !item.adminOnly).map((item) => (
           <RailNav
             key={item.id}
@@ -343,6 +343,11 @@ export function Rail() {
             onNavigate={go}
           />
         ))}
+      </nav>
+      <div
+        className="rail-scroll"
+        style={{ flex: 1, minHeight: 0, width: "100%", overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 14 }}
+      >
         {(favoriteServices.length > 0 || recentService) && (
           <>
             <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
@@ -354,14 +359,14 @@ export function Rail() {
             )}
           </>
         )}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingTop: 12, paddingBottom: 14 }}>
         {role === "admin" && (
-          <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+          <>
             <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
             <RailNav icon="tune" label="Admin" href="/admin" active={pathname.startsWith("/admin")} badge={downCount} onNavigate={go} />
-          </div>
+          </>
         )}
-      </nav>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingBottom: 14 }}>
         <RailCtrl icon="search" label="Search & Commands" onClick={() => setPaletteOpen(true)} kbd="⌘K" />
         {realRole === "admin" && (
           <RailCtrl
