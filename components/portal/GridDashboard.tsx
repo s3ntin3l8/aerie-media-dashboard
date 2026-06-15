@@ -10,6 +10,7 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/primitives";
 import { GRID, packAround, mobileStack, type Tile, type MobileOverlay } from "@/components/portal/gridLayout";
 import { widgetMeta, hasSettings, WIDGET_CATALOG } from "@/components/portal/widgetCatalog";
+import { StackedContext } from "@/components/portal/StackedContext";
 
 type CSS = React.CSSProperties;
 
@@ -211,6 +212,7 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
   if (stacked) {
     const { visible, hidden } = mobileStack(layout, mobileOverlay);
     return (
+      <StackedContext.Provider value={stacked}>
       <div ref={wrapRef} style={{ display: "flex", flexDirection: "column", gap }}>
         {visible.map((item, i) => {
           const m = widgetMeta(item.type);
@@ -269,6 +271,7 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
           </div>
         )}
       </div>
+      </StackedContext.Provider>
     );
   }
 
@@ -281,6 +284,7 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
   const hPx = Math.max(rows * cellH - gap, 120);
 
   return (
+    <StackedContext.Provider value={stacked}>
     <div ref={wrapRef} style={{ position: "relative", width: "100%", height: hPx, transition: "height .18s" }}>
       {/* drop placeholder */}
       {act &&
@@ -389,5 +393,6 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
         );
       })}
     </div>
+    </StackedContext.Provider>
   );
 }
