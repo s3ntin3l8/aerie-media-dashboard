@@ -55,8 +55,8 @@ const nextSort = (prev: SortState, col: string): SortState =>
 // Pure fr/fixed tracks (no `auto`) so the separate header + per-row grids resolve to identical
 // column widths — an `auto` track sizes to each container's own content (narrow "Actions" text
 // in the header vs. wide buttons in rows), which would misalign the columns.
-const LIB_COLS = "1.5fr 0.7fr 0.95fr 0.75fr 2.1fr";
-const TASK_COLS = "2fr 0.8fr 0.7fr 1.1fr";
+const LIB_COLS = "1.6fr 0.8fr 1fr 0.8fr 1.1fr";
+const TASK_COLS = "2.2fr 0.9fr 0.8fr 0.6fr";
 
 export function AdminPlex({ flash, isMobile }: { flash: (msg: string) => void; isMobile: boolean }) {
   const [data, setData] = useState<PlexPanelData | null>(null);
@@ -157,12 +157,19 @@ export function AdminPlex({ flash, isMobile }: { flash: (msg: string) => void; i
   const libHead = (col: string, label: string) => sortHead(libSort, setLibCol, col, label);
   const taskHead = (col: string, label: string) => sortHead(taskSort, setTaskCol, col, label);
 
+  // Icon-only action button (mirrors the Services table). `title` is the accessible label/tooltip.
+  const iconBtn = (icon: string, title: string, onClick: () => void, tonal = false) => (
+    <button onClick={onClick} className={`btn ${tonal ? "btn-tonal" : "btn-ghost"} btn-sm`} style={{ padding: 6 }} title={title} aria-label={title} disabled={pending}>
+      <Icon name={icon} size={16} />
+    </button>
+  );
+
   const libActions = (s: PlexPanelData["sections"][number]) => (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-      <Btn variant="tonal" size="xs" icon="sync" onClick={() => act(() => scanSectionAction(s.id))} disabled={pending}>Scan</Btn>
-      <Btn variant="ghost" size="xs" icon="refresh" onClick={() => act(() => scanSectionAction(s.id, true))} disabled={pending}>Refresh metadata</Btn>
-      <Btn variant="ghost" size="xs" icon="graphic_eq" onClick={() => act(() => analyzeSectionAction(s.id))} disabled={pending}>Analyze</Btn>
-      <Btn variant="ghost" size="xs" icon="delete_sweep" onClick={() => act(() => emptyTrashAction(s.id))} disabled={pending}>Empty trash</Btn>
+    <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+      {iconBtn("sync", "Scan", () => act(() => scanSectionAction(s.id)), true)}
+      {iconBtn("refresh", "Refresh metadata", () => act(() => scanSectionAction(s.id, true)))}
+      {iconBtn("graphic_eq", "Analyze", () => act(() => analyzeSectionAction(s.id)))}
+      {iconBtn("delete_sweep", "Empty trash", () => act(() => emptyTrashAction(s.id)))}
     </div>
   );
 
@@ -212,13 +219,13 @@ export function AdminPlex({ flash, isMobile }: { flash: (msg: string) => void; i
           </div>
         ) : (
           <div className="aerie-x-scroll">
-            <div style={{ minWidth: 900, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
+            <div style={{ minWidth: 760, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
               <div style={{ display: "grid", gridTemplateColumns: LIB_COLS, gap: 12, alignItems: "center", padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
                 {libHead("title", "Library")}
                 {libHead("type", "Type")}
                 {libHead("scanned", "Last scanned")}
                 {libHead("status", "Status")}
-                <div style={{ textAlign: "right" }}><Eyebrow style={{ whiteSpace: "nowrap" }}>Actions</Eyebrow></div>
+                <div style={{ paddingLeft: 6 }}><Eyebrow style={{ whiteSpace: "nowrap" }}>Actions</Eyebrow></div>
               </div>
               {sortedSections.map((s, i) => (
                 <div key={s.id} style={{ display: "grid", gridTemplateColumns: LIB_COLS, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: listDivider(i) }}>
@@ -270,18 +277,18 @@ export function AdminPlex({ flash, isMobile }: { flash: (msg: string) => void; i
                   </div>
                   {t.description && <span style={{ fontSize: 11, color: "var(--on-surface-variant)" }}>{t.description}</span>}
                 </div>
-                <Btn variant="ghost" size="xs" icon="play_arrow" onClick={() => act(() => runButlerTaskAction(t.name))} disabled={pending}>Run now</Btn>
+                {iconBtn("play_arrow", "Run now", () => act(() => runButlerTaskAction(t.name)))}
               </div>
             ))}
           </div>
         ) : (
           <div className="aerie-x-scroll">
-            <div style={{ minWidth: 720, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
+            <div style={{ minWidth: 640, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
               <div style={{ display: "grid", gridTemplateColumns: TASK_COLS, gap: 12, alignItems: "center", padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
                 {taskHead("title", "Task")}
                 {taskHead("interval", "Interval")}
                 {taskHead("status", "Status")}
-                <div style={{ textAlign: "right" }}><Eyebrow style={{ whiteSpace: "nowrap" }}>Actions</Eyebrow></div>
+                <div style={{ paddingLeft: 6 }}><Eyebrow style={{ whiteSpace: "nowrap" }}>Actions</Eyebrow></div>
               </div>
               {sortedTasks.map((t, i) => (
                 <div key={t.name} style={{ display: "grid", gridTemplateColumns: TASK_COLS, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: listDivider(i) }}>
@@ -295,8 +302,8 @@ export function AdminPlex({ flash, isMobile }: { flash: (msg: string) => void; i
                       ? <Pill tone="originator-own">enabled</Pill>
                       : <Pill tone="on-surface-variant">disabled</Pill>}
                   </span>
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <Btn variant="ghost" size="xs" icon="play_arrow" onClick={() => act(() => runButlerTaskAction(t.name))} disabled={pending}>Run now</Btn>
+                  <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                    {iconBtn("play_arrow", "Run now", () => act(() => runButlerTaskAction(t.name)))}
                   </div>
                 </div>
               ))}
