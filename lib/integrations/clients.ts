@@ -3624,6 +3624,8 @@ export interface PlexSection {
   type: string;
   agent: string;
   refreshing: boolean;
+  /** Last scan time, epoch seconds (Plex `scannedAt`, falling back to `updatedAt`). Absent → never reported. */
+  scannedAt?: number;
 }
 export interface PlexButlerTask {
   name: string;
@@ -3636,7 +3638,7 @@ export interface PlexButlerTask {
 const plexHeaders = (apiKey: string) => ({ "X-Plex-Token": apiKey, Accept: "application/json" });
 
 interface PlexSectionsRaw {
-  MediaContainer?: { Directory?: { key: string; type?: string; title?: string; agent?: string; refreshing?: boolean }[] };
+  MediaContainer?: { Directory?: { key: string; type?: string; title?: string; agent?: string; refreshing?: boolean; scannedAt?: number; updatedAt?: number }[] };
 }
 interface PlexButlerRaw {
   ButlerTasks?: { ButlerTask?: { name: string; title?: string; description?: string; enabled?: boolean; interval?: number }[] };
@@ -3653,6 +3655,7 @@ export function plexSections(): Promise<PlexSection[]> {
       type: s.type ?? "",
       agent: s.agent ?? "",
       refreshing: Boolean(s.refreshing),
+      scannedAt: s.scannedAt ?? s.updatedAt,
     }));
   });
 }
