@@ -92,7 +92,24 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 3, ...TRUNCATE }}>{s.host}</div>
         </div>
       </div>
-      <div style={{ fontSize: 12, color: "var(--on-surface-variant)", lineHeight: 1.4 }}>{s.note}</div>
+      {/* Always reserve one line for the note (even when empty) so the divider + stats land at
+          the same height on every card in a row — the grid stretches card height, not inner
+          content, so an un-reserved note shifts only the noted card's divider down. Long notes
+          stay single-line and fade out at the right edge rather than wrapping to a new line. */}
+      <div
+        style={{
+          fontSize: 12,
+          color: "var(--on-surface-variant)",
+          lineHeight: "17px",
+          height: 17,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          maskImage: "linear-gradient(to right, #000 78%, transparent)",
+          WebkitMaskImage: "linear-gradient(to right, #000 78%, transparent)",
+        }}
+      >
+        {s.note}
+      </div>
       <Divider />
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <StatusDot status={s.status} size={7} />
