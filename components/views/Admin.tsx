@@ -12,7 +12,7 @@ import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar } from "@/compo
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
-import { PageHeader, RouteBadges, MetaBadges } from "@/components/views/shared";
+import { PageHeader, RouteBadges, MetaBadges, KeepAliveCell } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { LogsModal } from "@/components/modals/LogsModal";
 import { serviceRequiresKey, matchPreset, isTraefikSource } from "@/lib/servicePresets";
@@ -27,10 +27,12 @@ type AdminSortDir = "asc" | "desc";
 // amber = degraded, red = down, dim grey = no monitoring data. Sits on a position:relative
 // wrapper (NOT inside ServiceLogo, whose overflow:hidden would clip it). Colours reuse the
 // canonical statusColor() so they match StatusDot / Heartbeat everywhere else.
-function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest)" }: {
+function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest)", corner = "tr" }: {
   service: Pick<Service, "status" | "uptime">;
   dot?: number;
   ring?: string;
+  /** which corner to pin to: top-right (default) or bottom-right */
+  corner?: "tr" | "br";
 }) {
   const title = service.status === "unknown" ? "No monitoring data" : `${statusWord(service.status)} · ${uptimeText(service)}`;
   return (
@@ -38,7 +40,7 @@ function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest
       title={title}
       style={{
         position: "absolute",
-        top: -2,
+        ...(corner === "br" ? { bottom: -2 } : { top: -2 }),
         right: -2,
         width: dot,
         height: dot,
@@ -109,7 +111,7 @@ function optimisticForwardAuth(form: ServiceForm, prior: Service["forwardAuthCon
 function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void; onAddDiscovered: (prefill: Partial<ServiceForm>) => void }) {
   // Admin sees the FULL list (incl. inactive); every other surface gets active-only via useData().services.
   const { allServices: services, traefikDiscovered = [], traefikDismissed = [], traefikInstances = [], lokiConfigured = false } = useData();
-  const { favorites, toggleFavorite } = usePortal();
+  const { favorites, toggleFavorite, keptAliveIds } = usePortal();
   const patchData = usePatchData();
   const [, startActiveTransition] = useTransition();
   // The service whose log tail is open in the Loki viewer (admin-only; gated on lokiConfigured).
@@ -323,7 +325,14 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, opacity: dim }}>
                 <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
                   <ServiceLogo service={s} size={36} radius={9} />
-                  <StatusLight service={s} dot={12} />
+                  {/* Reachability light moves to the bottom-right so the top-right corner can carry
+                      the keep-alive glyph (rail-style). */}
+                  <StatusLight service={s} dot={12} corner="br" />
+                  {s.embeddable && s.keepAlive && (
+                    <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-container-lowest)", borderRadius: 9999 }}>
+                      <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} iconOnly />
+                    </span>
+                  )}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

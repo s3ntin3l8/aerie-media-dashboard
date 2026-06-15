@@ -18,6 +18,7 @@ vi.mock("@/app/(portal)/actions", () => ({ signOutAction: vi.fn(), setFavoritesA
 const portal = {
   role: "admin", realRole: "admin", user: { id: "u1", name: "Ada", email: "a@x" }, favorites: [], toggleFavorite: vi.fn(),
   modalOpen: false, setModalOpen: vi.fn(), theme: "dark", toggleTheme: vi.fn(), setPaletteOpen: vi.fn(), signOut: vi.fn(), oidc: true,
+  keptAliveIds: [],
 };
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn(), usePatchData: () => vi.fn() }));

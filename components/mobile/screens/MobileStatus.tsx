@@ -3,11 +3,13 @@ import React from "react";
 import { Eyebrow, StatusDot, Heartbeat } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
+import { usePortal } from "@/components/portal/PortalProvider";
 import { MiniStat } from "@/components/mobile/mcommon";
-import { CertCell, SsoCell } from "@/components/views/shared";
+import { CertCell, SsoCell, KeepAliveCell } from "@/components/views/shared";
 
 export function MobileStatus() {
   const services = useVisibleServices("status");
+  const { keptAliveIds } = usePortal();
   const up = services.filter((s) => s.status === "up").length;
   const avgUp =
     services.length > 0
@@ -183,6 +185,8 @@ export function MobileStatus() {
                     style={{ display: "flex", alignItems: "center", gap: 6 }}
                   >
                     <StatusDot status={s.status} size={6} />
+                    {/* Keep-alive sits right after the reachability dot, before the title. */}
+                    <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} iconOnly />
                     <span
                       style={{
                         fontSize: 13,
@@ -192,6 +196,10 @@ export function MobileStatus() {
                     >
                       {s.name}
                     </span>
+                    {/* Compact cert + SSO icon rail (full detail on tap/hover) — now behind the
+                        title rather than by the host, mirroring the desktop Cert/SSO columns. */}
+                    <CertCell route={s.route} iconOnly />
+                    <SsoCell route={s.route} iconOnly />
                   </div>
                   <div
                     style={{
@@ -214,10 +222,6 @@ export function MobileStatus() {
                     >
                       {s.host}
                     </span>
-                    {/* Compact cert + SSO icon rail (full detail on tap/hover) — the mobile
-                        counterpart to the desktop Cert/SSO columns. */}
-                    <CertCell route={s.route} iconOnly />
-                    <SsoCell route={s.route} iconOnly />
                   </div>
                   <div style={{ marginTop: 6 }}>
                     <Heartbeat beats={s.beats} h={15} barW={3.5} gap={1.5} />
