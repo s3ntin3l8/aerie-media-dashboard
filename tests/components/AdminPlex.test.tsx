@@ -42,6 +42,14 @@ const fullData = (over: Record<string, unknown> = {}) => ({
 const flash = vi.fn();
 const renderPanel = () => render(<AdminPlex flash={flash} isMobile={false} />);
 
+// Action buttons are disabled while a transition is pending; under load the mount transition
+// can still be settling when we click. Wait for the button to be enabled, then click it.
+async function clickReady(name: RegExp) {
+  const btn = await screen.findByRole("button", { name });
+  await waitFor(() => expect(btn).not.toBeDisabled());
+  fireEvent.click(btn);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   h.panel.value = fullData();
@@ -67,9 +75,7 @@ describe("AdminPlex — setup states", () => {
 describe("AdminPlex — library actions", () => {
   it("Scan triggers scanSectionAction(id) and flashes + re-reads on success", async () => {
     renderPanel();
-    await screen.findByText("Plex Maintenance");
-
-    fireEvent.click(screen.getByRole("button", { name: /Scan/ }));
+    await clickReady(/Scan/);
 
     await waitFor(() => expect(h.scanSectionAction).toHaveBeenCalledWith("1"));
     expect(flash).toHaveBeenCalledWith("Library scan started");
@@ -79,27 +85,21 @@ describe("AdminPlex — library actions", () => {
 
   it("Refresh metadata forces a full refresh (force=true)", async () => {
     renderPanel();
-    await screen.findByText("Plex Maintenance");
-
-    fireEvent.click(screen.getByRole("button", { name: /Refresh metadata/ }));
+    await clickReady(/Refresh metadata/);
 
     await waitFor(() => expect(h.scanSectionAction).toHaveBeenCalledWith("1", true));
   });
 
   it("Analyze triggers analyzeSectionAction(id)", async () => {
     renderPanel();
-    await screen.findByText("Plex Maintenance");
-
-    fireEvent.click(screen.getByRole("button", { name: /Analyze/ }));
+    await clickReady(/Analyze/);
 
     await waitFor(() => expect(h.analyzeSectionAction).toHaveBeenCalledWith("1"));
   });
 
   it("Empty trash targets the section by id", async () => {
     renderPanel();
-    await screen.findByText("Plex Maintenance");
-
-    fireEvent.click(screen.getByRole("button", { name: /Empty trash/ }));
+    await clickReady(/Empty trash/);
 
     await waitFor(() => expect(h.emptyTrashAction).toHaveBeenCalledWith("1"));
   });
@@ -108,27 +108,21 @@ describe("AdminPlex — library actions", () => {
 describe("AdminPlex — housekeeping + butler", () => {
   it("Clean bundles calls cleanBundlesAction", async () => {
     renderPanel();
-    await screen.findByText("Plex Maintenance");
-
-    fireEvent.click(screen.getByRole("button", { name: /Clean bundles/ }));
+    await clickReady(/Clean bundles/);
 
     await waitFor(() => expect(h.cleanBundlesAction).toHaveBeenCalled());
   });
 
   it("Optimize database calls optimizeDbAction", async () => {
     renderPanel();
-    await screen.findByText("Plex Maintenance");
-
-    fireEvent.click(screen.getByRole("button", { name: /Optimize database/ }));
+    await clickReady(/Optimize database/);
 
     await waitFor(() => expect(h.optimizeDbAction).toHaveBeenCalled());
   });
 
   it("Empty all trash calls emptyTrashAction with no id", async () => {
     renderPanel();
-    await screen.findByText("Plex Maintenance");
-
-    fireEvent.click(screen.getByRole("button", { name: /Empty all trash/ }));
+    await clickReady(/Empty all trash/);
 
     await waitFor(() => expect(h.emptyTrashAction).toHaveBeenCalledWith());
   });
@@ -136,8 +130,7 @@ describe("AdminPlex — housekeeping + butler", () => {
   it("Run now runs the butler task by name", async () => {
     renderPanel();
     await screen.findByText("Detect intros");
-
-    fireEvent.click(screen.getByRole("button", { name: /Run now/ }));
+    await clickReady(/Run now/);
 
     await waitFor(() => expect(h.runButlerTaskAction).toHaveBeenCalledWith("ButlerTaskGenerateIntroMarkers"));
   });
