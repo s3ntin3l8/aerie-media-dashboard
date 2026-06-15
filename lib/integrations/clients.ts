@@ -12,6 +12,7 @@ import { createAuthCache } from "./tokenCache";
 import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo, getServiceConfigs } from "./registry";
 import { isTraefikSource } from "../servicePresets";
 import { env } from "@/lib/env";
+import { fmtPercent } from "@/lib/format";
 import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute, TraefikInstance, AuthentikAccess, LokiLine } from "@/lib/types";
 
 
@@ -50,16 +51,23 @@ export function bustCache(key: string): void {
   ttlCache.delete(key);
 }
 
+/** GET a Sonarr/Radarr v3 endpoint with the service's X-Api-Key. The shape shared by every *arr
+ *  reader — serviceClient + afetchJson, labelled by serviceId for error attribution. */
+async function arrGet<T>(serviceId: "sonarr" | "radarr", path: string, timeoutMs?: number): Promise<T> {
+  const { baseUrl, apiKey, json: afetchJson } = await serviceClient(serviceId);
+  return afetchJson<T>(`${baseUrl}${path}`, {
+    service: serviceId,
+    headers: { "X-Api-Key": apiKey },
+    ...(timeoutMs ? { timeoutMs } : {}),
+  });
+}
+
 /** Drop every cached entry. Tests use this between cases; do not call from request paths. */
 export function clearCache(): void {
   ttlCache.clear();
   ttlInflight.clear();
   // Module-level singletons (not in ttlCache) — reset for deterministic tests.
   enrichCache.clear();
-  qualityProfilesCache = null;
-  movieProfilesCache = null;
-  tvProfilesCache = null;
-  movieIndexCache = null;
 }
 
 // ── Gatus — per-service health + heartbeat ─────────────────
@@ -1528,6 +1536,16 @@ const enrichCache = new Map<string, EnrichedDetails>();
 const ENRICH_TTL = 60 * 60 * 1000;
 // On failed fetch, retry after 30s to avoid hammering a slow upstream.
 const ENRICH_RETRY = 30 * 1000;
+// Cap memory on a long-lived process: every unique title ever requested lands here, so evict the
+// oldest (Map insertion order) once over the ceiling. ~2k entries is far above any real catalogue.
+const ENRICH_CACHE_MAX = 2000;
+function enrichCacheSet(key: string, val: EnrichedDetails): void {
+  if (enrichCache.size >= ENRICH_CACHE_MAX && !enrichCache.has(key)) {
+    const oldest = enrichCache.keys().next().value;
+    if (oldest !== undefined) enrichCache.delete(oldest);
+  }
+  enrichCache.set(key, val);
+}
 
 // Coalesce concurrent enrichment fetches for the same title. The cold-cache window
 // gets polled every 3s; without this, each poll re-issues the same TMDB roundtrips.
@@ -1570,11 +1588,11 @@ async function enrichMedia(afetchJson: ServiceClient["json"], baseUrl: string, a
         serviceUrl: mi?.serviceUrl,
         arrId: mi?.externalServiceId,
       };
-      enrichCache.set(cacheKey, result);
+      enrichCacheSet(cacheKey, result);
       return result;
     } catch {
       const fallback: EnrichedDetails = { title: "", cachedAt: Date.now() };
-      enrichCache.set(cacheKey, fallback);
+      enrichCacheSet(cacheKey, fallback);
       return fallback;
     } finally {
       enrichInflight.delete(cacheKey);
@@ -1617,57 +1635,34 @@ const OVERSEERR_STATUS: Record<number, MediaRequest["status"]> = { 1: "pending",
 // Radarr (movies) and Sonarr (TV) have independent profile ID spaces so we keep
 // separate maps and select by request type when resolving a name.
 interface QualityProfileMaps { movie: Record<number, string>; tv: Record<number, string> }
-let qualityProfilesCache: { at: number; maps: QualityProfileMaps } | null = null;
 const QUALITY_PROFILES_TTL = 60 * 60 * 1000;
 
 async function arrQualityProfileMap(serviceId: "radarr" | "sonarr"): Promise<Record<number, string>> {
-  const { baseUrl, apiKey, json: afetchJson } = await serviceClient(serviceId);
   type ArrProfile = { id: number; name: string };
-  const profiles = await afetchJson<ArrProfile[]>(`${baseUrl}/api/v3/qualityprofile`, {
-    service: serviceId,
-    headers: { "X-Api-Key": apiKey },
-    timeoutMs: 5000,
-  });
+  const profiles = await arrGet<ArrProfile[]>(serviceId, `/api/v3/qualityprofile`, 5000);
   const m: Record<number, string> = {};
   for (const p of profiles) if (p.id != null && p.name) m[p.id] = p.name;
   return m;
 }
 
-async function overseerrQualityProfiles(afetchJson: ServiceClient["json"], baseUrl: string, apiKey: string): Promise<QualityProfileMaps> {
-  if (qualityProfilesCache && Date.now() - qualityProfilesCache.at < QUALITY_PROFILES_TTL) {
-    return qualityProfilesCache.maps;
-  }
-
-  // Primary: call Radarr/Sonarr directly — gets ALL profiles, not just the active one.
-  // Falls back to Overseerr settings (active profile only) if *arr isn't configured in AERIE.
-  const [movieMap, tvMap] = await Promise.all([
-    arrQualityProfileMap("radarr").catch(async () => {
-      // Fallback: Overseerr settings knows the active profile without pinging *arr.
+function overseerrQualityProfiles(afetchJson: ServiceClient["json"], baseUrl: string, apiKey: string): Promise<QualityProfileMaps> {
+  return cached("overseerr:qualityprofiles:maps", QUALITY_PROFILES_TTL, async () => {
+    // Primary: call Radarr/Sonarr directly — gets ALL profiles, not just the active one.
+    // Falls back to Overseerr settings (active profile only) if *arr isn't configured in AERIE.
+    const settingsFallback = (arr: "radarr" | "sonarr") => async () => {
       type S = { activeProfileId?: number; activeProfileName?: string };
-      const h = { "X-Api-Key": apiKey };
-      const rows = await afetchJson<S[]>(`${baseUrl}/api/v1/settings/radarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
+      const rows = await afetchJson<S[]>(`${baseUrl}/api/v1/settings/${arr}`, { service: "overseerr", headers: { "X-Api-Key": apiKey }, timeoutMs: 5000 }).catch(() => [] as S[]);
       const m: Record<number, string> = {};
       for (const e of rows) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
       return m;
-    }),
-    arrQualityProfileMap("sonarr").catch(async () => {
-      type S = { activeProfileId?: number; activeProfileName?: string };
-      const h = { "X-Api-Key": apiKey };
-      const rows = await afetchJson<S[]>(`${baseUrl}/api/v1/settings/sonarr`, { service: "overseerr", headers: h, timeoutMs: 5000 }).catch(() => [] as S[]);
-      const m: Record<number, string> = {};
-      for (const e of rows) if (e.activeProfileId != null && e.activeProfileName) m[e.activeProfileId] = e.activeProfileName;
-      return m;
-    }),
-  ]);
-
-  const maps: QualityProfileMaps = { movie: movieMap, tv: tvMap };
-  qualityProfilesCache = { at: Date.now(), maps };
-  return maps;
+    };
+    const [movieMap, tvMap] = await Promise.all([
+      arrQualityProfileMap("radarr").catch(settingsFallback("radarr")),
+      arrQualityProfileMap("sonarr").catch(settingsFallback("sonarr")),
+    ]);
+    return { movie: movieMap, tv: tvMap };
+  });
 }
-
-// Per-type profile caches (movie = Radarr, TV = Sonarr) for the client-facing fetch.
-let movieProfilesCache: { at: number; profiles: QualityProfile[] } | null = null;
-let tvProfilesCache: { at: number; profiles: QualityProfile[] } | null = null;
 
 async function fetchServiceProfiles(afetchJson: ServiceClient["json"], baseUrl: string, apiKey: string, arr: "radarr" | "sonarr"): Promise<QualityProfile[]> {
   const DEFAULT: QualityProfile = { id: "default", label: "Default", sub: "Overseerr default", icon: "auto_awesome", def: true };
@@ -1705,49 +1700,41 @@ const MOVIE_FILE_INDEX_TTL = 30 * 60 * 1000;
 /** Radarr download/monitor state for a movie (by tmdbId). */
 interface MovieMeta { monitored?: boolean; hasFile?: boolean; genres?: string[]; studio?: string }
 interface MovieIndexes { fileIndex: Map<number, FileInfo>; profileIndex: Map<number, number>; metaIndex: Map<number, MovieMeta> }
-let movieIndexCache: { at: number } & MovieIndexes | null = null;
 
-async function arrMovieIndexes(): Promise<MovieIndexes> {
-  if (movieIndexCache && Date.now() - movieIndexCache.at < MOVIE_FILE_INDEX_TTL) {
-    return { fileIndex: movieIndexCache.fileIndex, profileIndex: movieIndexCache.profileIndex, metaIndex: movieIndexCache.metaIndex };
-  }
-  const { baseUrl, apiKey, json: afetchJson } = await serviceClient("radarr");
-  type RMovie = {
-    tmdbId: number;
-    qualityProfileId?: number;
-    monitored?: boolean;
-    hasFile?: boolean;
-    genres?: string[];
-    studio?: string;
-    movieFile?: {
-      size?: number;
-      quality?: { quality?: { resolution?: number; source?: string } };
-      mediaInfo?: { videoCodec?: string };
+function arrMovieIndexes(): Promise<MovieIndexes> {
+  return cached("radarr:movieindexes", MOVIE_FILE_INDEX_TTL, async () => {
+    type RMovie = {
+      tmdbId: number;
+      qualityProfileId?: number;
+      monitored?: boolean;
+      hasFile?: boolean;
+      genres?: string[];
+      studio?: string;
+      movieFile?: {
+        size?: number;
+        quality?: { quality?: { resolution?: number; source?: string } };
+        mediaInfo?: { videoCodec?: string };
+      };
     };
-  };
-  const movies = await afetchJson<RMovie[]>(`${baseUrl}/api/v3/movie`, {
-    service: "radarr",
-    headers: { "X-Api-Key": apiKey },
-    timeoutMs: 10000,
+    const movies = await arrGet<RMovie[]>("radarr", `/api/v3/movie`, 10000);
+    const SOURCE: Record<string, string> = { bluray: "Blu-ray", webrip: "WEBRip", webdl: "WEB-DL", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
+    const fileIndex = new Map<number, FileInfo>();
+    const profileIndex = new Map<number, number>();
+    const metaIndex = new Map<number, MovieMeta>();
+    for (const m of movies) {
+      if (!m.tmdbId) continue;
+      if (m.qualityProfileId != null) profileIndex.set(m.tmdbId, m.qualityProfileId);
+      metaIndex.set(m.tmdbId, { monitored: m.monitored, hasFile: m.hasFile, genres: m.genres?.length ? m.genres : undefined, studio: m.studio || undefined });
+      if (!m.movieFile) continue;
+      const q = m.movieFile.quality?.quality;
+      const res = q?.resolution ? `${q.resolution}p` : undefined;
+      const src = q?.source ? (SOURCE[q.source] ?? q.source) : undefined;
+      const codec = m.movieFile.mediaInfo?.videoCodec?.toUpperCase() ?? undefined;
+      const parts = [res, src, codec ? `· ${codec}` : undefined].filter(Boolean);
+      fileIndex.set(m.tmdbId, { label: parts.join(" ") || "Unknown", sizeBytes: m.movieFile.size });
+    }
+    return { fileIndex, profileIndex, metaIndex };
   });
-  const SOURCE: Record<string, string> = { bluray: "Blu-ray", webrip: "WEBRip", webdl: "WEB-DL", hdtv: "HDTV", dvd: "DVD", cam: "CAM" };
-  const fileIndex = new Map<number, FileInfo>();
-  const profileIndex = new Map<number, number>();
-  const metaIndex = new Map<number, MovieMeta>();
-  for (const m of movies) {
-    if (!m.tmdbId) continue;
-    if (m.qualityProfileId != null) profileIndex.set(m.tmdbId, m.qualityProfileId);
-    metaIndex.set(m.tmdbId, { monitored: m.monitored, hasFile: m.hasFile, genres: m.genres?.length ? m.genres : undefined, studio: m.studio || undefined });
-    if (!m.movieFile) continue;
-    const q = m.movieFile.quality?.quality;
-    const res = q?.resolution ? `${q.resolution}p` : undefined;
-    const src = q?.source ? (SOURCE[q.source] ?? q.source) : undefined;
-    const codec = m.movieFile.mediaInfo?.videoCodec?.toUpperCase() ?? undefined;
-    const parts = [res, src, codec ? `· ${codec}` : undefined].filter(Boolean);
-    fileIndex.set(m.tmdbId, { label: parts.join(" ") || "Unknown", sizeBytes: m.movieFile.size });
-  }
-  movieIndexCache = { at: Date.now(), fileIndex, profileIndex, metaIndex };
-  return { fileIndex, profileIndex, metaIndex };
 }
 
 /** Radarr monitor/download state + metadata for a single movie by tmdbId (uses the cached index). */
@@ -1814,23 +1801,15 @@ export async function sonarrSeasonQuality(seriesId: number): Promise<SeasonQuali
   });
 }
 
-/** Live quality profiles for movie requests (from the first Radarr instance). Cached 1h. */
-export async function overseerrMovieProfiles(): Promise<QualityProfile[]> {
-  if (movieProfilesCache && Date.now() - movieProfilesCache.at < QUALITY_PROFILES_TTL) return movieProfilesCache.profiles;
-  const { baseUrl, apiKey, json: afetchJson } = await serviceClient("overseerr");
-  const profiles = await fetchServiceProfiles(afetchJson, baseUrl, apiKey, "radarr");
-  movieProfilesCache = { at: Date.now(), profiles };
-  return profiles;
+/** Live quality profiles for a request kind (movie = Radarr, TV = Sonarr). Cached 1h. */
+function overseerrProfiles(arr: "radarr" | "sonarr"): Promise<QualityProfile[]> {
+  return cached(`overseerr:profiles:${arr}`, QUALITY_PROFILES_TTL, async () => {
+    const { baseUrl, apiKey, json: afetchJson } = await serviceClient("overseerr");
+    return fetchServiceProfiles(afetchJson, baseUrl, apiKey, arr);
+  });
 }
-
-/** Live quality profiles for TV requests (from the first Sonarr instance). Cached 1h. */
-export async function overseerrTvProfiles(): Promise<QualityProfile[]> {
-  if (tvProfilesCache && Date.now() - tvProfilesCache.at < QUALITY_PROFILES_TTL) return tvProfilesCache.profiles;
-  const { baseUrl, apiKey, json: afetchJson } = await serviceClient("overseerr");
-  const profiles = await fetchServiceProfiles(afetchJson, baseUrl, apiKey, "sonarr");
-  tvProfilesCache = { at: Date.now(), profiles };
-  return profiles;
-}
+export const overseerrMovieProfiles = (): Promise<QualityProfile[]> => overseerrProfiles("radarr");
+export const overseerrTvProfiles = (): Promise<QualityProfile[]> => overseerrProfiles("sonarr");
 
 // Overseerr's /api/v1/request endpoint is slow only when cold (~10s after idle, ~300ms warm).
 // Stale-while-revalidate keeps the snapshot instant: serve the last-known list, refresh in the
@@ -1984,29 +1963,15 @@ async function fetchDiscover(svc: ServiceClient, path: string, limit = 20): Prom
     .map(mapDiscoverResult);
 }
 
-export async function overseerrTrending(): Promise<DiscoverItem[]> {
-  return cached("overseerr:discover:trending", QUALITY_PROFILES_TTL, async () => {
-    return fetchDiscover(await serviceClient("overseerr"), "trending", 20);
-  });
+/** Cached Overseerr discover feed: `key` names the cache slot, `path` is the /discover/<path> route. */
+function cachedDiscover(key: string, path: string): Promise<DiscoverItem[]> {
+  return cached(`overseerr:discover:${key}`, QUALITY_PROFILES_TTL, async () => fetchDiscover(await serviceClient("overseerr"), path, 20));
 }
 
-export async function overseerrPopularMovies(): Promise<DiscoverItem[]> {
-  return cached("overseerr:discover:popularMovies", QUALITY_PROFILES_TTL, async () => {
-    return fetchDiscover(await serviceClient("overseerr"), "movies", 20);
-  });
-}
-
-export async function overseerrPopularTv(): Promise<DiscoverItem[]> {
-  return cached("overseerr:discover:popularTv", QUALITY_PROFILES_TTL, async () => {
-    return fetchDiscover(await serviceClient("overseerr"), "tv", 20);
-  });
-}
-
-export async function overseerrUpcomingMovies(): Promise<DiscoverItem[]> {
-  return cached("overseerr:discover:upcomingMovies", QUALITY_PROFILES_TTL, async () => {
-    return fetchDiscover(await serviceClient("overseerr"), "movies/upcoming", 20);
-  });
-}
+export const overseerrTrending = (): Promise<DiscoverItem[]> => cachedDiscover("trending", "trending");
+export const overseerrPopularMovies = (): Promise<DiscoverItem[]> => cachedDiscover("popularMovies", "movies");
+export const overseerrPopularTv = (): Promise<DiscoverItem[]> => cachedDiscover("popularTv", "tv");
+export const overseerrUpcomingMovies = (): Promise<DiscoverItem[]> => cachedDiscover("upcomingMovies", "movies/upcoming");
 
 // ── Overseerr — request mutations (delete / edit) ─────────────
 export async function overseerrDeleteRequest(requestId: number): Promise<void> {
@@ -2141,19 +2106,17 @@ interface OverseerrUserApi {
 
 // Cache the user list briefly — getSnapshot polls every 12s and submitRequest may
 // also call this; a short TTL avoids hammering /api/v1/user on every poll.
-let usersCache: { at: number; users: OverseerrUser[] } | null = null;
 const USERS_TTL = 5 * 60 * 1000;
 
-export async function overseerrUsers(): Promise<OverseerrUser[]> {
-  if (usersCache && Date.now() - usersCache.at < USERS_TTL) return usersCache.users;
-  const { baseUrl, apiKey, json: afetchJson } = await serviceClient("overseerr");
-  const data = await afetchJson<{ results: OverseerrUserApi[] }>(`${baseUrl}/api/v1/user?take=100`, {
-    service: "overseerr",
-    headers: { "X-Api-Key": apiKey },
+export function overseerrUsers(): Promise<OverseerrUser[]> {
+  return cached("overseerr:users", USERS_TTL, async () => {
+    const { baseUrl, apiKey, json: afetchJson } = await serviceClient("overseerr");
+    const data = await afetchJson<{ results: OverseerrUserApi[] }>(`${baseUrl}/api/v1/user?take=100`, {
+      service: "overseerr",
+      headers: { "X-Api-Key": apiKey },
+    });
+    return (data.results ?? []).map((u) => ({ id: u.id, email: u.email, displayName: u.displayName, plexUsername: u.plexUsername }));
   });
-  const users = (data.results ?? []).map((u) => ({ id: u.id, email: u.email, displayName: u.displayName, plexUsername: u.plexUsername }));
-  usersCache = { at: Date.now(), users };
-  return users;
 }
 
 // ── Overseerr — open issues (cached) ───────────────────────
@@ -2253,12 +2216,9 @@ interface ArrQueueRecord {
 }
 
 export async function arrQueue(serviceId: "sonarr" | "radarr"): Promise<QueueItem[]> {
-  const { baseUrl, apiKey, json: afetchJson } = await serviceClient(serviceId);
-  const data = await afetchJson<{ records: ArrQueueRecord[] }>(`${baseUrl}/api/v3/queue?pageSize=20`, {
-    headers: { "X-Api-Key": apiKey },
-  });
+  const data = await arrGet<{ records: ArrQueueRecord[] }>(serviceId, `/api/v3/queue?pageSize=20`);
   return (data.records ?? []).map((r, i) => {
-    const pct = r.size && r.sizeleft != null ? Math.round(((r.size - r.sizeleft) / r.size) * 100) : 0;
+    const pct = r.size && r.sizeleft != null ? fmtPercent(r.size - r.sizeleft, r.size) : 0;
     return { id: `${serviceId}-${i}`, title: r.title, svc: serviceId, pct, eta: r.timeleft || "—", speed: "" };
   });
 }
@@ -2292,7 +2252,7 @@ export async function nzbgetQueue(): Promise<QueueItem[]> {
   return (groups ?? []).map((g, i) => {
     // Per-item rate/ETA aren't exposed (DownloadRate is global — see nzbgetStatus),
     // so rows carry progress only; the panel header shows the server-wide rate.
-    const pct = g.FileSizeMB && g.RemainingSizeMB != null ? Math.round(((g.FileSizeMB - g.RemainingSizeMB) / g.FileSizeMB) * 100) : 0;
+    const pct = g.FileSizeMB && g.RemainingSizeMB != null ? fmtPercent(g.FileSizeMB - g.RemainingSizeMB, g.FileSizeMB) : 0;
     return { id: `nzbget-${i}`, title: g.NZBName || "(unnamed)", svc: "nzbget", pct, eta: "—", speed: "" };
   });
 }
@@ -2332,10 +2292,7 @@ interface ArrDiskSpace {
 
 export async function arrDiskSpace(serviceId: "sonarr" | "radarr"): Promise<StorageMount[]> {
   return cached(`diskspace:${serviceId}`, 10 * 60 * 1000, async () => {
-    const { baseUrl, apiKey, json: afetchJson } = await serviceClient(serviceId);
-    const data = await afetchJson<ArrDiskSpace[]>(`${baseUrl}/api/v3/diskspace`, {
-      headers: { "X-Api-Key": apiKey },
-    });
+    const data = await arrGet<ArrDiskSpace[]>(serviceId, `/api/v3/diskspace`);
     return (data ?? [])
       .filter((d) => d.totalSpace > 0)
       .map((d) => ({ path: d.path, label: d.label || d.path, freeBytes: d.freeSpace, totalBytes: d.totalSpace }));
@@ -2352,10 +2309,7 @@ interface ArrHealthRecord {
 
 export async function arrHealth(serviceId: "sonarr" | "radarr"): Promise<HealthIssue[]> {
   return cached(`health:${serviceId}`, 3 * 60 * 1000, async () => {
-    const { baseUrl, apiKey, json: afetchJson } = await serviceClient(serviceId);
-    const data = await afetchJson<ArrHealthRecord[]>(`${baseUrl}/api/v3/health`, {
-      headers: { "X-Api-Key": apiKey },
-    });
+    const data = await arrGet<ArrHealthRecord[]>(serviceId, `/api/v3/health`);
     return (data ?? []).map((h) => ({
       svc: serviceId,
       type: h.type || "warning",
@@ -2426,13 +2380,9 @@ function arrRating(r?: ArrRatings): number | undefined {
 
 export async function arrCalendar(serviceId: "sonarr" | "radarr"): Promise<UpcomingItem[]> {
   return cached(`calendar:${serviceId}`, 15 * 60 * 1000, async () => {
-    const { baseUrl, apiKey, json: afetchJson } = await serviceClient(serviceId);
     const start = new Date().toISOString();
     const end = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
-    const data = await afetchJson<ArrCalendarRecord[]>(
-      `${baseUrl}/api/v3/calendar?start=${start}&end=${end}&includeSeries=true`,
-      { service: serviceId, headers: { "X-Api-Key": apiKey } },
-    );
+    const data = await arrGet<ArrCalendarRecord[]>(serviceId, `/api/v3/calendar?start=${start}&end=${end}&includeSeries=true`);
     const isSeries = serviceId === "sonarr";
     const out: UpcomingItem[] = [];
     for (const rec of data ?? []) {
@@ -2485,11 +2435,7 @@ interface ArrHistoryRecord {
 
 export async function arrHistory(serviceId: "sonarr" | "radarr"): Promise<DownloadEvent[]> {
   return cached(`history:${serviceId}`, 3 * 60 * 1000, async () => {
-    const { baseUrl, apiKey, json: afetchJson } = await serviceClient(serviceId);
-    const data = await afetchJson<{ records: ArrHistoryRecord[] }>(
-      `${baseUrl}/api/v3/history?pageSize=30&sortKey=date&sortDirection=descending`,
-      { service: serviceId, headers: { "X-Api-Key": apiKey } },
-    );
+    const data = await arrGet<{ records: ArrHistoryRecord[] }>(serviceId, `/api/v3/history?pageSize=30&sortKey=date&sortDirection=descending`);
     return (data.records ?? [])
       .filter((r) => r.eventType === "grabbed" || r.eventType === "downloadFolderImported")
       .map((r) => ({
@@ -2824,7 +2770,7 @@ export async function listenarrQueue(): Promise<QueueItem[]> {
   return (data.items ?? []).map((r, i) => {
     // Prefer the byte counts (unambiguous units) over the reported progress when both exist.
     const pct = r.size && r.downloaded != null
-      ? Math.min(100, Math.max(0, Math.round((r.downloaded / r.size) * 100)))
+      ? fmtPercent(r.downloaded, r.size)
       : Math.min(100, Math.max(0, Math.round(r.progress ?? 0)));
     return {
       id: `listenarr-${r.id ?? i}`,
@@ -3056,7 +3002,7 @@ export async function qbittorrentQueue(): Promise<QueueItem[]> {
   const svc = await serviceClient("qbittorrent");
   const torrents = await qbitGet<QbitTorrentRecord[]>(svc, "/api/v2/torrents/info");
   return (torrents ?? []).map((t) => {
-    const pct = Math.min(100, Math.max(0, Math.round((t.progress ?? 0) * 100)));
+    const pct = fmtPercent(t.progress ?? 0, 1);
     const etaSec = t.eta ?? 0;
     return {
       id: `qbittorrent-${t.hash ?? Math.random()}`,

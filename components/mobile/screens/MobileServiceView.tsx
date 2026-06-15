@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
-import { Icon } from "@/components/primitives";
+import { Icon, TRUNCATE } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { LaunchScreen } from "@/components/views/Launcher";
 import { useEmbedProbe } from "@/components/hooks/useEmbedProbe";
@@ -68,7 +68,7 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
         </button>
         <ServiceLogo service={s} size={30} radius={8} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
+          <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", lineHeight: 1.1, ...TRUNCATE }}>{s.name}</div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>v{String(s.version).replace(/^v/i, "")} · {s.embeddable ? "embedded" : "external"}</div>
         </div>
         <a
@@ -96,7 +96,7 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
             <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center", cursor: cert ? "help" : undefined }}>
               <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={12} color={lockColor} />
             </span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>{url}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", ...TRUNCATE, flex: 1 }}>{url}</span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, padding: "1px 7px", borderRadius: 4, background: `color-mix(in srgb, ${badge.color} 12%, transparent)`, color: badge.color, fontWeight: 700, flexShrink: 0 }}>{badge.label}</span>
           </div>
 

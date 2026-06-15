@@ -11,7 +11,7 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { useEmbedProbe } from "@/components/hooks/useEmbedProbe";
-import { Icon, StatusDot, Heartbeat, Divider, SearchField } from "@/components/primitives";
+import { Icon, StatusDot, Heartbeat, Divider, SearchField, hoverGlow, TRUNCATE } from "@/components/primitives";
 import { Empty } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, KeepAliveCell } from "@/components/views/shared";
@@ -45,14 +45,7 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
         overflow: "hidden",
         transition: "border-color .18s, box-shadow .18s, transform .1s",
       }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = `color-mix(in srgb, ${c} 55%, transparent)`;
-        e.currentTarget.style.boxShadow = `0 0 0 3px color-mix(in srgb, ${c} 8%, transparent)`;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "var(--outline-variant)";
-        e.currentTarget.style.boxShadow = "none";
-      }}
+      {...hoverGlow(c)}
     >
       <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c }} />
       <button
@@ -94,9 +87,9 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
         <ServiceLogo service={s} size={44} radius={12} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, paddingRight: 22 }}>
-            <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
+            <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", ...TRUNCATE }}>{s.name}</span>
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.host}</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", marginTop: 3, ...TRUNCATE }}>{s.host}</div>
         </div>
       </div>
       <div style={{ fontSize: 12, color: "var(--on-surface-variant)", lineHeight: 1.4 }}>{s.note}</div>

@@ -21,6 +21,7 @@ const logoOf = (c: { id: string; logoSlug: string | null }, slug: string) => c.l
 vi.mock("@/lib/integrations/registry", () => ({
   getServiceConfigs: vi.fn(async () => CONFIGS),
   getServiceSecret: vi.fn(async () => null), // aggregator needs no secret; gates stay open on active
+  getAllServiceSecrets: vi.fn(async () => new Map<string, string>()), // no stored secrets
   getServiceCredentials: vi.fn(async (id: string) => ({ baseUrl: `https://${id}.test`, apiKey: null, insecureTls: false })),
   isConfigured: vi.fn(async () => false),
   configMatchesLogo: vi.fn((c: { id: string; logoSlug: string | null }, slug: string) => logoOf(c, slug)),

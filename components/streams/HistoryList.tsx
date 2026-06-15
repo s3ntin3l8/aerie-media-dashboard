@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import type { StreamHistoryItem } from "@/lib/types";
-import { Icon, Avatar, PosterTile } from "@/components/primitives";
+import { Icon, Avatar, PosterTile, TRUNCATE, listDivider } from "@/components/primitives";
 import { Empty, PanelShell, timeAgo } from "@/components/panels";
 
 function fmtDuration(seconds: number): string {
@@ -64,14 +64,14 @@ function HistoryRow({ item, i, isAdmin }: { item: StreamHistoryItem; i: number; 
   const startedIso = new Date(item.started * 1000).toISOString();
 
   return (
-    <div style={{ display: "flex", gap: 12, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none", alignItems: "flex-start" }}>
+    <div style={{ display: "flex", gap: 12, padding: "10px 16px", borderTop: listDivider(i), alignItems: "flex-start" }}>
       <PosterTile title={mainTitle} kind={posterKind} cat="stream" w={38} art={art} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 13, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 2 }}>
+        <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 13, color: "var(--on-surface)", ...TRUNCATE, marginBottom: 2 }}>
           {mainTitle}
         </div>
         {subTitle && (
-          <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginBottom: 5, ...TRUNCATE }}>
             {subTitle}
           </div>
         )}

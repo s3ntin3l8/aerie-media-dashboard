@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { useRouter } from "next/navigation";
-import { Icon, Avatar, Pill, StatusDot, ProgressBar } from "@/components/primitives";
+import { Icon, Avatar, Pill, StatusDot, ProgressBar, TRUNCATE } from "@/components/primitives";
 import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { MiniStat, SectionHead } from "@/components/mobile/mcommon";
@@ -48,7 +48,7 @@ function MemberRow({ u, nowPlaying }: { u: User; nowPlaying: NowPlaying[] }) {
             </span>
           )}
         </div>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</div>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", ...TRUNCATE }}>{u.email}</div>
         {(u.movieQuota || u.tvQuota) && (
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <span style={{ fontFamily: "var(--font-body)", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--on-surface-variant)", marginBottom: 1 }}>Requests</span>
@@ -59,7 +59,7 @@ function MemberRow({ u, nowPlaying }: { u: User; nowPlaying: NowPlaying[] }) {
         {session && (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 1 }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--primary)" }}>▶</span>
-            <span style={{ fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span style={{ fontSize: 11, color: "var(--on-surface-variant)", ...TRUNCATE }}>
               {session.paused ? "Paused · " : "Watching · "}
               <span style={{ color: "var(--on-surface)" }}>{session.title}</span>
             </span>
@@ -167,7 +167,7 @@ export function MobileAdmin({ onClose }: { onClose: () => void }) {
               {queue.map((q, i) => (
                 <div key={q.id} style={{ display: "flex", flexDirection: "column", gap: 7, padding: "12px 0", borderTop: i ? "1px solid var(--outline-variant)" : "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{q.title}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "var(--on-surface)", ...TRUNCATE }}>{q.title}</span>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--primary)" }}>{q.pct}%</span>
                   </div>
                   <ProgressBar pct={q.pct} color="var(--primary)" h={4} />

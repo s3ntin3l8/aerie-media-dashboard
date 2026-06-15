@@ -16,7 +16,6 @@ import { compactAll, findSlot, type Tile, type WidgetMeta } from "@/components/p
 import {
   CentralServices,
   LibraryStats,
-  NowPlayingPanel,
   ServiceTiles,
   StatusPanel,
   MyRequestsPanel,
@@ -28,6 +27,7 @@ import {
   DiscoverFeedPanel,
   StoragePanel,
 } from "@/components/panels";
+import { NowPlayingPanel } from "@/components/panels/streams";
 import { BandwidthWidget, ClockWidget, ShortcutsWidget, AnnouncementsWidget, WizarrWidget, IndexersWidget, AgregarrWidget, BazarrWidget, BooksWidget, DownloadClientWidget, HostStatsWidget, HealthWidget, ActivityWidget } from "@/components/widgets";
 
 // Context handed to every widget's render() — navigation + actions wired by Home.

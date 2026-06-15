@@ -6,8 +6,9 @@ import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
-import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
-import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";
+import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar, TRUNCATE, listDivider } from "@/components/primitives";
+import { PanelShell, timeAgo } from "@/components/panels";
+import { fmtBytes, fmtPercent } from "@/lib/format";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile, RouteHealthBadge, CertCell, SsoCell, KeepAliveCell } from "@/components/views/shared";
 import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
@@ -272,7 +273,7 @@ export function Status() {
                 })}
               </div>
               {sortedList.map((s, i) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderTop: listDivider(i) }}>
                   <ServiceLogo service={s} size={30} radius={8} />
                   <div style={{ flex: "0 0 200px", minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -325,7 +326,7 @@ export function Status() {
                   const isError = h.type.toLowerCase() === "error";
                   const c = isError ? "var(--error)" : "var(--amber)";
                   return (
-                    <div key={`${h.svc}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                    <div key={`${h.svc}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderTop: listDivider(i) }}>
                       <Icon name={isError ? "error" : "warning"} size={15} color={c} />
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", color: c, flex: "0 0 56px" }}>{h.svc}</span>
                       <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1 }}>{h.message}</span>
@@ -395,7 +396,7 @@ export function Status() {
                   />
                   <MetricCard
                     title="Disk"
-                    value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${Math.round((metrics.diskUsedBytes / metrics.diskTotalBytes) * 100)}%` : "—"}
+                    value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${fmtPercent(metrics.diskUsedBytes, metrics.diskTotalBytes)}%` : "—"}
                     unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`}
                     color="var(--amber)"
                     data={metrics.diskHistory}
@@ -434,9 +435,9 @@ export function Status() {
                       const pct = f.totalBytes > 0 ? (f.usedBytes / f.totalBytes) * 100 : 0;
                       const c = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
                       return (
-                        <div key={f.mount} style={{ padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                        <div key={f.mount} style={{ padding: "10px 16px", borderTop: listDivider(i) }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.mount}</span>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface)", flex: 1, ...TRUNCATE }}>{f.mount}</span>
                             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{fmtBytes(f.usedBytes)} / {fmtBytes(f.totalBytes)}</span>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

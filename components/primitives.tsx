@@ -13,6 +13,66 @@ type CSS = React.CSSProperties;
 
 export { catColor };
 
+/** Single-line ellipsis truncation — the most-repeated inline style in the app. */
+export const TRUNCATE: CSS = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+
+/** `borderTop` for list rows: a hairline between items, none above the first (index 0).
+ *  `opacity` is the outline-variant mix percentage (45 for most lists, 50 for stream rows). */
+export const listDivider = (i: number, opacity = 45): string =>
+  i ? `1px solid color-mix(in srgb, var(--outline-variant) ${opacity}%, transparent)` : "none";
+
+/** Hover handlers that ring a bordered card with a tinted glow in color `c`, restored on leave.
+ *  Spread onto the element: `<div {...hoverGlow(c)} />`. */
+export function hoverGlow(c: string): {
+  onMouseEnter: (e: React.MouseEvent<HTMLElement>) => void;
+  onMouseLeave: (e: React.MouseEvent<HTMLElement>) => void;
+} {
+  return {
+    onMouseEnter: (e) => {
+      e.currentTarget.style.borderColor = `color-mix(in srgb, ${c} 55%, transparent)`;
+      e.currentTarget.style.boxShadow = `0 0 0 3px color-mix(in srgb, ${c} 8%, transparent)`;
+    },
+    onMouseLeave: (e) => {
+      e.currentTarget.style.borderColor = "var(--outline-variant)";
+      e.currentTarget.style.boxShadow = "none";
+    },
+  };
+}
+
+/** Collapsible card with an icon/title/count header and a rotating chevron. Self-manages its
+ *  open state. Used by the Admin "Discovered via Traefik" and "Traefik nodes" panels. */
+export function ExpandableSection({
+  icon,
+  title,
+  count,
+  defaultOpen = false,
+  children,
+}: {
+  icon: string;
+  title: React.ReactNode;
+  count?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)", padding: 14, marginBottom: 12 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: 0, border: "none", background: "transparent", color: "inherit", cursor: "pointer", marginBottom: open ? 10 : 0 }}
+      >
+        <Icon name={icon} size={16} color="var(--primary)" />
+        <Eyebrow>{title}</Eyebrow>
+        {count != null && <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{count}</span>}
+        <Icon name="expand_more" size={18} color="var(--on-surface-variant)" style={{ marginLeft: "auto", transform: open ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
 // ── Material Symbol icon ───────────────────────────────────
 export function Icon({
   name,

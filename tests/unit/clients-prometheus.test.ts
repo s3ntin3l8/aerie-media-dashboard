@@ -1,22 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mockHttp, mockClientsRegistry, mockEnv } from "./clientsMocks";
 
-vi.mock("@/lib/integrations/http", () => ({
-  fetchJson: vi.fn(),
-  fetchJsonRaw: vi.fn(),
-  fetchRaw: vi.fn(),
-  IntegrationError: class IntegrationError extends Error {
-    service: string;
-    constructor(service: string, message: string) { super(`[${service}] ${message}`); this.service = service; }
-  },
-}));
-vi.mock("@/lib/integrations/registry", () => ({
-  getServiceSecret: vi.fn(), getServiceCredentials: vi.fn(),
-  getDeploymentSetting: vi.fn(),
-}));
-vi.mock("@/lib/env", () => ({
-  env: { encryptionKey: "0".repeat(64), authSecret: "test", configFile: "/dev/null", databaseUrl: "file::memory:", prometheusInstance: undefined },
-  authConfigured: false,
-}));
+vi.mock("@/lib/integrations/http", () => mockHttp());
+vi.mock("@/lib/integrations/registry", () => mockClientsRegistry());
+vi.mock("@/lib/env", () => mockEnv());
 
 import { fetchJson } from "@/lib/integrations/http";
 import { getServiceCredentials, getDeploymentSetting } from "@/lib/integrations/registry";

@@ -6,6 +6,8 @@ export type Category = "stream" | "request" | "automation" | "monitor" | "infra"
 export type ServiceStatus = "up" | "degraded" | "down" | "unknown";
 export type Role = "admin" | "user";
 export type MediaKind = "movie" | "series" | "track";
+/** Hint passed to onSelect handlers to deep-link a piece of media (Streams / Recently-added). */
+export type SelectMediaHint = { kind: MediaKind; tmdbId?: number; grandparentRatingKey?: string };
 export type RequestStatus = "available" | "approved" | "pending" | "declined" | "processing" | "failed";
 export type PlayMode = "direct" | "transcode";
 
