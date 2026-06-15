@@ -52,8 +52,11 @@ type SortState = { col: string; dir: SortDir };
 const nextSort = (prev: SortState, col: string): SortState =>
   prev.col === col ? { col, dir: prev.dir === "asc" ? "desc" : "asc" } : { col, dir: "asc" };
 
-const LIB_COLS = "minmax(160px, 2fr) 120px 130px 110px minmax(280px, auto)";
-const TASK_COLS = "minmax(200px, 2.5fr) 130px 110px 120px";
+// Pure fr/fixed tracks (no `auto`) so the separate header + per-row grids resolve to identical
+// column widths — an `auto` track sizes to each container's own content (narrow "Actions" text
+// in the header vs. wide buttons in rows), which would misalign the columns.
+const LIB_COLS = "1.5fr 0.7fr 0.95fr 0.75fr 2.1fr";
+const TASK_COLS = "2fr 0.8fr 0.7fr 1.1fr";
 
 export function AdminPlex({ flash, isMobile }: { flash: (msg: string) => void; isMobile: boolean }) {
   const [data, setData] = useState<PlexPanelData | null>(null);
@@ -209,7 +212,7 @@ export function AdminPlex({ flash, isMobile }: { flash: (msg: string) => void; i
           </div>
         ) : (
           <div className="aerie-x-scroll">
-            <div style={{ minWidth: 880, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
+            <div style={{ minWidth: 900, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
               <div style={{ display: "grid", gridTemplateColumns: LIB_COLS, gap: 12, alignItems: "center", padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
                 {libHead("title", "Library")}
                 {libHead("type", "Type")}
