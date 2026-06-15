@@ -17,3 +17,7 @@ jobs:
     uses: s3ntin3l8/.github/.github/workflows/codeql.yml@main
     with:
       languages: 'javascript-typescript'
+      # Drop the heavy "security-and-quality" suite — over this large TS codebase it roughly
+      # doubled CodeQL's analysis time for marginal (non-security) value. Keep full security
+      # coverage via security-extended. (Requires the `queries` input in the shared workflow.)
+      queries: 'security-extended'
