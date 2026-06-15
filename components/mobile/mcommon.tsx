@@ -2,7 +2,7 @@
 // Shared display helpers reused across mobile screens.
 // Ported from the design's mobile/mcommon.jsx, adapted to live data.
 import React from "react";
-import { Icon, Avatar, Pill, PosterTile } from "@/components/primitives";
+import { Icon, Avatar, Pill, PosterTile, TRUNCATE } from "@/components/primitives";
 import { REQ_TONE, REQ_LABEL } from "@/lib/display";
 import type { MediaRequest, Service } from "@/lib/types";
 
@@ -43,7 +43,7 @@ export function MiniStat({ label, value, icon, color = "var(--primary)" }: {
   return (
     <div className="card" style={{ padding: "11px 12px", borderRadius: 14, background: "var(--surface-container)", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+        <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--on-surface-variant)", ...TRUNCATE }}>{label}</span>
         <Icon name={icon} size={13} color={color} />
       </div>
       <div style={{ fontFamily: "var(--font-headline)", fontSize: 22, fontWeight: 800, color: color, lineHeight: 1 }}>{value}</div>
@@ -75,7 +75,7 @@ export function ApprovalRow({ r, onReq, onTap }: { r: MediaRequest; onReq: (id: 
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
+            <div style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700, color: "var(--on-surface)", ...TRUNCATE }}>{r.title}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3, fontSize: 11, color: "var(--on-surface-variant)" }}>
               <Icon name={r.kind === "series" ? "live_tv" : "movie"} size={12} />
               <span style={{ textTransform: "capitalize" }}>{r.kind}</span>

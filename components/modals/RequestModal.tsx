@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DiscoverItem, MediaRequest, QualityProfile, RequestStatus, User } from "@/lib/types";
-import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider } from "@/components/primitives";
+import { Icon, Pill, Eyebrow, Avatar, Chip, PosterTile, ProgressBar, Divider, TRUNCATE } from "@/components/primitives";
 import { ModalShell, SectionLabel, Field, fieldInput } from "@/components/modals/ModalShell";
 import { MediaDetailBody } from "@/components/modals/MediaDetailBody";
 import { MediaLinks } from "@/components/modals/MediaLinks";
@@ -117,7 +117,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
               >
                 <PosterTile title={d.title} kind={d.kind} cat="request" w={42} art={d.art} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 13.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</div>
+                  <div style={{ fontFamily: "var(--font-headline)", fontWeight: 700, fontSize: 13.5, color: "var(--on-surface)", ...TRUNCATE }}>{d.title}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 2, fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>
                     <Icon name={d.kind === "series" ? "live_tv" : "movie"} size={12} />
                     {d.kind === "series" ? "Series" : "Movie"} · {d.year}

@@ -4,7 +4,7 @@
 // ============================================================
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Icon, Avatar, RailTip, StatusDot } from "@/components/primitives";
+import { Icon, Avatar, RailTip, StatusDot, TRUNCATE } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { KeepAliveCell } from "@/components/views/shared";
 import { BrandBadge } from "@/components/brand/Brand";
@@ -286,9 +286,9 @@ function RailAccountMenu({ name, email, avatar }: { name: string; email?: string
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px" }}>
             <Avatar name={name} src={avatar} size={32} you />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, ...TRUNCATE }}>{name}</div>
               {email && (
-                <div style={{ fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 11, color: "var(--on-surface-variant)", ...TRUNCATE }}>
                   {email}
                 </div>
               )}

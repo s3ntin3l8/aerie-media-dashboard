@@ -25,6 +25,9 @@ import {
   PosterTile,
   Avatar,
   catColor,
+  hoverGlow,
+  TRUNCATE,
+  listDivider,
 } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import {
@@ -253,19 +256,19 @@ function StreamRow({ s, i, big, role, allServices, users, onSelect }: { s: impor
   return (
     <div
       onClick={canOpen ? () => onSelect!({ kind: s.kind, tmdbId: s.tmdbId, grandparentRatingKey: s.grandparentRatingKey }) : undefined}
-      style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" : "none", cursor: canOpen ? "pointer" : "default" }}
+      style={{ position: "relative", display: "flex", gap: 13, padding: big ? "15px 16px" : "12px 16px", borderTop: listDivider(i, 50), cursor: canOpen ? "pointer" : "default" }}
     >
       <span style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 9999, background: accent }} />
       {/* audio covers (ABS books, albums) are square; video posters 2:3 */}
       <PosterTile title={s.title} kind={s.kind} cat="stream" w={big ? 50 : 42} ratio={s.kind === "track" ? 1 : 1.5} art={s.art} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
-          <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: big ? 15 : 13.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: big ? 15 : 13.5, color: "var(--on-surface)", ...TRUNCATE }}>
             {s.title}
           </span>
           {s.paused ? <Icon name="pause_circle" size={14} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={11} /> : null}
         </div>
-        <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginBottom: 8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginBottom: 8, ...TRUNCATE }}>
           {s.ep || (s.kind === "movie" ? s.year : "")}
           {s.ep || s.year ? " · " : ""}
           {s.device}
@@ -436,19 +439,19 @@ export function StreamCard({ s, role, allServices, users }: { s: import("@/lib/t
   const titleBlock = (
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-        <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 18, color: "var(--on-surface)", ...TRUNCATE }}>
           {s.title}
         </span>
         {s.paused ? <Icon name="pause_circle" size={16} color="var(--on-surface-variant)" /> : s.kind === "track" ? <Equalizer color={c} h={12} /> : null}
       </div>
       {s.ep && (
-        <div style={{ fontSize: 13, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.ep}</div>
+        <div style={{ fontSize: 13, color: "var(--on-surface)", ...TRUNCATE }}>{s.ep}</div>
       )}
       {s.narrator && (
-        <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Read by {s.narrator}</div>
+        <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", ...TRUNCATE }}>Read by {s.narrator}</div>
       )}
       <StreamMeta s={s} />
-      <div style={{ fontSize: 12, color: "var(--on-surface)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <div style={{ fontSize: 12, color: "var(--on-surface)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 5, ...TRUNCATE }}>
         <Icon name="devices" size={12} color="var(--on-surface-variant)" />
         {s.device}
       </div>
@@ -668,14 +671,7 @@ export function ServiceTiles({ role, onOpen, onAll, services, fill, serviceIds }
           transition: "border-color .18s, transform .1s, box-shadow .18s",
           overflow: "hidden",
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = `color-mix(in srgb, ${c} 55%, transparent)`;
-          e.currentTarget.style.boxShadow = `0 0 0 3px color-mix(in srgb, ${c} 8%, transparent)`;
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "var(--outline-variant)";
-          e.currentTarget.style.boxShadow = "none";
-        }}
+        {...hoverGlow(c)}
       >
         <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: c }} />
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -789,7 +785,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
             target="_blank"
             rel="noopener noreferrer"
             title={`Open https://${s.host} in a new tab`}
-            style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", textDecoration: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", cursor: "pointer" }}
+            style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)", textDecoration: "none", ...TRUNCATE, display: "block", cursor: "pointer" }}
             onMouseEnter={(e) => {
               e.currentTarget.style.color = "var(--primary)";
               e.currentTarget.style.textDecoration = "underline";
@@ -939,10 +935,10 @@ export function StatusPanel({ role, onAll, fill }: { role: Role; onAll?: () => v
       ) : (
       <div style={{ display: "flex", flexDirection: "column" }}>
         {list.map((s, i) => (
-          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 16px", borderTop: listDivider(i) }}>
             <StatusDot status={s.status} size={7} />
             <div style={{ minWidth: 0, flex: "0 0 96px" }}>
-              <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</div>
+              <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--on-surface)", ...TRUNCATE }}>{s.name}</div>
             </div>
             <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "center", overflow: "hidden" }}>
               <Heartbeat beats={s.beats.slice(-18)} h={18} barW={3} gap={1.5} />
@@ -999,10 +995,10 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
         {items.map((r, i) => {
           const u = users.find((x) => x.id === r.portalUser);
           return (
-            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: rowPadding, borderTop: listDivider(i) }}>
               <PosterTile title={r.title} kind={r.kind} cat="request" w={32} art={r.art} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", ...TRUNCATE }}>
                   {r.title} <span style={{ fontWeight: 400, color: "var(--on-surface-variant)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{r.year}</span>
                 </div>
                 <div style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
@@ -1216,7 +1212,7 @@ export function RecentlyAdded({ fill, limit, mediaKind, title, source, onSelect 
               style={{ width: 76, flexShrink: 0, cursor: canOpen ? "pointer" : "default" }}
             >
               <PosterTile title={r.title} kind={r.kind} cat={r.cat} w={76} art={r.art} />
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, ...TRUNCATE }}>{r.title}</div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{r.year}</div>
             </div>
             );
@@ -1317,10 +1313,10 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
     >
       <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((q, i) => (
-          <div key={q.id} style={{ padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+          <div key={q.id} style={{ padding: rowPadding, borderTop: listDivider(i) }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
               <Icon name={q.svc === "radarr" ? "movie" : q.svc === "nzbget" ? "download" : q.svc === "listenarr" ? "headphones" : q.svc === "qbittorrent" ? "downloading" : "live_tv"} size={14} color="var(--originator-third-party)" />
-              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{q.title}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: 1, ...TRUNCATE }}>{q.title}</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{q.speed}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1356,10 +1352,10 @@ export function StoragePanel({ fill, limit, title }: { fill?: boolean; limit?: n
           const pct = m.totalBytes > 0 ? (used / m.totalBytes) * 100 : 0;
           const color = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
           return (
-            <div key={m.path} style={{ padding: "11px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+            <div key={m.path} style={{ padding: "11px 16px", borderTop: listDivider(i) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
                 <Icon name="folder" size={14} color="var(--on-surface-variant)" />
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.label}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", flex: 1, ...TRUNCATE }}>{m.label}</span>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{fmtBytes(m.freeBytes)} free</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1404,8 +1400,8 @@ export function UpcomingPanel({ fill, limit, window: windowDays, title, onSelect
               title={u.title}
             >
               <PosterTile title={u.title} kind={u.kind} cat="request" w={76} art={u.art} />
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.title}</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={u.ep || ""}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, ...TRUNCATE }}>{u.title}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", ...TRUNCATE }} title={u.ep || ""}>
                 {fmtDay(u.when)}{u.ep ? ` · ${u.ep}` : ""}
               </div>
             </div>
@@ -1438,7 +1434,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
               {displayUsers.map((u) => (
                 <div key={u.name} style={{ display: "flex", alignItems: "center", gap: 9 }}>
                   <Avatar name={u.name} src={u.avatar} size={20} color="var(--originator-own)" />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: "0 0 110px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--on-surface)", flex: "0 0 110px", ...TRUNCATE }}>{u.name}</span>
                   <div style={{ flex: 1 }}>
                     <ProgressBar pct={(u.plays / maxUser) * 100} color="var(--originator-own)" h={5} />
                   </div>
@@ -1453,7 +1449,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
             const renderItem = (m: (typeof topStats.media)[number], i: number) => (
               <div key={`${m.title}-${i}`} style={{ width: 76, flexShrink: 0 }}>
                 <PosterTile title={m.title} kind="movie" cat="stream" w={76} art={m.art} />
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.title}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, ...TRUNCATE }}>{m.title}</div>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{m.plays} plays</div>
               </div>
             );
@@ -1502,9 +1498,9 @@ export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; 
     >
       <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((d, i) => (
-          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: rowPadding, borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+          <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: rowPadding, borderTop: listDivider(i) }}>
             <Icon name={d.svc === "radarr" ? "movie" : d.svc === "listenarr" ? "headphones" : d.svc === "qbittorrent" ? "downloading" : "live_tv"} size={14} color="var(--originator-third-party)" />
-            <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</span>
+            <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1, ...TRUNCATE }}>{d.title}</span>
             <Pill tone={d.event === "imported" ? "originator-own" : "on-surface-variant"}>{d.event}</Pill>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", minWidth: 52, textAlign: "right" }}>{timeAgo(d.when)}</span>
           </div>
@@ -1619,7 +1615,7 @@ export function DiscoverPanel({
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface)", marginTop: 6, ...TRUNCATE }}>{d.title}</div>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{d.year || ""}</div>
                 {tone && label && (
                   <Pill tone={tone} style={{ fontSize: 8.5, padding: "1px 5px", marginTop: 3, width: "100%", textAlign: "center", display: "block" }}>{label}</Pill>

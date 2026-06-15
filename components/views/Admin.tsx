@@ -8,7 +8,7 @@ import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { setVisibility, upsertService, setServiceSecret, mergeServiceForwardAuth, clearServiceForwardAuth, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
-import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
+import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge, ExpandableSection, TRUNCATE, listDivider } from "@/components/primitives";
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
@@ -126,8 +126,6 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   const cols = "1.4fr 0.7fr 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 1fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
-  const [discoveredOpen, setDiscoveredOpen] = useState(false);
-  const [nodesOpen, setNodesOpen] = useState(false);
 
   // Optimistically flip active in the snapshot (so the row dims + the service drops from
   // every user surface instantly), then persist; revert on failure.
@@ -199,22 +197,10 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   // additive — clicking Add opens the service modal pre-filled; the row self-clears once added.
   // Dismiss hides a host you never want to add (persisted; restorable below).
   const discoveredEl = (traefikDiscovered.length > 0 || traefikDismissed.length > 0) ? (
-    <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)", padding: 14, marginBottom: 12 }}>
-      <button
-        type="button"
-        onClick={() => setDiscoveredOpen((v) => !v)}
-        aria-expanded={discoveredOpen}
-        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: 0, border: "none", background: "transparent", color: "inherit", cursor: "pointer", marginBottom: discoveredOpen ? 10 : 0 }}
-      >
-        <Icon name="travel_explore" size={16} color="var(--primary)" />
-        <Eyebrow>Discovered via Traefik</Eyebrow>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{traefikDiscovered.length}</span>
-        <Icon name="expand_more" size={18} color="var(--on-surface-variant)" style={{ marginLeft: "auto", transform: discoveredOpen ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
-      </button>
-      {discoveredOpen && (<>
+    <ExpandableSection icon="travel_explore" title="Discovered via Traefik" count={traefikDiscovered.length}>
       <div style={{ display: "flex", flexDirection: "column" }}>
         {traefikDiscovered.map((r, i) => (
-          <div key={r.router} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+          <div key={r.router} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: listDivider(i) }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1, minWidth: 0 }}>{r.hosts[0]}</span>
             <RouteBadges route={r} />
             {multiTraefik && (
@@ -250,8 +236,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
           </div>
         </details>
       )}
-      </>)}
-    </div>
+    </ExpandableSection>
   ) : null;
 
   // Traefik node health from the aggregator, already scoped server-side to only the nodes that route
@@ -259,25 +244,13 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   const nodeStatusColor = (st: string) =>
     st === "ok" ? "var(--originator-own)" : st === "degraded" ? "var(--amber)" : st === "unreachable" ? "var(--error)" : "var(--on-surface-variant)";
   const nodesEl = traefikInstances.length > 0 ? (
-    <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)", padding: 14, marginBottom: 12 }}>
-      <button
-        type="button"
-        onClick={() => setNodesOpen((v) => !v)}
-        aria-expanded={nodesOpen}
-        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: 0, border: "none", background: "transparent", color: "inherit", cursor: "pointer", marginBottom: nodesOpen ? 10 : 0 }}
-      >
-        <Icon name="lan" size={16} color="var(--primary)" />
-        <Eyebrow>Traefik nodes</Eyebrow>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{traefikInstances.length}</span>
-        <Icon name="expand_more" size={18} color="var(--on-surface-variant)" style={{ marginLeft: "auto", transform: nodesOpen ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
-      </button>
-      {nodesOpen && (
+    <ExpandableSection icon="lan" title="Traefik nodes" count={traefikInstances.length}>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {traefikInstances.map((n, i) => {
             const color = nodeStatusColor(n.status);
             const served = (n.serves ?? []).map(traefikName);
             return (
-              <div key={n.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+              <div key={n.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: listDivider(i) }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--on-surface)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1, minWidth: 0 }}>{n.name}</span>
                 {n.role && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--on-surface-variant)", opacity: 0.8 }}>{n.role}</span>}
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontFamily: "var(--font-mono)", fontSize: 10, lineHeight: 1.4, padding: "1px 6px", borderRadius: 9999, color, border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`, background: `color-mix(in srgb, ${color} 12%, transparent)`, whiteSpace: "nowrap" }}>
@@ -296,8 +269,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
             );
           })}
         </div>
-      )}
-    </div>
+    </ExpandableSection>
   ) : null;
 
   if (isMobile) {
@@ -463,7 +435,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
           const pinned = favorites.includes(s.id);
           const dim = s.active ? undefined : 0.5;
           return (
-            <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+            <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: listDivider(i) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, opacity: dim }}>
                 <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
                   <ServiceLogo service={s} size={28} radius={7} />
@@ -471,13 +443,13 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{s.name}</span>
+                    <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", ...TRUNCATE, minWidth: 0 }}>{s.name}</span>
                     {!s.active && <span style={{ flexShrink: 0 }}><Pill rawColor="var(--on-surface-variant)">inactive</Pill></span>}
                   </div>
                 </div>
               </div>
               <span style={{ opacity: dim }}><CatBadge cat={s.cat} size="xs" /></span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", ...TRUNCATE, opacity: dim }}>{s.host}</span>
               {/* Cert + SSO + route-health + Authentik access, consolidated into one column. */}
               <span style={{ opacity: dim, minWidth: 0 }}><ProxyAccessCell route={s.route} access={s.authentik} reserve /></span>
               <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
@@ -722,7 +694,7 @@ function AdminVisibility({ isMobile }: { isMobile: boolean }) {
             {groups.map((g, i) => {
               const on = state[`${s.id}:${g.name}`] ?? false;
               return (
-                <div key={g.name} style={{ borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+                <div key={g.name} style={{ borderTop: listDivider(i) }}>
                   <button
                     onClick={() => toggle(s.id, g.name)}
                     aria-label={`${s.name} visible to ${g.name}: ${on ? "on" : "off"}`}
@@ -767,7 +739,7 @@ function AdminVisibility({ isMobile }: { isMobile: boolean }) {
           ))}
         </div>
         {services.map((s, i) => (
-          <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", padding: "10px 18px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+          <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", padding: "10px 18px", borderTop: listDivider(i) }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               <ServiceLogo service={s} size={20} radius={5} />
               <span style={{ fontWeight: 600, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</span>

@@ -9,7 +9,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useData } from "@/components/portal/DataProvider";
 import { PanelShell, Empty, useTick } from "@/components/panels";
 import { fmtBytes, fmtPercent, fmtMbps } from "@/lib/format";
-import { Icon, Eyebrow, StatusDot } from "@/components/primitives";
+import { Icon, Eyebrow, StatusDot, listDivider } from "@/components/primitives";
 import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 
 type CSS = React.CSSProperties;
@@ -526,7 +526,7 @@ export function HealthWidget({ fill, limit, title }: { fill?: boolean; limit?: n
             const isError = h.type.toLowerCase() === "error";
             const c = isError ? "var(--error)" : "var(--amber)";
             return (
-              <div key={`${h.svc}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderTop: i ? "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" : "none" }}>
+              <div key={`${h.svc}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderTop: listDivider(i) }}>
                 <Icon name={isError ? "error" : "warning"} size={15} color={c} />
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", color: c, flex: "0 0 56px" }}>{h.svc}</span>
                 <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1 }}>{h.message}</span>

@@ -11,7 +11,7 @@
 import { useRouter } from "next/navigation";
 import type { NowPlaying } from "@/lib/types";
 import { useStreamProgress } from "@/components/hooks/useStreamProgress";
-import { Icon, PosterTile, ProgressBar } from "@/components/primitives";
+import { Icon, PosterTile, ProgressBar, TRUNCATE } from "@/components/primitives";
 import { fmtTime } from "@/lib/time";
 
 export function NowPlayingChip({ sessions, accent, compact = false }: { sessions: NowPlaying[]; accent: string; compact?: boolean }) {
@@ -35,7 +35,7 @@ export function NowPlayingChip({ sessions, accent, compact = false }: { sessions
       <PosterTile title={s.title} kind={s.kind} cat="stream" w={posterW} ratio={s.kind === "track" ? 1 : 1.4} rounded={4} art={s.art} />
       <Icon name={s.paused ? "pause" : "play_arrow"} size={15} color={accent} />
       <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: titleMax }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-surface)", ...TRUNCATE, maxWidth: titleMax }}>
           {s.title}{extra > 0 ? ` +${extra}` : ""}
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}>

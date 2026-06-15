@@ -7,7 +7,7 @@
 // returns null when it has no data, so missing fields just vanish.
 // ============================================================
 import React from "react";
-import { Icon, Avatar } from "@/components/primitives";
+import { Icon, Avatar, TRUNCATE } from "@/components/primitives";
 import type { NowPlaying } from "@/lib/types";
 
 type Tone = "neutral" | "good" | "warn" | "bad";
@@ -72,7 +72,7 @@ export function StreamMeta({ s }: { s: NowPlaying }) {
       {se && <DChip tone="neutral" strong>{se}</DChip>}
       {s.chapter && <DChip tone="neutral" strong>{`CH ${s.chapter.index}/${s.chapter.count}`}</DChip>}
       {s.chapter?.title && (
-        <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 }}>
+        <span style={{ fontSize: 11.5, color: "var(--on-surface-variant)", ...TRUNCATE, maxWidth: 220 }}>
           {s.chapter.title}
         </span>
       )}
