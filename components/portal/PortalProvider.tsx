@@ -6,7 +6,7 @@
 // ============================================================
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import type { AppUser, Role } from "@/lib/types";
+import type { AppUser, Role, DashboardStore } from "@/lib/types";
 import { signOutAction, setFavoritesAction } from "@/app/(portal)/actions";
 import { NAV_ITEMS } from "@/lib/nav";
 
@@ -25,6 +25,9 @@ interface PortalState {
   /** effective role after admin "preview as member" toggle */
   role: Role;
   toggleRole: () => void;
+  /** the signed-in user's saved per-role dashboard layouts + mobile overlay (null when none stored).
+   *  Seeded server-side so desktop Home and the mobile dashboard read one source. */
+  initialDashboards: DashboardStore | null;
   /** pinned-favorite service ids (rail quick-launch) */
   favorites: string[];
   /** pin/unpin a service; persists to the DB optimistically */
@@ -56,7 +59,7 @@ const NAV: Record<string, string> = Object.fromEntries(
   NAV_ITEMS.filter((item) => item.gKey).map((item) => [item.gKey!, item.href])
 );
 
-export function PortalProvider({ user, oidc = false, favorites: initialFavorites = [], children }: { user: AppUser; oidc?: boolean; favorites?: string[]; children: React.ReactNode }) {
+export function PortalProvider({ user, oidc = false, favorites: initialFavorites = [], initialDashboards = null, children }: { user: AppUser; oidc?: boolean; favorites?: string[]; initialDashboards?: DashboardStore | null; children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const realRole = user.role;
@@ -179,7 +182,7 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
   }, [router]);
 
   return (
-    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, oidc, realRole, role, toggleRole, favorites, toggleFavorite, lastOpened, keptAliveIds, setKeptAliveIds, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
+    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, oidc, realRole, role, toggleRole, initialDashboards, favorites, toggleFavorite, lastOpened, keptAliveIds, setKeptAliveIds, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
       {children}
     </Ctx.Provider>
   );

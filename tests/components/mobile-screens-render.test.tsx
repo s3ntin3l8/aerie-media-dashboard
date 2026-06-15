@@ -18,13 +18,13 @@ vi.mock("@/app/(portal)/actions", () => ({ signOutAction: vi.fn(), setFavoritesA
 const portal = {
   role: "admin", realRole: "admin", user: { id: "u1", name: "Ada", email: "a@x" }, favorites: [], toggleFavorite: vi.fn(),
   modalOpen: false, setModalOpen: vi.fn(), theme: "dark", toggleTheme: vi.fn(), setPaletteOpen: vi.fn(), signOut: vi.fn(), oidc: true,
-  keptAliveIds: ["media"],
+  keptAliveIds: ["media"], initialDashboards: null,
 };
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn(), usePatchData: () => vi.fn() }));
 
 import { useData } from "@/components/portal/DataProvider";
-import { MobileHome } from "@/components/mobile/screens/MobileHome";
+import { MobileDashboard } from "@/components/mobile/screens/MobileDashboard";
 import { MobileStatus } from "@/components/mobile/screens/MobileStatus";
 import { MobileStreams } from "@/components/mobile/screens/MobileStreams";
 import { MobileRequests } from "@/components/mobile/screens/MobileRequests";
@@ -55,7 +55,7 @@ beforeEach(() => {
 });
 
 describe("mobile screen smoke renders", () => {
-  it("MobileHome renders", () => { expect(render(<MobileHome />).container.textContent).toBeTruthy(); });
+  it("MobileDashboard renders", () => { expect(render(<MobileDashboard />).container.textContent).toBeTruthy(); });
   it("MobileStatus renders", () => { expect(render(<MobileStatus />).container.textContent).toBeTruthy(); });
   it("MobileStreams renders", () => { expect(render(<MobileStreams />).container.textContent).toBeTruthy(); });
   it("MobileRequests renders", () => { expect(render(<MobileRequests />).container.textContent).toBeTruthy(); });

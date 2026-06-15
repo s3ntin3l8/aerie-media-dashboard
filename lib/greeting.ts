@@ -2,7 +2,7 @@
 // AERIE — time-of-day greeting helper
 // ------------------------------------------------------------
 // Extracted from components/views/Home.tsx GreetingHeader.
-// Used by GreetingHeader, MobileHome screen, and Login view.
+// Used by GreetingHeader, the MobileDashboard screen, and the Login view.
 // Note: always render the output with suppressHydrationWarning —
 // server and client may disagree on the current hour.
 // ============================================================
