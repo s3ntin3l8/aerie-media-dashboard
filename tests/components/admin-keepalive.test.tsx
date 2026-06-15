@@ -37,6 +37,7 @@ vi.mock("@/components/portal/PortalProvider", () => ({
     modalOpen: false,
     paletteOpen: false,
     setPaletteOpen: vi.fn(),
+    keptAliveIds: [],
   }),
 }));
 
@@ -95,9 +96,28 @@ describe("Admin — keep-alive toggle", () => {
     );
   });
 
+  it("renders the consolidated proxy/access column and the compact stored-key indicator", () => {
+    const cert = { domains: ["sonarr.test"], notAfter: 1893456000, daysRemaining: 20, issuer: "LE", resolver: "le", keyType: "ECDSA" };
+    seedData([mkSvc({
+      hasSecret: true,
+      route: { serviceId: "sonarr", router: "sonarr@docker", rule: "", hosts: ["sonarr.test"], status: "enabled", tls: true, forwardAuth: true, middlewares: ["authentik@docker"], serverStatus: "up", cert },
+      authentik: { serviceId: "sonarr", appName: "Sonarr", appSlug: "sonarr", host: "sonarr.test", providerName: null, providerType: null, everyone: true, groups: [], users: 0, policyGated: false },
+    })]);
+    render(<Admin />);
+
+    // Proxy & access column: SSO chip + cert expiry + Authentik access, all in one cell.
+    expect(screen.getByText("SSO")).toBeInTheDocument();
+    expect(screen.getByText(/cert 20d/)).toBeInTheDocument();
+    expect(screen.getByText("everyone")).toBeInTheDocument();
+    // API-key column is icon-only on desktop; the AES-GCM state lives in the tooltip.
+    expect(screen.getByTitle("API key stored (AES-GCM encrypted)")).toBeInTheDocument();
+  });
+
   it("renders the keep-alive toggle in the mobile card", () => {
     mobile.value = true;
-    seedData([mkSvc(), plex]);
+    // keepAlive:true so the mobile card's corner keep-alive glyph branch renders too;
+    // hasSecret:true so the (non-compact) stored-key indicator renders in the mobile card.
+    seedData([mkSvc({ keepAlive: true, hasSecret: true }), plex]);
     render(<Admin />);
 
     // Embeddable service: enabled toggle; non-embeddable: disabled with explanatory title.
