@@ -193,16 +193,28 @@ export function Status() {
         ? "Prometheus unreachable — check the service baseUrl in Admin → Services."
         : "Prometheus not configured — add the service and set a baseUrl in Admin → Services.");
   const list = useVisibleServices("status");
-  const [healthSort, setHealthSort] = useState<"name" | "status" | "uptime" | "ms">("name");
+  const [healthSort, setHealthSort] = useState<"name" | "status" | "uptime" | "ms" | "cert" | "sso">("name");
   const sortedList = useMemo(() => [...list].sort((a, b) => {
     switch (healthSort) {
       case "name":   return a.name.localeCompare(b.name);
       case "status": return HEALTH_STATUS_ORDER[a.status] - HEALTH_STATUS_ORDER[b.status];
       case "uptime": return b.uptime - a.uptime;
       case "ms":     return (a.ms ?? Infinity) - (b.ms ?? Infinity);
+      // Soonest-expiring cert first; services with no cert sink to the bottom. SSO-protected
+      // services first. Both fall back to name so ties read in a stable, alphabetical order.
+      case "cert":   return ((a.route?.cert?.daysRemaining ?? Infinity) - (b.route?.cert?.daysRemaining ?? Infinity)) || a.name.localeCompare(b.name);
+      case "sso":    return ((b.route?.forwardAuth ? 1 : 0) - (a.route?.forwardAuth ? 1 : 0)) || a.name.localeCompare(b.name);
       default:       return 0;
     }
   }), [list, healthSort]);
+  // Cert / SSO sorts are only meaningful when Traefik route data exists, so only offer them
+  // when at least one visible service actually carries that data.
+  const sortOpts = useMemo(() => {
+    const opts: Array<"name" | "status" | "uptime" | "ms" | "cert" | "sso"> = ["name", "status", "uptime", "ms"];
+    if (list.some((s) => s.route?.cert)) opts.push("cert");
+    if (list.some((s) => s.route?.forwardAuth)) opts.push("sso");
+    return opts;
+  }, [list]);
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
@@ -249,8 +261,8 @@ export function Status() {
             <div style={{ display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", marginRight: 4 }}>Sort</span>
-                {(["name", "status", "uptime", "ms"] as const).map((opt) => {
-                  const labels: Record<string, string> = { name: "Name", status: "Status", uptime: "Uptime", ms: "Response" };
+                {sortOpts.map((opt) => {
+                  const labels: Record<string, string> = { name: "Name", status: "Status", uptime: "Uptime", ms: "Response", cert: "Cert", sso: "SSO" };
                   const active = healthSort === opt;
                   return (
                     <button
