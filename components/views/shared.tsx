@@ -5,7 +5,8 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { Icon, Eyebrow, CatBadge } from "@/components/primitives";
-import type { TraefikRoute, AuthentikAccess, Category } from "@/lib/types";
+import type { TraefikRoute, AuthentikAccess, Category, Service } from "@/lib/types";
+import { keepAliveDisplay } from "@/lib/embed/keepAliveDisplay";
 
 export function PageHeader({
   eyebrow,
@@ -158,6 +159,28 @@ export function CertCell({ route, reserve = false, iconOnly = false }: { route?:
     return <Icon name="lock" size={11} color="var(--on-surface-variant)" />;
   }
   return reserve ? <DashCell /> : null;
+}
+
+/** Keep-alive indicator for an embeddable service. Two-state (see keepAliveDisplay): a dim outline
+ *  `autorenew` glyph when merely flagged, a filled + glowing accent glyph when its embed is live
+ *  right now. `reserve` renders a muted "—" placeholder so aligned columns stay flush (used in the
+ *  /status health table); `iconOnly` drops the chip frame for tight spots (rail / launcher card). */
+export function KeepAliveCell({ service, live, reserve = false, iconOnly = false }: { service: Service; live: boolean; reserve?: boolean; iconOnly?: boolean }) {
+  const d = keepAliveDisplay(service, live);
+  if (!d.show) return reserve ? <DashCell /> : null;
+  const glow = d.live ? { filter: "drop-shadow(0 0 4px color-mix(in srgb, var(--primary) 60%, transparent))" } : undefined;
+  if (iconOnly) {
+    return (
+      <span title={d.title} style={{ display: "inline-flex", opacity: d.live ? 1 : 0.7, ...glow }}>
+        <Icon name="autorenew" size={12} fill={d.live} color={d.color} />
+      </span>
+    );
+  }
+  return (
+    <RouteChip color={d.color} title={d.title}>
+      <Icon name="autorenew" size={11} fill={d.live} /> {d.live ? "live" : "keep-alive"}
+    </RouteChip>
+  );
 }
 
 /** Route-problem chip shown only when the router/backend is unhealthy. Stays inline in the

@@ -14,14 +14,14 @@ import { useEmbedProbe } from "@/components/hooks/useEmbedProbe";
 import { Icon, StatusDot, Heartbeat, Divider, SearchField } from "@/components/primitives";
 import { Empty } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
-import { PageHeader } from "@/components/views/shared";
+import { PageHeader, KeepAliveCell } from "@/components/views/shared";
 import { NowPlayingChip } from "@/components/views/NowPlayingChip";
 import { embedAuthSummary } from "@/components/views/embedAuth";
 
 
 function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
   const c = catColor(s.cat);
-  const { favorites, toggleFavorite, user, oidc } = usePortal();
+  const { favorites, toggleFavorite, user, oidc, keptAliveIds } = usePortal();
   const pinned = favorites.includes(s.id);
   // Reuse the embed subheader's pure auth/cert derivation so the card's lock + shield
   // signals stay consistent with what the opened service view shows (see embedAuth.ts).
@@ -116,6 +116,8 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
             <Icon name="shield_person" size={13} color={authColor} />
           </span>
         )}
+        {/* Keep-alive flag — dim when flagged-idle, filled + glowing when its embed is live now. */}
+        <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} iconOnly />
         <span
           style={{
             marginLeft: "auto",

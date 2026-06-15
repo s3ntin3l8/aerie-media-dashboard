@@ -31,6 +31,10 @@ interface PortalState {
   toggleFavorite: (id: string) => void;
   /** id of the most-recently-opened service (rail jump-back slot), or null */
   lastOpened: string | null;
+  /** ids of keep-alive embeds currently mounted/live in EmbedHost (desktop only; [] on mobile) */
+  keptAliveIds: string[];
+  /** EmbedHost writes the live keep-alive set here so the rail / status / launcher can read it */
+  setKeptAliveIds: React.Dispatch<React.SetStateAction<string[]>>;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
   /** true while any modal (service/request) is open — suppresses portal shortcuts */
@@ -60,6 +64,7 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
   const [role, setRole] = useState<Role>(realRole);
   const [favorites, setFavorites] = useState<string[]>(initialFavorites);
   const [lastOpened, setLastOpened] = useState<string | null>(null);
+  const [keptAliveIds, setKeptAliveIds] = useState<string[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   // Ref mirror so the (stable) keydown listener always sees the latest value.
@@ -174,7 +179,7 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
   }, [router]);
 
   return (
-    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, oidc, realRole, role, toggleRole, favorites, toggleFavorite, lastOpened, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
+    <Ctx.Provider value={{ theme, setTheme, toggleTheme, user, oidc, realRole, role, toggleRole, favorites, toggleFavorite, lastOpened, keptAliveIds, setKeptAliveIds, paletteOpen, setPaletteOpen, modalOpen, setModalOpen, signOut }}>
       {children}
     </Ctx.Provider>
   );

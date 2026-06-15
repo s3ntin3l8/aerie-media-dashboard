@@ -12,9 +12,10 @@
 // Lazy: a service's iframe mounts the first time it's opened, then stays alive.
 // Desktop only — mobile uses a separate render path (MobilePortal).
 // ============================================================
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useData } from "@/components/portal/DataProvider";
+import { usePortal } from "@/components/portal/PortalProvider";
 import { ServiceView } from "@/components/views/Launcher";
 import { serviceIdFromPath, nextMountedIds } from "@/lib/embed/keepAlive";
 
@@ -35,11 +36,13 @@ export function EmbedHost() {
   // longer keep-alive (flag turned off, service deactivated/deleted) so they tear down + reload next time.
   // `services` is a stable reference between polls (memoized in DataProvider), so this effect only
   // re-runs on navigation or an actual data change — not every render.
-  const [mountedIds, setMountedIds] = useState<string[]>([]);
+  // State is lifted into PortalProvider (`keptAliveIds`) so the rail / status / launcher can reflect
+  // which embeds are live right now; EmbedHost remains the sole writer.
+  const { keptAliveIds: mountedIds, setKeptAliveIds: setMountedIds } = usePortal();
   useEffect(() => {
     const keepIds = services.filter((s) => s.embeddable && s.keepAlive).map((s) => s.id);
     setMountedIds((prev) => nextMountedIds(prev, keepIds, pathId));
-  }, [pathId, services]);
+  }, [pathId, services, setMountedIds]);
 
   // Render the active embed on the SAME render it's first opened (the effect just persists it to
   // state) — avoids a one-frame blank before the iframe mounts.

@@ -9,7 +9,7 @@ import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
 import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";
 import { ServiceLogo } from "@/components/ServiceLogo";
-import { PageHeader, StatTile, RouteHealthBadge, CertCell, SsoCell } from "@/components/views/shared";
+import { PageHeader, StatTile, RouteHealthBadge, CertCell, SsoCell, KeepAliveCell } from "@/components/views/shared";
 import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
 
 const HEALTH_STATUS_ORDER: Record<string, number> = { up: 0, degraded: 1, down: 2, unknown: 3 };
@@ -177,7 +177,7 @@ function useSecondsAgo(dep: unknown): string {
 }
 
 export function Status() {
-  const { role } = usePortal();
+  const { role, keptAliveIds } = usePortal();
   const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured, beszelSystemId } = useData();
   const metricsAge = useSecondsAgo(metrics);
   const bothConfigured = prometheusConfigured && beszelConfigured;
@@ -296,6 +296,11 @@ export function Status() {
                   </div>
                   <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }}>
                     <SsoCell route={s.route} reserve />
+                  </div>
+                  {/* Keep-alive: dedicated reserved column (muted "—" when off) so it lines up
+                      with Cert/SSO across rows. Filled + glowing when the embed is live now. */}
+                  <div style={{ flex: "0 0 46px", display: "flex", justifyContent: "flex-end" }}>
+                    <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} reserve iconOnly />
                   </div>
                   {/* Always reserve this column (even when empty) so heartbeats stay aligned
                       across monitored and unmonitored rows. */}
