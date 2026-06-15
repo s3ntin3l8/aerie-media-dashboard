@@ -1,18 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mockHttp, mockClientsRegistry, mockEnv } from "./clientsMocks";
 
 // Same harness as clients-media.test.ts: stub the HTTP layer + registry creds so the real
 // normalizers run against controlled upstream payloads, with no DB or network.
-vi.mock("@/lib/integrations/http", () => ({
-  fetchJson: vi.fn(),
-  fetchJsonRaw: vi.fn(),
-  fetchRaw: vi.fn(),
-  IntegrationError: class IntegrationError extends Error {
-    service: string;
-    constructor(service: string, message: string) { super(`[${service}] ${message}`); this.service = service; }
-  },
-}));
-vi.mock("@/lib/integrations/registry", () => ({ getServiceSecret: vi.fn(), getServiceCredentials: vi.fn(), getDeploymentSetting: vi.fn() }));
-vi.mock("@/lib/env", () => ({ env: { encryptionKey: "0".repeat(64), authSecret: "test", configFile: "/dev/null", databaseUrl: "file::memory:" }, authConfigured: false }));
+vi.mock("@/lib/integrations/http", () => mockHttp());
+vi.mock("@/lib/integrations/registry", () => mockClientsRegistry());
+vi.mock("@/lib/env", () => mockEnv());
 
 import { fetchJson } from "@/lib/integrations/http";
 import { getServiceCredentials } from "@/lib/integrations/registry";
