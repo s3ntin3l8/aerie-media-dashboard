@@ -7,7 +7,8 @@
 // ============================================================
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useData } from "@/components/portal/DataProvider";
-import { PanelShell, Empty, useTick, fmtBytes } from "@/components/panels";
+import { PanelShell, Empty, useTick } from "@/components/panels";
+import { fmtBytes, fmtPercent, fmtMbps } from "@/lib/format";
 import { Icon, Eyebrow, StatusDot } from "@/components/primitives";
 import type { ShortcutLink } from "@/components/portal/widgetCatalog";
 
@@ -500,9 +501,9 @@ export function HostStatsWidget({
         <StatRow>
           {showCpu && <Metric label="CPU" value={m.cpuPct != null ? m.cpuPct.toFixed(0) : "—"} unit={m.cpuPct != null ? "%" : undefined} icon="memory" color="var(--primary)" />}
           {showMemory && <Metric label="Memory" value={fmtBytes(m.memUsedBytes)} unit={` / ${fmtBytes(m.memTotalBytes)}`} icon="memory_alt" color="var(--originator-court)" />}
-          {showDisk && <Metric label="Disk" value={m.diskUsedBytes != null && m.diskTotalBytes ? String(Math.round((m.diskUsedBytes / m.diskTotalBytes) * 100)) : "—"} unit={m.diskTotalBytes ? "%" : undefined} icon="hard_drive" color="var(--amber)" />}
-          {showNet && <Metric label="Net out" value={m.netOutBps != null ? (m.netOutBps / 1e6).toFixed(1) : "—"} unit=" Mbps" icon="arrow_upward" color="var(--originator-third-party)" />}
-          {showNet && <Metric label="Net in" value={m.netInBps != null ? (m.netInBps / 1e6).toFixed(1) : "—"} unit=" Mbps" icon="arrow_downward" color="var(--originator-court)" />}
+          {showDisk && <Metric label="Disk" value={m.diskUsedBytes != null && m.diskTotalBytes ? String(fmtPercent(m.diskUsedBytes, m.diskTotalBytes)) : "—"} unit={m.diskTotalBytes ? "%" : undefined} icon="hard_drive" color="var(--amber)" />}
+          {showNet && <Metric label="Net out" value={m.netOutBps != null ? fmtMbps(m.netOutBps) : "—"} unit=" Mbps" icon="arrow_upward" color="var(--originator-third-party)" />}
+          {showNet && <Metric label="Net in" value={m.netInBps != null ? fmtMbps(m.netInBps) : "—"} unit=" Mbps" icon="arrow_downward" color="var(--originator-court)" />}
           {showLoad && <Metric label="Load" value={m.sysLoad != null ? m.sysLoad.toFixed(2) : "—"} icon="speed" color="var(--originator-own)" />}
           {showUptime && m.uptimeSec != null && <Metric label="Uptime" value={fmtUptime(m.uptimeSec)} icon="schedule" color="var(--primary)" />}
         </StatRow>

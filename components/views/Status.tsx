@@ -7,7 +7,8 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar } from "@/components/primitives";
-import { PanelShell, timeAgo, fmtBytes } from "@/components/panels";
+import { PanelShell, timeAgo } from "@/components/panels";
+import { fmtBytes, fmtPercent } from "@/lib/format";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile, RouteHealthBadge, CertCell, SsoCell, KeepAliveCell } from "@/components/views/shared";
 import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
@@ -395,7 +396,7 @@ export function Status() {
                   />
                   <MetricCard
                     title="Disk"
-                    value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${Math.round((metrics.diskUsedBytes / metrics.diskTotalBytes) * 100)}%` : "—"}
+                    value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${fmtPercent(metrics.diskUsedBytes, metrics.diskTotalBytes)}%` : "—"}
                     unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`}
                     color="var(--amber)"
                     data={metrics.diskHistory}

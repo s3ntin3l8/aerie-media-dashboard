@@ -13,6 +13,7 @@ import { isVisible } from "@/lib/visibility";
 import { resolveBySource } from "@/lib/widgets/capabilities";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { fmtTime } from "@/lib/time";
+import { fmtBytes } from "@/lib/format";
 import {
   Icon,
   Pill,
@@ -46,15 +47,6 @@ export function useTick(ms = 1000) {
     return () => clearInterval(t);
   }, [ms]);
   return now;
-}
-
-/** Human-readable byte size ("1.4 TB", "820 GB", "512 MB", "—" for null). */
-export function fmtBytes(b: number | null | undefined): string {
-  if (b == null) return "—";
-  const tb = b / 1_099_511_627_776;
-  if (tb >= 1) return `${tb.toFixed(1)} TB`;
-  const gb = b / 1_073_741_824;
-  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(b / 1_048_576).toFixed(0)} MB`;
 }
 
 /** Relative day label for an upcoming ISO date ("Today", "Tomorrow", "Mon 5"). */

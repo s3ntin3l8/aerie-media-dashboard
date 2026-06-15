@@ -12,6 +12,7 @@ import { createAuthCache } from "./tokenCache";
 import { getServiceCredentials, getDeploymentSetting, getServiceConfigsByLogo, getServiceConfigs } from "./registry";
 import { isTraefikSource } from "../servicePresets";
 import { env } from "@/lib/env";
+import { fmtPercent } from "@/lib/format";
 import type { MediaKind, NowPlaying, StreamGeo, StreamHistoryItem, MediaRequest, QueueItem, NzbgetStatus, QbittorrentStats, ServiceStatus, LibraryStat, RecentItem, DiscoverItem, RequestStatus, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, OverseerrQuota, QualityProfile, FileInfo, SeasonQuality, TraefikRoute, TraefikInstance, AuthentikAccess, LokiLine } from "@/lib/types";
 
 
@@ -2217,7 +2218,7 @@ interface ArrQueueRecord {
 export async function arrQueue(serviceId: "sonarr" | "radarr"): Promise<QueueItem[]> {
   const data = await arrGet<{ records: ArrQueueRecord[] }>(serviceId, `/api/v3/queue?pageSize=20`);
   return (data.records ?? []).map((r, i) => {
-    const pct = r.size && r.sizeleft != null ? Math.round(((r.size - r.sizeleft) / r.size) * 100) : 0;
+    const pct = r.size && r.sizeleft != null ? fmtPercent(r.size - r.sizeleft, r.size) : 0;
     return { id: `${serviceId}-${i}`, title: r.title, svc: serviceId, pct, eta: r.timeleft || "—", speed: "" };
   });
 }
@@ -2251,7 +2252,7 @@ export async function nzbgetQueue(): Promise<QueueItem[]> {
   return (groups ?? []).map((g, i) => {
     // Per-item rate/ETA aren't exposed (DownloadRate is global — see nzbgetStatus),
     // so rows carry progress only; the panel header shows the server-wide rate.
-    const pct = g.FileSizeMB && g.RemainingSizeMB != null ? Math.round(((g.FileSizeMB - g.RemainingSizeMB) / g.FileSizeMB) * 100) : 0;
+    const pct = g.FileSizeMB && g.RemainingSizeMB != null ? fmtPercent(g.FileSizeMB - g.RemainingSizeMB, g.FileSizeMB) : 0;
     return { id: `nzbget-${i}`, title: g.NZBName || "(unnamed)", svc: "nzbget", pct, eta: "—", speed: "" };
   });
 }
@@ -2769,7 +2770,7 @@ export async function listenarrQueue(): Promise<QueueItem[]> {
   return (data.items ?? []).map((r, i) => {
     // Prefer the byte counts (unambiguous units) over the reported progress when both exist.
     const pct = r.size && r.downloaded != null
-      ? Math.min(100, Math.max(0, Math.round((r.downloaded / r.size) * 100)))
+      ? fmtPercent(r.downloaded, r.size)
       : Math.min(100, Math.max(0, Math.round(r.progress ?? 0)));
     return {
       id: `listenarr-${r.id ?? i}`,
@@ -3001,7 +3002,7 @@ export async function qbittorrentQueue(): Promise<QueueItem[]> {
   const svc = await serviceClient("qbittorrent");
   const torrents = await qbitGet<QbitTorrentRecord[]>(svc, "/api/v2/torrents/info");
   return (torrents ?? []).map((t) => {
-    const pct = Math.min(100, Math.max(0, Math.round((t.progress ?? 0) * 100)));
+    const pct = fmtPercent(t.progress ?? 0, 1);
     const etaSec = t.eta ?? 0;
     return {
       id: `qbittorrent-${t.hash ?? Math.random()}`,
