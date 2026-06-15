@@ -12,7 +12,7 @@ import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } fro
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
-import { PageHeader, RouteBadges, MetaBadges, KeepAliveCell, CertCell, SsoCell, AccessCell, RouteHealthBadge } from "@/components/views/shared";
+import { PageHeader, RouteBadges, MetaBadges, KeepAliveCell, ProxyAccessCell } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { LogsModal } from "@/components/modals/LogsModal";
 import { serviceRequiresKey, matchPreset, isTraefikSource } from "@/lib/servicePresets";
@@ -56,9 +56,10 @@ function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest
 // Stored-secret indicator. Distinguishes a configured service (masked AES-GCM badge) from an
 // unconfigured one — warning-tinted "Not set" when the service type expects a key, neutral
 // "No key" for legitimately key-optional services (Gatus / Prometheus / NZBGet-without-auth).
-function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
+function KeyIndicator({ service, dim, compact = false }: { service: Service; dim?: number; compact?: boolean }) {
   const base = { display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11, opacity: dim } as const;
   if (service.hasSecret) {
+    if (compact) return <span title="API key stored (AES-GCM encrypted)" style={{ ...base }}><Icon name="lock" size={14} color="var(--originator-own)" /></span>;
     return (
       <span style={{ ...base, gap: 6, color: "var(--on-surface-variant)" }}>
         <Icon name="lock" size={12} color="var(--originator-own)" />
@@ -70,12 +71,14 @@ function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
   // choice). Recognize it the same lenient way the data layer does (isTraefikSource: id/name/logo)
   // so a renamed or custom-logo instance gets the neutral "No key" badge, not a spurious warning.
   if (!isTraefikSource(service) && serviceRequiresKey(service.id, service.logoSlug)) {
+    if (compact) return <span title="No API key set — this service expects one" style={{ ...base, color: "var(--warning)" }}><Icon name="warning" size={14} /></span>;
     return (
       <span style={{ ...base, color: "var(--warning)" }}>
         <Icon name="warning" size={12} />Not set
       </span>
     );
   }
+  if (compact) return <span title="No API key needed for this service" style={{ ...base, color: "var(--on-surface-variant)" }}><Icon name="lock_open" size={14} /></span>;
   return (
     <span style={{ ...base, color: "var(--on-surface-variant)" }}>
       <Icon name="lock_open" size={12} />No key
@@ -119,8 +122,8 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   const logsModalEl = lokiConfigured && logsFor ? (
     <LogsModal open serviceId={logsFor.id} serviceName={logsFor.name} logoSlug={logsFor.logoSlug} onClose={() => setLogsFor(null)} />
   ) : null;
-  // Service · Category · Host · Cert · SSO · Access · Embed · Active · Keep alive · API key · actions
-  const cols = "1.5fr 0.6fr 1fr 0.85fr 0.6fr 0.85fr 0.5fr 0.5fr 0.6fr 1fr 0.7fr";
+  // Service · Category · Host · Proxy & access · Embed · Active · Keep · API key · actions
+  const cols = "1.4fr 0.7fr 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 1fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
   const [discoveredOpen, setDiscoveredOpen] = useState(false);
@@ -427,7 +430,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
         onClick={() => handleSortClick(col)}
         style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
       >
-        <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined }}>{label}</Eyebrow>
+        <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined, whiteSpace: "nowrap" }}>{label}</Eyebrow>
         <Icon
           name={active ? (sort.dir === "asc" ? "expand_less" : "expand_more") : "unfold_more"}
           size={13}
@@ -444,18 +447,16 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
     {discoveredEl}
     {nodesEl}
     <div className="aerie-x-scroll">
-      <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
+      <div style={{ minWidth: 960, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
           {sortHead("name", "Service")}
-          <Eyebrow>Category</Eyebrow>
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Category</Eyebrow>
           {sortHead("host", "Host")}
-          <Eyebrow>Cert</Eyebrow>
-          <Eyebrow>SSO</Eyebrow>
-          <Eyebrow>Access</Eyebrow>
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Proxy &amp; access</Eyebrow>
           {sortHead("embed", "Embed")}
-          <Eyebrow>Active</Eyebrow>
-          <Eyebrow>Keep alive</Eyebrow>
-          <Eyebrow>API key</Eyebrow>
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Active</Eyebrow>
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Keep</Eyebrow>
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>API key</Eyebrow>
           <span />
         </div>
         {sorted.map((s, i) => {
@@ -469,24 +470,16 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                   <StatusLight service={s} dot={10} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</span>
-                    {!s.active && <Pill rawColor="var(--on-surface-variant)">inactive</Pill>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{s.name}</span>
+                    {!s.active && <span style={{ flexShrink: 0 }}><Pill rawColor="var(--on-surface-variant)">inactive</Pill></span>}
                   </div>
-                  {/* Cert / SSO / Authentik moved to their own columns; only the route-health
-                      chip (shown when a route is unhealthy) stays inline here. */}
-                  {s.route && (
-                    <div style={{ marginTop: 3 }}>
-                      <RouteHealthBadge route={s.route} />
-                    </div>
-                  )}
                 </div>
               </div>
-              <span style={{ opacity: dim }}>{<CatBadge cat={s.cat} size="xs" />}</span>
+              <span style={{ opacity: dim }}><CatBadge cat={s.cat} size="xs" /></span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
-              <span style={{ opacity: dim }}><CertCell route={s.route} reserve /></span>
-              <span style={{ opacity: dim }}><SsoCell route={s.route} reserve /></span>
-              <span style={{ opacity: dim }}><AccessCell access={s.authentik} reserve /></span>
+              {/* Cert + SSO + route-health + Authentik access, consolidated into one column. */}
+              <span style={{ opacity: dim, minWidth: 0 }}><ProxyAccessCell route={s.route} access={s.authentik} reserve /></span>
               <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
               <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
               <span
@@ -495,7 +488,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
               >
                 <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
               </span>
-              <KeyIndicator service={s} dim={dim} />
+              <KeyIndicator service={s} dim={dim} compact />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                 <button onClick={() => toggleFavorite(s.id)} className="btn btn-ghost btn-sm" style={{ padding: 6, color: pinned ? "var(--amber)" : undefined }} title={pinned ? "Unpin from rail" : "Pin to rail"}>
                   <Icon name={pinned ? "star" : "star_border"} size={15} />

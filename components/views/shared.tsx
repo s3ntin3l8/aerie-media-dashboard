@@ -246,6 +246,21 @@ export function AccessCell({ access, reserve = false }: { access?: AuthentikAcce
   return <AccessBadges access={access} />;
 }
 
+/** Consolidated proxy/security cell for an aligned table column: Traefik route badges
+ *  (SSO + route-health + cert) plus the Authentik access badge, or a muted "—" under `reserve`
+ *  when a service carries neither. Keeps the cert/SSO/access story in one column. */
+export function ProxyAccessCell({ route, access, reserve = false }: { route?: TraefikRoute; access?: AuthentikAccess; reserve?: boolean }) {
+  const routeBad = route && (route.serverStatus === "down" || (route.status !== "enabled" && route.status !== "unknown"));
+  const has = Boolean(route?.forwardAuth || route?.cert || route?.tls || routeBad || access);
+  if (!has) return reserve ? <DashCell /> : null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap", gap: 5, rowGap: 4 }}>
+      {route && <RouteBadges route={route} />}
+      {access && <AccessBadges access={access} />}
+    </span>
+  );
+}
+
 /** One compact, wrapping meta row for a service: an optional category pill followed by the
  *  Traefik route badges and the Authentik access badge. Replaces stacking each in its own
  *  margined line so service rows stay short (two lines instead of four). */
