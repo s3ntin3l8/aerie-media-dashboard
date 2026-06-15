@@ -285,7 +285,7 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
             <StatusDot status={s.status} size={7} />
             {monitored && (
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
-                {s.uptime}% · {s.ms}ms
+                {s.uptime.toFixed(2)}% · {s.ms}ms
               </span>
             )}
           </span>
