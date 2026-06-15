@@ -21,8 +21,12 @@ import { embedAuthSummary } from "@/components/views/embedAuth";
 
 function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
   const c = catColor(s.cat);
-  const { favorites, toggleFavorite } = usePortal();
+  const { favorites, toggleFavorite, user, oidc } = usePortal();
   const pinned = favorites.includes(s.id);
+  // Reuse the embed subheader's pure auth/cert derivation so the card's lock + shield
+  // signals stay consistent with what the opened service view shows (see embedAuth.ts).
+  const who = user.name || user.email || "session";
+  const { lockColor, lockTitle, behindSso, authColor, authTitle } = embedAuthSummary(s, who, oidc);
   return (
     <a
       onClick={onOpen}
@@ -102,6 +106,16 @@ function LauncherCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: s.status === "degraded" ? "var(--amber)" : s.status === "down" ? "var(--error)" : "var(--on-surface-variant)" }}>
           {s.status === "up" ? `${s.uptime.toFixed(2)}% · ${s.ms}ms` : s.status === "unknown" ? "no data" : s.status}
         </span>
+        {/* Security signals — TLS (always) + SSO/forward-auth (only when behind it), mirroring
+            the embed subheader's lock/shield (see ServiceView). Icons-only to keep the card quiet. */}
+        <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center", marginLeft: 4, cursor: s.route?.cert ? "help" : undefined }}>
+          <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={13} color={lockColor} />
+        </span>
+        {behindSso && (
+          <span title={authTitle} style={{ display: "inline-flex", alignItems: "center", cursor: "help" }}>
+            <Icon name="shield_person" size={13} color={authColor} />
+          </span>
+        )}
         <span
           style={{
             marginLeft: "auto",
