@@ -5,11 +5,11 @@
 // (default layout / new-instance placement).
 // ============================================================
 
-import type { DashboardTile, DashboardStore } from "@/lib/types";
+import type { DashboardTile, DashboardStore, MobileOverlay } from "@/lib/types";
 
 // `Tile` is the grid-local alias for the persisted DashboardTile domain type.
 export type Tile = DashboardTile;
-export type { DashboardStore };
+export type { DashboardStore, MobileOverlay };
 
 export interface WidgetMeta {
   type: string;
@@ -78,6 +78,35 @@ export function compactAll(items: Tile[]): Tile[] {
     placed.push(t);
   }
   return placed;
+}
+
+// ── mobile single-column overlay ──
+// Resolve the mobile stack from the shared tile set + an optional overlay.
+// `visible` honours overlay.order first (skipping hidden/stale uids), then appends
+// any remaining non-hidden tiles in grid-position order — so newly added widgets
+// land at the bottom of the stack. `hidden` lists the mobile-hidden tiles (grid
+// order) for the "Hidden on this device" affordance. Stale uids self-heal here.
+export function mobileStack(layout: Tile[], overlay?: MobileOverlay): { visible: Tile[]; hidden: Tile[] } {
+  const byUid = new Map(layout.map((t) => [t.uid, t]));
+  const hiddenSet = new Set(overlay?.hidden ?? []);
+  const ordered = (overlay?.order ?? []).filter((uid) => byUid.has(uid) && !hiddenSet.has(uid));
+  const seen = new Set(ordered);
+  const sorted = gridSort(layout);
+  const rest = sorted.filter((t) => !seen.has(t.uid) && !hiddenSet.has(t.uid)).map((t) => t.uid);
+  return {
+    visible: [...ordered, ...rest].map((uid) => byUid.get(uid)!),
+    hidden: sorted.filter((t) => hiddenSet.has(t.uid)),
+  };
+}
+
+// Swap `uid` with its neighbour in `dir` (-1 up, +1 down). No-op at the ends.
+export function reorderUids(uids: string[], uid: string, dir: -1 | 1): string[] {
+  const i = uids.indexOf(uid);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= uids.length) return uids;
+  const next = [...uids];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
 }
 
 // First free top-left slot for a new w×h tile.

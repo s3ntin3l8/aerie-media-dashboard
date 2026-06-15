@@ -11,6 +11,9 @@ vi.mock("@/components/portal/widgetCatalog", () => ({
   widgetMeta: (type: string) => ({ type, minW: 2, minH: 2, maxW: 12, maxH: 24 }),
   // "myRequests" stands in for a widget with configurable settings; everything else has none.
   hasSettings: (type: string) => type === "myRequests",
+  // The stacked "Hidden on this device" list reads a display name from the catalog; empty stub
+  // → the component falls back to the tile type, which is all these tests need.
+  WIDGET_CATALOG: {},
 }));
 
 import { GridDashboard } from "@/components/portal/GridDashboard";
@@ -66,13 +69,87 @@ describe("GridDashboard — rendering", () => {
 });
 
 describe("GridDashboard — edit mode (stacked)", () => {
-  it("shows a Remove button per tile and fires onRemove with the tile uid", () => {
-    const onRemove = vi.fn();
+  it("renders the visible stack in overlay order", () => {
+    const layout = [tile({ uid: "a" }), tile({ uid: "b", y: 4 }), tile({ uid: "c", y: 8 })];
     render(
-      <GridDashboard layout={[tile({ uid: "x" })]} onChange={vi.fn()} editing renderWidget={renderWidget} onRemove={onRemove} onConfigure={vi.fn()} />,
+      <GridDashboard
+        layout={layout}
+        onChange={vi.fn()}
+        editing
+        renderWidget={renderWidget}
+        onRemove={vi.fn()}
+        onConfigure={vi.fn()}
+        mobileOverlay={{ order: ["c", "a", "b"], hidden: [] }}
+      />,
     );
-    fireEvent.click(screen.getByTitle("Remove"));
-    expect(onRemove).toHaveBeenCalledWith("x");
+    const order = screen.getAllByTestId(/^widget-/).map((el) => el.getAttribute("data-testid"));
+    expect(order).toEqual(["widget-c", "widget-a", "widget-b"]);
+  });
+
+  it("fires onMobileReorder from the up/down buttons and disables them at the ends", () => {
+    const onMobileReorder = vi.fn();
+    render(
+      <GridDashboard
+        layout={[tile({ uid: "a" }), tile({ uid: "b", y: 4 }), tile({ uid: "c", y: 8 })]}
+        onChange={vi.fn()}
+        editing
+        renderWidget={renderWidget}
+        onRemove={vi.fn()}
+        onConfigure={vi.fn()}
+        onMobileReorder={onMobileReorder}
+      />,
+    );
+    const ups = screen.getAllByTitle("Move up");
+    const downs = screen.getAllByTitle("Move down");
+    // First tile can't move up; last tile can't move down.
+    expect(ups[0]).toBeDisabled();
+    expect(downs[2]).toBeDisabled();
+    fireEvent.click(downs[0]);
+    expect(onMobileReorder).toHaveBeenCalledWith("a", 1);
+    fireEvent.click(ups[2]);
+    expect(onMobileReorder).toHaveBeenCalledWith("c", -1);
+  });
+
+  it("fires onMobileHide from the hide button (mobile remove = hide on this device)", () => {
+    const onMobileHide = vi.fn();
+    render(
+      <GridDashboard
+        layout={[tile({ uid: "x" })]}
+        onChange={vi.fn()}
+        editing
+        renderWidget={renderWidget}
+        onRemove={vi.fn()}
+        onConfigure={vi.fn()}
+        onMobileHide={onMobileHide}
+      />,
+    );
+    // No destructive "Remove" on the mobile stack — only hide.
+    expect(screen.queryByTitle("Remove")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Hide on this device"));
+    expect(onMobileHide).toHaveBeenCalledWith("x");
+  });
+
+  it("lists hidden tiles in a 'Hidden on this device' section with a working Show button", () => {
+    const onMobileShow = vi.fn();
+    render(
+      <GridDashboard
+        layout={[tile({ uid: "a" }), tile({ uid: "b", y: 4 })]}
+        onChange={vi.fn()}
+        editing
+        renderWidget={renderWidget}
+        onRemove={vi.fn()}
+        onConfigure={vi.fn()}
+        onMobileShow={onMobileShow}
+        mobileOverlay={{ order: [], hidden: ["b"] }}
+      />,
+    );
+    // "b" is hidden → not rendered in the stack…
+    expect(screen.queryByTestId("widget-b")).not.toBeInTheDocument();
+    expect(screen.getByTestId("widget-a")).toBeInTheDocument();
+    // …but surfaced in the hidden section with a Show button that fires onMobileShow.
+    expect(screen.getByText("Hidden on this device")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Show on this device"));
+    expect(onMobileShow).toHaveBeenCalledWith("b");
   });
 
   it("shows the settings gear only for tiles whose type has settings, and fires onConfigure", () => {

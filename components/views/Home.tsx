@@ -5,7 +5,7 @@
 // ============================================================
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Service, Role, DashboardStore, DiscoverItem, UpcomingItem, MediaKind } from "@/lib/types";
+import type { Service, Role, DashboardStore, MobileOverlay, DiscoverItem, UpcomingItem, MediaKind } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
@@ -17,7 +17,7 @@ import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
 import { CardSettingsModal } from "@/components/modals/CardSettingsModal";
 import { RequestModal } from "@/components/modals/RequestModal";
 import { UpcomingDetailModal } from "@/components/modals/UpcomingDetailModal";
-import { compactAll, migrateLayout, type Tile } from "@/components/portal/gridLayout";
+import { compactAll, migrateLayout, mobileStack, reorderUids, type Tile } from "@/components/portal/gridLayout";
 import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, resolveSettings, type WidgetCtx } from "@/components/portal/widgetCatalog";
 import { setDashboardsAction } from "@/app/(portal)/actions";
 import { submitRequest, resolveDiscoverItem } from "@/app/(portal)/requests/actions";
@@ -161,27 +161,54 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
   const [reqPick, setReqPick] = useState<DiscoverItem | null>(null);
   const [upcomingPick, setUpcomingPick] = useState<UpcomingItem | null>(null);
 
-  // Both role layouts live in one store; setLayout persists the whole store so a
-  // member's arrangement survives while an admin edits theirs (and vice-versa).
-  const [store, setStore] = useState<Record<Role, Tile[]>>(() => ({
+  // Both role layouts + the per-role mobile overlay live in one store; every edit
+  // persists the whole store atomically, so a member's arrangement (and the mobile
+  // order/hidden set) survives while an admin edits theirs, and vice-versa.
+  type DashState = { admin: Tile[]; user: Tile[]; mobile: Partial<Record<Role, MobileOverlay>> };
+  const [dash, setDash] = useState<DashState>(() => ({
     admin: migrateLayout(initialDashboards?.admin?.length ? initialDashboards.admin : defaultLayout("admin")),
     user: migrateLayout(initialDashboards?.user?.length ? initialDashboards.user : defaultLayout("user")),
+    mobile: initialDashboards?.mobile ?? {},
   }));
-  const layout = store[role] || [];
+  const layout = dash[role] || [];
+  const overlay = dash.mobile[role];
 
-  const setLayout = (next: Tile[] | ((prev: Tile[]) => Tile[])) =>
-    setStore((s) => {
-      const nl = typeof next === "function" ? next(s[role] || []) : next;
-      const nextStore = { ...s, [role]: nl };
-      void setDashboardsAction(nextStore);
-      return nextStore;
+  // Single state mutator: apply the updater, then persist the resulting store.
+  const commit = (updater: (d: DashState) => DashState) =>
+    setDash((d) => {
+      const next = updater(d);
+      void setDashboardsAction({ admin: next.admin, user: next.user, mobile: next.mobile });
+      return next;
     });
 
-  const removeWidget = (uid: string) => setLayout((l) => compactAll(l.filter((x) => x.uid !== uid)));
+  const setLayout = (next: Tile[] | ((prev: Tile[]) => Tile[])) =>
+    commit((d) => ({ ...d, [role]: typeof next === "function" ? next(d[role] || []) : next }));
+
+  // Removing a widget (a desktop action) also prunes its uid from this role's
+  // mobile overlay so no stale references linger in the persisted JSON.
+  const removeWidget = (uid: string) =>
+    commit((d) => {
+      const cur = d.mobile[role];
+      const mobile = cur ? { ...d.mobile, [role]: { order: cur.order.filter((u) => u !== uid), hidden: cur.hidden.filter((u) => u !== uid) } } : d.mobile;
+      return { ...d, [role]: compactAll((d[role] || []).filter((x) => x.uid !== uid)), mobile };
+    });
   const addWidget = (type: string) => setLayout((l) => addWidgetToLayout(l, type));
-  const resetLayout = () => setLayout(defaultLayout(role));
+  // Reset clears the role's mobile overlay too, so the stack falls back to grid order.
+  const resetLayout = () => commit((d) => ({ ...d, [role]: defaultLayout(role), mobile: { ...d.mobile, [role]: { order: [], hidden: [] } } }));
   const updateSettings = (uid: string, settings: Record<string, string | number | boolean>) =>
     setLayout((l) => l.map((t) => (t.uid === uid ? { ...t, settings } : t)));
+
+  // Mobile overlay handlers — operate on the current role's overlay (default empty).
+  const setOverlay = (fn: (cur: MobileOverlay) => MobileOverlay) =>
+    commit((d) => ({ ...d, mobile: { ...d.mobile, [role]: fn(d.mobile[role] ?? { order: [], hidden: [] }) } }));
+  const mobileReorder = (uid: string, dir: -1 | 1) =>
+    commit((d) => {
+      const cur = d.mobile[role] ?? { order: [], hidden: [] };
+      const order = reorderUids(mobileStack(d[role] || [], cur).visible.map((t) => t.uid), uid, dir);
+      return { ...d, mobile: { ...d.mobile, [role]: { ...cur, order } } };
+    });
+  const mobileHide = (uid: string) => setOverlay((cur) => ({ order: cur.order.filter((u) => u !== uid), hidden: [...cur.hidden.filter((u) => u !== uid), uid] }));
+  const mobileShow = (uid: string) => setOverlay((cur) => ({ ...cur, hidden: cur.hidden.filter((u) => u !== uid) }));
 
   // Library widgets (Now Playing / Recently Added) only know a TMDB id or a Plex
   // rating key — resolve to a full DiscoverItem, then open the detail modal.
@@ -235,7 +262,18 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
             </div>
           )}
 
-          <GridDashboard layout={layout} onChange={setLayout} editing={editing} renderWidget={renderWidget} onRemove={removeWidget} onConfigure={setConfigUid} />
+          <GridDashboard
+            layout={layout}
+            onChange={setLayout}
+            editing={editing}
+            renderWidget={renderWidget}
+            onRemove={removeWidget}
+            onConfigure={setConfigUid}
+            mobileOverlay={overlay}
+            onMobileReorder={mobileReorder}
+            onMobileHide={mobileHide}
+            onMobileShow={mobileShow}
+          />
 
           {!editing && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 18, fontSize: 11, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>

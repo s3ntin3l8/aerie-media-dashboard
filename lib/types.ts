@@ -637,5 +637,21 @@ export interface DashboardTile {
   settings?: Record<string, string | number | boolean>;
 }
 
+/**
+ * Per-role mobile overlay over the shared tile set: a custom single-column order
+ * plus a mobile-only hidden set. Absent ⇒ the stack falls back to grid position
+ * order and nothing is hidden. Tiles stay shared with desktop — this only governs
+ * how they're arranged/shown on the narrow stacked view.
+ */
+export interface MobileOverlay {
+  /** uid order for the single-column mobile stack. */
+  order: string[];
+  /** uids present in the role layout but hidden on mobile only. */
+  hidden: string[];
+}
+
 /** Per-role saved homescreen arrangements, persisted to preferences.dashboards. */
-export type DashboardStore = Partial<Record<Role, DashboardTile[]>>;
+export type DashboardStore = Partial<Record<Role, DashboardTile[]>> & {
+  /** Per-role mobile overlay (custom stack order + mobile-only hidden set). */
+  mobile?: Partial<Record<Role, MobileOverlay>>;
+};

@@ -8,8 +8,8 @@
 // ============================================================
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/primitives";
-import { GRID, gridSort, packAround, type Tile } from "@/components/portal/gridLayout";
-import { widgetMeta, hasSettings } from "@/components/portal/widgetCatalog";
+import { GRID, packAround, mobileStack, type Tile, type MobileOverlay } from "@/components/portal/gridLayout";
+import { widgetMeta, hasSettings, WIDGET_CATALOG } from "@/components/portal/widgetCatalog";
 
 type CSS = React.CSSProperties;
 
@@ -31,6 +31,12 @@ interface GridDashboardProps {
   renderWidget: (item: Tile, stacked: boolean) => React.ReactNode;
   onRemove: (uid: string) => void;
   onConfigure: (uid: string) => void;
+  // Mobile-only overlay (custom stack order + mobile-hidden set) and its handlers.
+  // Absent ⇒ the stacked view falls back to grid-position order, nothing hidden.
+  mobileOverlay?: MobileOverlay;
+  onMobileReorder?: (uid: string, dir: -1 | 1) => void;
+  onMobileHide?: (uid: string) => void;
+  onMobileShow?: (uid: string) => void;
 }
 
 // floating configure (gear) button shared by grid + stack
@@ -71,6 +77,21 @@ const removeBtnStyle: CSS = {
   boxShadow: "var(--shadow-sm)",
 };
 
+// mobile stacked edit controls — a flex row of square buttons in the top-right
+const mobileCtrlBar: CSS = { position: "absolute", top: 8, right: 8, zIndex: 6, display: "flex", gap: 6 };
+const ctrlBtnBase: CSS = {
+  width: 24,
+  height: 24,
+  borderRadius: 7,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "none",
+  boxShadow: "var(--shadow-sm)",
+};
+const neutralBtn: CSS = { ...ctrlBtnBase, background: "color-mix(in srgb, var(--on-surface) 12%, var(--surface-container-highest))", color: "var(--on-surface-variant)" };
+const dangerBtn: CSS = { ...ctrlBtnBase, background: "color-mix(in srgb, var(--error) 16%, var(--surface-container-highest))", color: "var(--error)" };
+
 // "lift" tile chrome while editing
 function tileChrome(editing: boolean, isActive: boolean): CSS {
   if (!editing) return {};
@@ -82,7 +103,7 @@ function tileChrome(editing: boolean, isActive: boolean): CSS {
   };
 }
 
-export function GridDashboard({ layout, onChange, editing, renderWidget, onRemove, onConfigure }: GridDashboardProps) {
+export function GridDashboard({ layout, onChange, editing, renderWidget, onRemove, onConfigure, mobileOverlay, onMobileReorder, onMobileHide, onMobileShow }: GridDashboardProps) {
   const { cols, rowH, gap, stackBelow } = GRID;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(1180);
@@ -185,35 +206,68 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
   };
 
   // ===========================================================
-  // STACKED (mobile) — single column, arrangement is read-only
+  // STACKED (mobile) — single column, reorder + hide per device
   // ===========================================================
   if (stacked) {
+    const { visible, hidden } = mobileStack(layout, mobileOverlay);
     return (
       <div ref={wrapRef} style={{ display: "flex", flexDirection: "column", gap }}>
-        {gridSort(layout).map((item) => {
+        {visible.map((item, i) => {
           const m = widgetMeta(item.type);
           const hUnits = Math.max(item.h, m.minH);
           return (
             <div key={item.uid} style={{ position: "relative", height: hUnits * rowH + (hUnits - 1) * gap, borderRadius: "var(--radius-xl)" }}>
               <div style={{ height: "100%", pointerEvents: editing ? "none" : "auto" }}>{renderWidget(item, true)}</div>
-              {editing && hasSettings(item.type) && (
-                <button
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => onConfigure(item.uid)}
-                  title="Widget settings"
-                  style={configBtnStyle}
-                >
-                  <Icon name="settings" size={14} />
-                </button>
-              )}
               {editing && (
-                <button onClick={() => onRemove(item.uid)} title="Remove" style={removeBtnStyle}>
-                  <Icon name="close" size={15} />
-                </button>
+                <div style={mobileCtrlBar}>
+                  <button
+                    onClick={() => onMobileReorder?.(item.uid, -1)}
+                    disabled={i === 0}
+                    title="Move up"
+                    style={{ ...neutralBtn, cursor: i === 0 ? "default" : "pointer", opacity: i === 0 ? 0.4 : 1 }}
+                  >
+                    <Icon name="keyboard_arrow_up" size={16} />
+                  </button>
+                  <button
+                    onClick={() => onMobileReorder?.(item.uid, 1)}
+                    disabled={i === visible.length - 1}
+                    title="Move down"
+                    style={{ ...neutralBtn, cursor: i === visible.length - 1 ? "default" : "pointer", opacity: i === visible.length - 1 ? 0.4 : 1 }}
+                  >
+                    <Icon name="keyboard_arrow_down" size={16} />
+                  </button>
+                  {hasSettings(item.type) && (
+                    <button onClick={() => onConfigure(item.uid)} title="Widget settings" style={{ ...neutralBtn, cursor: "pointer" }}>
+                      <Icon name="settings" size={14} />
+                    </button>
+                  )}
+                  <button onClick={() => onMobileHide?.(item.uid)} title="Hide on this device" style={{ ...dangerBtn, cursor: "pointer" }}>
+                    <Icon name="visibility_off" size={15} />
+                  </button>
+                </div>
               )}
             </div>
           );
         })}
+
+        {editing && hidden.length > 0 && (
+          <div style={{ marginTop: 4, padding: "12px 14px", borderRadius: 12, border: "1px dashed color-mix(in srgb, var(--on-surface) 16%, transparent)", background: "color-mix(in srgb, var(--surface-container-lowest) 60%, transparent)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+              <Icon name="visibility_off" size={14} color="var(--on-surface-variant)" />
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--on-surface-variant)" }}>Hidden on this device</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {hidden.map((item) => (
+                <div key={item.uid} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: 13, color: "var(--on-surface)" }}>{WIDGET_CATALOG[item.type]?.name ?? item.type}</span>
+                  <button onClick={() => onMobileShow?.(item.uid)} className="btn btn-ghost btn-sm" title="Show on this device">
+                    <Icon name="visibility" size={15} /> Show
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
