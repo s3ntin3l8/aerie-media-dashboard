@@ -36,15 +36,23 @@ beforeEach(() => {
 describe("plexSections", () => {
   it("maps Directory[] (key→id) and sends the X-Plex-Token header", async () => {
     mockJson.mockResolvedValue({
-      MediaContainer: { Directory: [{ key: "1", type: "movie", title: "Movies", agent: "tv.plex.agents.movie", refreshing: true }] },
+      MediaContainer: { Directory: [{ key: "1", type: "movie", title: "Movies", agent: "tv.plex.agents.movie", refreshing: true, scannedAt: 1700000000 }] },
     } as never);
 
     const sections = await plexSections();
 
-    expect(sections).toEqual([{ id: "1", title: "Movies", type: "movie", agent: "tv.plex.agents.movie", refreshing: true }]);
+    expect(sections).toEqual([{ id: "1", title: "Movies", type: "movie", agent: "tv.plex.agents.movie", refreshing: true, scannedAt: 1700000000 }]);
     const [url, opts] = mockJson.mock.calls[0] as [string, { headers?: Record<string, string> }];
     expect(url).toBe("http://plex:32400/library/sections/");
     expect(opts.headers).toMatchObject({ "X-Plex-Token": "tok", Accept: "application/json" });
+  });
+
+  it("falls back to updatedAt when scannedAt is absent", async () => {
+    mockJson.mockResolvedValue({
+      MediaContainer: { Directory: [{ key: "2", type: "show", title: "Shows", updatedAt: 1650000000 }] },
+    } as never);
+    const [s] = await plexSections();
+    expect(s.scannedAt).toBe(1650000000);
   });
 
   it("tolerates a missing MediaContainer", async () => {
@@ -55,13 +63,14 @@ describe("plexSections", () => {
 
 describe("plexButlerTasks", () => {
   it("maps ButlerTask[] from the ButlerTasks root", async () => {
+    // Plex reports `interval` in DAYS (e.g. BackupDatabase runs every 3 days), not seconds.
     mockJson.mockResolvedValue({
-      ButlerTasks: { ButlerTask: [{ name: "BackupDatabase", title: "Back Up", description: "d", enabled: true, interval: 259200 }] },
+      ButlerTasks: { ButlerTask: [{ name: "BackupDatabase", title: "Back Up", description: "d", enabled: true, interval: 3 }] },
     } as never);
 
     const tasks = await plexButlerTasks();
 
-    expect(tasks).toEqual([{ name: "BackupDatabase", title: "Back Up", description: "d", enabled: true, interval: 259200 }]);
+    expect(tasks).toEqual([{ name: "BackupDatabase", title: "Back Up", description: "d", enabled: true, interval: 3 }]);
     const [url] = mockJson.mock.calls[0] as [string, unknown];
     expect(url).toBe("http://plex:32400/butler");
   });
