@@ -6,7 +6,7 @@
 // ============================================================
 import React, { useState } from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { StreamsView } from "@/components/panels";
+import { StreamsView } from "@/components/panels/streams";
 import { PageHeader } from "@/components/views/shared";
 import { HistoryList } from "@/components/streams/HistoryList";
 

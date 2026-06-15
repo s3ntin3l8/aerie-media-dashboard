@@ -9,7 +9,7 @@ vi.mock("@/app/(portal)/admin/actions", () => ({ setQueueSource: vi.fn() }));
 vi.mock("@/app/(portal)/requests/actions", () => Object.fromEntries(["submitRequest", "getMediaDetail", "resolveDiscoverItem"].map((n) => [n, vi.fn(async () => [])])));
 
 import { useData } from "@/components/portal/DataProvider";
-import { NowPlayingPanel } from "@/components/panels";
+import { NowPlayingPanel } from "@/components/panels/streams";
 import { Streams } from "@/components/views/Streams";
 
 // A richly-populated session exercises StreamRow + the StreamDetail sub-blocks
