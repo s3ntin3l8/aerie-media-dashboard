@@ -11,6 +11,18 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn() }));
+// EmbedHost reads/writes the live keep-alive set via usePortal (lifted from local state).
+// Back it with a real useState so the lazy-mount + persist-across-navigation behaviour is intact
+// and we don't pull the real provider's next-auth imports into the browser test.
+vi.mock("@/components/portal/PortalProvider", async () => {
+  const React = await import("react");
+  return {
+    usePortal: () => {
+      const [keptAliveIds, setKeptAliveIds] = React.useState<string[]>([]);
+      return { keptAliveIds, setKeptAliveIds };
+    },
+  };
+});
 // Stub ServiceView so we can assert mount/visibility + the deep-link prop without the iframe tree.
 vi.mock("@/components/views/Launcher", () => ({
   ServiceView: ({ s, deepPath }: { s: { id: string }; deepPath?: string }) => (

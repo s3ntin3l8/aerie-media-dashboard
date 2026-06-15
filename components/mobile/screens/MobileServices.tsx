@@ -3,12 +3,17 @@ import React, { useState } from "react";
 import { Icon, Pill, StatusDot, Eyebrow } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
+import { usePortal } from "@/components/portal/PortalProvider";
+import { embedAuthSummary } from "@/components/views/embedAuth";
+import { KeepAliveCell } from "@/components/views/shared";
 import { CAT, CAT_ORDER } from "@/lib/categories";
 import type { Service } from "@/lib/types";
 
 export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
   const [q, setQ] = useState("");
   const services = useVisibleServices("launcher");
+  const { user, oidc, keptAliveIds } = usePortal();
+  const who = user.name || user.email || "session";
 
   const grouped = CAT_ORDER.map((cat) => ({
     cat,
@@ -142,7 +147,9 @@ export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
 
             {/* Service cards */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {g.items.map((s) => (
+              {g.items.map((s) => {
+                const { lockColor, lockTitle, behindSso, authColor, authTitle } = embedAuthSummary(s, who, oidc);
+                return (
                 <div
                   key={s.id}
                   onClick={() => onOpen(s)}
@@ -226,13 +233,24 @@ export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
                         ? `${s.uptime.toFixed(2)}% · ${s.ms}ms`
                         : s.status}
                     </span>
+                    {/* Security + keep-alive signals — mirrors the desktop launcher card. */}
+                    <span title={lockTitle} style={{ display: "inline-flex", alignItems: "center" }}>
+                      <Icon name={s.scheme === "https" ? "lock" : "lock_open"} size={13} color={lockColor} />
+                    </span>
+                    {behindSso && (
+                      <span title={authTitle} style={{ display: "inline-flex", alignItems: "center" }}>
+                        <Icon name="shield_person" size={13} color={authColor} />
+                      </span>
+                    )}
+                    <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} iconOnly />
                     <span style={{ flex: 1 }} />
                     <Pill tone={s.embeddable ? "primary" : "amber"} style={{ fontSize: 9 }}>
                       {s.embeddable ? "EMBED" : "LAUNCH"}
                     </Pill>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))

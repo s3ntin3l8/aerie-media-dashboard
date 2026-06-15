@@ -8,11 +8,11 @@ import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { setVisibility, upsertService, setServiceSecret, mergeServiceForwardAuth, clearServiceForwardAuth, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
-import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar } from "@/components/primitives";
+import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
-import { PageHeader, RouteBadges, MetaBadges } from "@/components/views/shared";
+import { PageHeader, RouteBadges, MetaBadges, KeepAliveCell, ProxyAccessCell } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { LogsModal } from "@/components/modals/LogsModal";
 import { serviceRequiresKey, matchPreset, isTraefikSource } from "@/lib/servicePresets";
@@ -27,10 +27,12 @@ type AdminSortDir = "asc" | "desc";
 // amber = degraded, red = down, dim grey = no monitoring data. Sits on a position:relative
 // wrapper (NOT inside ServiceLogo, whose overflow:hidden would clip it). Colours reuse the
 // canonical statusColor() so they match StatusDot / Heartbeat everywhere else.
-function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest)" }: {
+function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest)", corner = "tr" }: {
   service: Pick<Service, "status" | "uptime">;
   dot?: number;
   ring?: string;
+  /** which corner to pin to: top-right (default) or bottom-right */
+  corner?: "tr" | "br";
 }) {
   const title = service.status === "unknown" ? "No monitoring data" : `${statusWord(service.status)} · ${uptimeText(service)}`;
   return (
@@ -38,7 +40,7 @@ function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest
       title={title}
       style={{
         position: "absolute",
-        top: -2,
+        ...(corner === "br" ? { bottom: -2 } : { top: -2 }),
         right: -2,
         width: dot,
         height: dot,
@@ -54,9 +56,10 @@ function StatusLight({ service, dot = 10, ring = "var(--surface-container-lowest
 // Stored-secret indicator. Distinguishes a configured service (masked AES-GCM badge) from an
 // unconfigured one — warning-tinted "Not set" when the service type expects a key, neutral
 // "No key" for legitimately key-optional services (Gatus / Prometheus / NZBGet-without-auth).
-function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
+function KeyIndicator({ service, dim, compact = false }: { service: Service; dim?: number; compact?: boolean }) {
   const base = { display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11, opacity: dim } as const;
   if (service.hasSecret) {
+    if (compact) return <span title="API key stored (AES-GCM encrypted)" style={{ ...base }}><Icon name="lock" size={14} color="var(--originator-own)" /></span>;
     return (
       <span style={{ ...base, gap: 6, color: "var(--on-surface-variant)" }}>
         <Icon name="lock" size={12} color="var(--originator-own)" />
@@ -68,12 +71,14 @@ function KeyIndicator({ service, dim }: { service: Service; dim?: number }) {
   // choice). Recognize it the same lenient way the data layer does (isTraefikSource: id/name/logo)
   // so a renamed or custom-logo instance gets the neutral "No key" badge, not a spurious warning.
   if (!isTraefikSource(service) && serviceRequiresKey(service.id, service.logoSlug)) {
+    if (compact) return <span title="No API key set — this service expects one" style={{ ...base, color: "var(--warning)" }}><Icon name="warning" size={14} /></span>;
     return (
       <span style={{ ...base, color: "var(--warning)" }}>
         <Icon name="warning" size={12} />Not set
       </span>
     );
   }
+  if (compact) return <span title="No API key needed for this service" style={{ ...base, color: "var(--on-surface-variant)" }}><Icon name="lock_open" size={14} /></span>;
   return (
     <span style={{ ...base, color: "var(--on-surface-variant)" }}>
       <Icon name="lock_open" size={12} />No key
@@ -109,7 +114,7 @@ function optimisticForwardAuth(form: ServiceForm, prior: Service["forwardAuthCon
 function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { isMobile: boolean; onOpenService: (s: Service) => void; onEdit: (s: Service) => void; onAddDiscovered: (prefill: Partial<ServiceForm>) => void }) {
   // Admin sees the FULL list (incl. inactive); every other surface gets active-only via useData().services.
   const { allServices: services, traefikDiscovered = [], traefikDismissed = [], traefikInstances = [], lokiConfigured = false } = useData();
-  const { favorites, toggleFavorite } = usePortal();
+  const { favorites, toggleFavorite, keptAliveIds } = usePortal();
   const patchData = usePatchData();
   const [, startActiveTransition] = useTransition();
   // The service whose log tail is open in the Loki viewer (admin-only; gated on lokiConfigured).
@@ -117,7 +122,8 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   const logsModalEl = lokiConfigured && logsFor ? (
     <LogsModal open serviceId={logsFor.id} serviceName={logsFor.name} logoSlug={logsFor.logoSlug} onClose={() => setLogsFor(null)} />
   ) : null;
-  const cols = "1.6fr 1fr 0.6fr 0.6fr 0.7fr 1.1fr 0.5fr";
+  // Service · Category · Host · Proxy & access · Embed · Active · Keep · API key · actions
+  const cols = "1.4fr 0.7fr 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 1fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
   const [discoveredOpen, setDiscoveredOpen] = useState(false);
@@ -323,7 +329,14 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, opacity: dim }}>
                 <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
                   <ServiceLogo service={s} size={36} radius={9} />
-                  <StatusLight service={s} dot={12} />
+                  {/* Reachability light moves to the bottom-right so the top-right corner can carry
+                      the keep-alive glyph (rail-style). */}
+                  <StatusLight service={s} dot={12} corner="br" />
+                  {s.embeddable && s.keepAlive && (
+                    <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-container-lowest)", borderRadius: 9999 }}>
+                      <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} iconOnly />
+                    </span>
+                  )}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -408,36 +421,42 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
     );
   }
 
+  // A sortable column header (Service / Host / Embed) — interleaved among the plain Eyebrow headers
+  // so each lands in its own grid column position.
+  const sortHead = (col: AdminSortCol, label: string) => {
+    const active = sort.col === col;
+    return (
+      <button
+        onClick={() => handleSortClick(col)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+      >
+        <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined, whiteSpace: "nowrap" }}>{label}</Eyebrow>
+        <Icon
+          name={active ? (sort.dir === "asc" ? "expand_less" : "expand_more") : "unfold_more"}
+          size={13}
+          color={active ? "var(--on-surface)" : "var(--on-surface-variant)"}
+          style={{ opacity: active ? 1 : 0.4 }}
+        />
+      </button>
+    );
+  };
+
   return (
     <>
     {logsModalEl}
     {discoveredEl}
     {nodesEl}
     <div className="aerie-x-scroll">
-      <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
+      <div style={{ minWidth: 960, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
-          {(["name", "host", "embed"] as AdminSortCol[]).map((col, i) => {
-            const labels: Record<AdminSortCol, string> = { name: "Service", host: "Host", embed: "Embed" };
-            const active = sort.col === col;
-            return (
-              <button
-                key={col}
-                onClick={() => handleSortClick(col)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
-              >
-                <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined }}>{labels[col]}</Eyebrow>
-                <Icon
-                  name={active ? (sort.dir === "asc" ? "expand_less" : "expand_more") : "unfold_more"}
-                  size={13}
-                  color={active ? "var(--on-surface)" : "var(--on-surface-variant)"}
-                  style={{ opacity: active ? 1 : 0.4 }}
-                />
-              </button>
-            );
-          })}
-          <Eyebrow>Active</Eyebrow>
-          <Eyebrow>Keep alive</Eyebrow>
-          <Eyebrow>API key</Eyebrow>
+          {sortHead("name", "Service")}
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Category</Eyebrow>
+          {sortHead("host", "Host")}
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Proxy &amp; access</Eyebrow>
+          {sortHead("embed", "Embed")}
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Active</Eyebrow>
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>Keep</Eyebrow>
+          <Eyebrow style={{ whiteSpace: "nowrap" }}>API key</Eyebrow>
           <span />
         </div>
         {sorted.map((s, i) => {
@@ -451,16 +470,16 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                   <StatusLight service={s} dot={10} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</span>
-                    {!s.active && <Pill rawColor="var(--on-surface-variant)">inactive</Pill>}
-                  </div>
-                  <div style={{ marginTop: 3 }}>
-                    <MetaBadges cat={s.cat} route={s.route} access={s.authentik} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{s.name}</span>
+                    {!s.active && <span style={{ flexShrink: 0 }}><Pill rawColor="var(--on-surface-variant)">inactive</Pill></span>}
                   </div>
                 </div>
               </div>
+              <span style={{ opacity: dim }}><CatBadge cat={s.cat} size="xs" /></span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
+              {/* Cert + SSO + route-health + Authentik access, consolidated into one column. */}
+              <span style={{ opacity: dim, minWidth: 0 }}><ProxyAccessCell route={s.route} access={s.authentik} reserve /></span>
               <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
               <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
               <span
@@ -469,7 +488,7 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
               >
                 <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
               </span>
-              <KeyIndicator service={s} dim={dim} />
+              <KeyIndicator service={s} dim={dim} compact />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                 <button onClick={() => toggleFavorite(s.id)} className="btn btn-ghost btn-sm" style={{ padding: 6, color: pinned ? "var(--amber)" : undefined }} title={pinned ? "Unpin from rail" : "Pin to rail"}>
                   <Icon name={pinned ? "star" : "star_border"} size={15} />

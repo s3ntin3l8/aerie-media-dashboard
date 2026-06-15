@@ -112,14 +112,15 @@ describe("Admin — key badge for key-optional Traefik sources", () => {
     // would flag it as needing a key; isTraefikSource keeps it key-optional → neutral "No key".
     seedSvcs([mkSvc({ id: "traefik-viewer", name: "Traefik Viewer", host: "traefik.test", hasSecret: false })]);
     render(<Admin />);
-    expect(screen.getByText("No key")).toBeInTheDocument();
-    expect(screen.queryByText("Not set")).not.toBeInTheDocument();
+    // Desktop table renders the compact (icon-only) key indicator; the state is in the tooltip.
+    expect(screen.getByTitle("No API key needed for this service")).toBeInTheDocument();
+    expect(screen.queryByTitle("No API key set — this service expects one")).not.toBeInTheDocument();
   });
 
   it("still warns ('Not set') for a non-Traefik service missing a required key", () => {
     seedSvcs([mkSvc({ id: "sonarr", name: "Sonarr", host: "sonarr.test", hasSecret: false })]);
     render(<Admin />);
-    expect(screen.getByText("Not set")).toBeInTheDocument();
+    expect(screen.getByTitle("No API key set — this service expects one")).toBeInTheDocument();
   });
 });
 

@@ -18,6 +18,7 @@ vi.mock("@/app/(portal)/actions", () => ({ signOutAction: vi.fn(), setFavoritesA
 const portal = {
   role: "admin", realRole: "admin", user: { id: "u1", name: "Ada", email: "a@x" }, favorites: [], toggleFavorite: vi.fn(),
   modalOpen: false, setModalOpen: vi.fn(), theme: "dark", toggleTheme: vi.fn(), setPaletteOpen: vi.fn(), signOut: vi.fn(), oidc: true,
+  keptAliveIds: ["media"],
 };
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn(), usePatchData: () => vi.fn() }));
@@ -31,8 +32,16 @@ import { MobileServices } from "@/components/mobile/screens/MobileServices";
 import { MobileAdmin } from "@/components/mobile/screens/MobileAdmin";
 
 const service = { id: "sonarr", name: "Sonarr", cat: "automation", icon: "dns", host: "sonarr.test", scheme: "https", status: "up", uptime: 99.9, ms: 12, beats: new Array(30).fill(1), active: true, embeddable: false, keepAlive: false };
+// A second, fully-secured + keep-alive service so the mobile screens exercise the lock / shield /
+// keep-alive / cert / SSO branches added for #50/#71 (kept "live" via portal.keptAliveIds above).
+const mediaSvc = {
+  id: "media", name: "Media", cat: "stream", icon: "dns", host: "media.test", scheme: "https",
+  status: "up", uptime: 99.5, ms: 8, beats: new Array(30).fill(1), active: true, embeddable: true, keepAlive: true,
+  route: { serviceId: "media", router: "media@docker", rule: "", hosts: ["media.test"], status: "enabled", tls: true, forwardAuth: true, middlewares: ["authentik@docker"], serverStatus: "up", cert: { domains: ["media.test"], notAfter: 1893456000, daysRemaining: 30, issuer: "LE", resolver: "le", keyType: "ECDSA" } },
+  authentik: { serviceId: "media", appName: "Media", appSlug: "media", host: "media.test", providerName: null, providerType: null, everyone: true, groups: [], users: 0, policyGated: false },
+};
 const SNAP = {
-  services: [service], allServices: [service], users: [{ id: "u1", name: "Ada", email: "a@x", role: "admin", avatar: undefined }],
+  services: [service, mediaSvc], allServices: [service, mediaSvc], users: [{ id: "u1", name: "Ada", email: "a@x", role: "admin", avatar: undefined }],
   visibility: [], groups: [{ name: "admins", label: "Admins" }], adminGroup: "admins",
   nowPlaying: [], library: [{ id: "movies", label: "Movies", count: "100", icon: "movie", delta: "" }], libraryAll: [], recent: [], recentAll: [],
   requests: [], requestCounts: { total: 0, pending: 0, approved: 0, processing: 0, failed: 0, available: 0 }, issues: null,

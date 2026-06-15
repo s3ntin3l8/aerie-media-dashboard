@@ -4,8 +4,9 @@
 // ============================================================
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Icon, Avatar, RailTip } from "@/components/primitives";
+import { Icon, Avatar, RailTip, StatusDot } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
+import { KeepAliveCell } from "@/components/views/shared";
 import { BrandBadge } from "@/components/brand/Brand";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
@@ -97,9 +98,14 @@ function RailNav({
 // button as RailNav, but renders the service's brand logo so it reads as distinct
 // from the nav icons. `recent` adds a small history corner badge so a transient
 // jump-back slot is visually distinguishable from a deliberate pin.
-function RailServiceNav({ s, active, recent = false, onNavigate }: { s: Service; active: boolean; recent?: boolean; onNavigate: (href: string) => void }) {
+function RailServiceNav({ s, active, recent = false, live = false, onNavigate }: { s: Service; active: boolean; recent?: boolean; live?: boolean; onNavigate: (href: string) => void }) {
+  const tip = recent
+    ? `${s.name} — recently opened`
+    : s.embeddable && s.keepAlive
+      ? `${s.name} — ${live ? "kept alive (live)" : "keep-alive on"}`
+      : s.name;
   return (
-    <RailTip label={recent ? `${s.name} — recently opened` : s.name}>
+    <RailTip label={tip}>
       <a
         onClick={() => onNavigate(`/s/${s.id}`)}
         style={{
@@ -123,12 +129,49 @@ function RailServiceNav({ s, active, recent = false, onNavigate }: { s: Service;
       >
         {active && <span style={{ position: "absolute", left: -8, top: 9, bottom: 9, width: 2.5, borderRadius: 9999, background: "var(--primary)" }} />}
         <ServiceLogo service={s} size={30} radius={8} />
+        {/* Reachability — same pulsing StatusDot as System Status, in a small bezel so it reads
+            against the logo. Bottom-right corner. */}
+        <span
+          style={{
+            position: "absolute",
+            bottom: -3,
+            right: -3,
+            width: 14,
+            height: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "var(--surface-lowest)",
+            borderRadius: 9999,
+          }}
+        >
+          <StatusDot status={s.status} size={8} />
+        </span>
+        {/* Keep-alive flag (top-right) — dim when merely flagged, filled + glowing when live. */}
+        {s.embeddable && s.keepAlive && (
+          <span
+            style={{
+              position: "absolute",
+              top: -4,
+              right: -4,
+              width: 16,
+              height: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "var(--surface-lowest)",
+              borderRadius: 9999,
+            }}
+          >
+            <KeepAliveCell service={s} live={live} iconOnly />
+          </span>
+        )}
         {recent && (
           <span
             style={{
               position: "absolute",
               bottom: -2,
-              right: -2,
+              left: -2,
               width: 15,
               height: 15,
               display: "flex",
@@ -288,7 +331,7 @@ function RailAccountMenu({ name, email, avatar }: { name: string; email?: string
 export function Rail() {
   const router = useRouter();
   const pathname = usePathname();
-  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, favorites, lastOpened } = usePortal();
+  const { role, realRole, toggleRole, theme, toggleTheme, setPaletteOpen, user, favorites, lastOpened, keptAliveIds } = usePortal();
   const { services, requests, visibility, users } = useData();
 
   const me = user;
@@ -352,10 +395,10 @@ export function Rail() {
           <>
             <div style={{ width: 20, height: 1, background: "var(--outline-variant)", margin: "2px 0" }} />
             {favoriteServices.map((s) => (
-              <RailServiceNav key={s.id} s={s} active={pathname === `/s/${s.id}`} onNavigate={go} />
+              <RailServiceNav key={s.id} s={s} active={pathname === `/s/${s.id}`} live={keptAliveIds.includes(s.id)} onNavigate={go} />
             ))}
             {recentService && (
-              <RailServiceNav key={recentService.id} s={recentService} recent active={pathname === `/s/${recentService.id}`} onNavigate={go} />
+              <RailServiceNav key={recentService.id} s={recentService} recent active={pathname === `/s/${recentService.id}`} live={keptAliveIds.includes(recentService.id)} onNavigate={go} />
             )}
           </>
         )}
