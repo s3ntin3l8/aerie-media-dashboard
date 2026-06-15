@@ -452,7 +452,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
               <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
               <span
                 title={s.embeddable ? "Keep this service's iframe mounted (hidden) after first open so its state survives switching" : "Only embeddable services can be kept alive"}
-                style={{ opacity: s.embeddable ? undefined : 0.3, pointerEvents: s.embeddable ? undefined : "none" }}
+                style={{ display: "inline-flex", alignItems: "center", opacity: s.embeddable ? undefined : 0.3, pointerEvents: s.embeddable ? undefined : "none" }}
               >
                 <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
               </span>
