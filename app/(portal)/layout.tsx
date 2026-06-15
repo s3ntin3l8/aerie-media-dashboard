@@ -4,7 +4,7 @@ import { DataProvider } from "@/components/portal/DataProvider";
 import { MobileShell } from "@/components/mobile/MobileShell";
 import { getSessionUser } from "@/lib/session";
 import { getSnapshotFast } from "@/lib/data/snapshot";
-import { getFavorites } from "@/lib/integrations/registry";
+import { getFavorites, getDashboards } from "@/lib/integrations/registry";
 import { authConfigured } from "@/lib/env";
 
 // Session + live data are request-scoped; never prerender the shell.
@@ -17,9 +17,14 @@ export default async function PortalLayout({ children }: { children: React.React
   // Don't block first paint on a cold upstream: getSnapshotFast serves the last good
   // snapshot if a fresh one would be slow, and refreshes in the background.
   const [user, { snapshot, stale }] = await Promise.all([getSessionUser(), getSnapshotFast()]);
-  const favorites = await getFavorites(user.id);
+  // Both prefs are per-user; the dashboards seed drives desktop Home *and* the mobile
+  // dashboard from one source (the mobile shell never renders the page that fetched it).
+  const [favorites, dashboards] = await Promise.all([
+    getFavorites(user.id),
+    user.id !== "anon" ? getDashboards(user.id) : Promise.resolve(null),
+  ]);
   return (
-    <PortalProvider user={user} oidc={authConfigured} favorites={favorites}>
+    <PortalProvider user={user} oidc={authConfigured} favorites={favorites} initialDashboards={dashboards}>
       <DataProvider initial={snapshot} initialStale={stale}>
         <MobileShell>{children}</MobileShell>
       </DataProvider>

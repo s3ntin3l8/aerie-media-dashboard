@@ -3,24 +3,15 @@
 // AERIE — Home dashboard (modular 12-col widget grid)
 // Pick widgets, drag/resize on a snap grid, per-role saved layouts.
 // ============================================================
-import React, { useState } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
-import type { Service, Role, DashboardStore, MobileOverlay, DiscoverItem, UpcomingItem, MediaKind } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData, useRefresh } from "@/components/portal/DataProvider";
+import { useData } from "@/components/portal/DataProvider";
 import { Icon, Sparkline, StatusDot, Eyebrow, Kbd, SearchField } from "@/components/primitives";
 import { getGreeting } from "@/lib/greeting";
-import { useRequestReview } from "@/components/hooks/useRequestReview";
 import { Empty } from "@/components/panels";
-import { GridDashboard } from "@/components/portal/GridDashboard";
-import { AddWidgetModal } from "@/components/modals/AddWidgetModal";
-import { CardSettingsModal } from "@/components/modals/CardSettingsModal";
-import { RequestModal } from "@/components/modals/RequestModal";
-import { UpcomingDetailModal } from "@/components/modals/UpcomingDetailModal";
-import { compactAll, migrateLayout, mobileStack, reorderUids, type Tile } from "@/components/portal/gridLayout";
-import { WIDGET_CATALOG, defaultLayout, addWidgetToLayout, resolveSettings, type WidgetCtx } from "@/components/portal/widgetCatalog";
-import { setDashboardsAction } from "@/app/(portal)/actions";
-import { submitRequest, resolveDiscoverItem } from "@/app/(portal)/requests/actions";
+import { useDashboard } from "@/components/portal/useDashboard";
+import { DashboardBody } from "@/components/portal/DashboardBody";
 
 // 40px aggregate health ticker
 function HealthTicker({ onOpenStatus }: { onOpenStatus: () => void }) {
@@ -147,80 +138,12 @@ function GreetingHeader({
   );
 }
 
-export function Home({ initialDashboards }: { initialDashboards?: DashboardStore | null }) {
+export function Home() {
   const router = useRouter();
-  const { role, setPaletteOpen, user } = usePortal();
+  const { setPaletteOpen, user, initialDashboards } = usePortal();
   const { services } = useData();
-  const { onAct } = useRequestReview();
-  const openService = (s: Service) => router.push(`/s/${s.id}`);
-
-  const refresh = useRefresh();
-  const [editing, setEditing] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [configUid, setConfigUid] = useState<string | null>(null);
-  const [reqPick, setReqPick] = useState<DiscoverItem | null>(null);
-  const [upcomingPick, setUpcomingPick] = useState<UpcomingItem | null>(null);
-
-  // Both role layouts + the per-role mobile overlay live in one store; every edit
-  // persists the whole store atomically, so a member's arrangement (and the mobile
-  // order/hidden set) survives while an admin edits theirs, and vice-versa.
-  type DashState = { admin: Tile[]; user: Tile[]; mobile: Partial<Record<Role, MobileOverlay>> };
-  const [dash, setDash] = useState<DashState>(() => ({
-    admin: migrateLayout(initialDashboards?.admin?.length ? initialDashboards.admin : defaultLayout("admin")),
-    user: migrateLayout(initialDashboards?.user?.length ? initialDashboards.user : defaultLayout("user")),
-    mobile: initialDashboards?.mobile ?? {},
-  }));
-  const layout = dash[role] || [];
-  const overlay = dash.mobile[role];
-
-  // Single state mutator: apply the updater, then persist the resulting store.
-  const commit = (updater: (d: DashState) => DashState) =>
-    setDash((d) => {
-      const next = updater(d);
-      void setDashboardsAction({ admin: next.admin, user: next.user, mobile: next.mobile });
-      return next;
-    });
-
-  const setLayout = (next: Tile[] | ((prev: Tile[]) => Tile[])) =>
-    commit((d) => ({ ...d, [role]: typeof next === "function" ? next(d[role] || []) : next }));
-
-  // Removing a widget (a desktop action) also prunes its uid from this role's
-  // mobile overlay so no stale references linger in the persisted JSON.
-  const removeWidget = (uid: string) =>
-    commit((d) => {
-      const cur = d.mobile[role];
-      const mobile = cur ? { ...d.mobile, [role]: { order: cur.order.filter((u) => u !== uid), hidden: cur.hidden.filter((u) => u !== uid) } } : d.mobile;
-      return { ...d, [role]: compactAll((d[role] || []).filter((x) => x.uid !== uid)), mobile };
-    });
-  const addWidget = (type: string) => setLayout((l) => addWidgetToLayout(l, type));
-  // Reset clears the role's mobile overlay too, so the stack falls back to grid order.
-  const resetLayout = () => commit((d) => ({ ...d, [role]: defaultLayout(role), mobile: { ...d.mobile, [role]: { order: [], hidden: [] } } }));
-  const updateSettings = (uid: string, settings: Record<string, string | number | boolean>) =>
-    setLayout((l) => l.map((t) => (t.uid === uid ? { ...t, settings } : t)));
-
-  // Mobile overlay handlers — operate on the current role's overlay (default empty).
-  const setOverlay = (fn: (cur: MobileOverlay) => MobileOverlay) =>
-    commit((d) => ({ ...d, mobile: { ...d.mobile, [role]: fn(d.mobile[role] ?? { order: [], hidden: [] }) } }));
-  const mobileReorder = (uid: string, dir: -1 | 1) =>
-    commit((d) => {
-      const cur = d.mobile[role] ?? { order: [], hidden: [] };
-      const order = reorderUids(mobileStack(d[role] || [], cur).visible.map((t) => t.uid), uid, dir);
-      return { ...d, mobile: { ...d.mobile, [role]: { ...cur, order } } };
-    });
-  const mobileHide = (uid: string) => setOverlay((cur) => ({ order: cur.order.filter((u) => u !== uid), hidden: [...cur.hidden.filter((u) => u !== uid), uid] }));
-  const mobileShow = (uid: string) => setOverlay((cur) => ({ ...cur, hidden: cur.hidden.filter((u) => u !== uid) }));
-
-  // Library widgets (Now Playing / Recently Added) only know a TMDB id or a Plex
-  // rating key — resolve to a full DiscoverItem, then open the detail modal.
-  const onSelectMedia = (hint: { kind: MediaKind; tmdbId?: number; grandparentRatingKey?: string }) => {
-    void resolveDiscoverItem(hint).then((d) => { if (d) setReqPick(d); });
-  };
-  const ctx: WidgetCtx = { role, onNavigate: (path) => router.push(path), onOpenService: openService, onAct, onRequest: setReqPick, onSelectUpcoming: setUpcomingPick, onSelectMedia };
-  const renderWidget = (item: Tile) => {
-    const m = WIDGET_CATALOG[item.type];
-    if (!m) return <Empty icon="error" line="Unknown widget" sub={item.type} />;
-    return m.render(ctx, resolveSettings(item.type, item.settings));
-  };
+  const api = useDashboard(initialDashboards);
+  const { role, layout, editing } = api;
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)", position: "relative" }}>
@@ -230,8 +153,8 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
         editing={editing}
         widgetCount={layout.length}
         onOpenPalette={() => setPaletteOpen(true)}
-        onToggleEdit={() => setEditing((e) => !e)}
-        onReset={resetLayout}
+        onToggleEdit={api.toggleEdit}
+        onReset={api.resetLayout}
       />
       <HealthTicker onOpenStatus={() => router.push("/status")} />
 
@@ -262,18 +185,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
             </div>
           )}
 
-          <GridDashboard
-            layout={layout}
-            onChange={setLayout}
-            editing={editing}
-            renderWidget={renderWidget}
-            onRemove={removeWidget}
-            onConfigure={setConfigUid}
-            mobileOverlay={overlay}
-            onMobileReorder={mobileReorder}
-            onMobileHide={mobileHide}
-            onMobileShow={mobileShow}
-          />
+          <DashboardBody api={api} />
 
           {!editing && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 18, fontSize: 11, color: "var(--on-surface-variant)", flexWrap: "wrap" }}>
@@ -295,7 +207,7 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
       {/* + FAB — opens the widget catalog while editing */}
       {editing && (
         <button
-          onClick={() => setAddOpen(true)}
+          onClick={() => api.setAddOpen(true)}
           title="Add a widget"
           style={{
             position: "absolute",
@@ -322,42 +234,6 @@ export function Home({ initialDashboards }: { initialDashboards?: DashboardStore
         >
           <Icon name="add" size={22} color="var(--on-primary)" /> Add widget
         </button>
-      )}
-
-      <AddWidgetModal open={addOpen} onClose={() => setAddOpen(false)} role={role} layout={layout} onAdd={addWidget} />
-      <CardSettingsModal
-        open={!!configUid}
-        tile={configUid ? layout.find((t) => t.uid === configUid) : undefined}
-        onClose={() => setConfigUid(null)}
-        onSave={(uid, settings) => {
-          updateSettings(uid, settings);
-          setConfigUid(null);
-        }}
-      />
-      {reqPick && (
-        <RequestModal
-          open
-          mode="request"
-          initialPick={reqPick}
-          onClose={() => setReqPick(null)}
-          onSubmit={async (pick, quality, seasons) => {
-            const picked = Object.keys(seasons).filter((k) => seasons[Number(k)]).map(Number);
-            const r = await submitRequest(pick, picked, quality);
-            refresh();
-            return r;
-          }}
-          onAct={onAct}
-        />
-      )}
-      {upcomingPick && (
-        <UpcomingDetailModal
-          item={upcomingPick}
-          onClose={() => setUpcomingPick(null)}
-          onOpenService={(svc, at) => {
-            setUpcomingPick(null);
-            router.push(at ? `/s/${svc}?at=${encodeURIComponent(at)}` : `/s/${svc}`);
-          }}
-        />
       )}
     </section>
   );

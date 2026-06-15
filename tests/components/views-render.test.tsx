@@ -18,7 +18,7 @@ vi.mock("@/app/(portal)/requests/actions", () => Object.fromEntries(
   ].map((n) => [n, vi.fn(async () => [])])));
 vi.mock("@/app/(portal)/actions", () => ({ signOutAction: vi.fn(), setFavoritesAction: vi.fn(), setDashboardsAction: vi.fn() }));
 
-const portal = { role: "admin", realRole: "admin", user: { id: "u1", name: "Ada", email: "a@x" }, favorites: [], toggleFavorite: vi.fn(), modalOpen: false, setModalOpen: vi.fn(), theme: "dark", oidc: true, keptAliveIds: [] };
+const portal = { role: "admin", realRole: "admin", user: { id: "u1", name: "Ada", email: "a@x" }, favorites: [], toggleFavorite: vi.fn(), modalOpen: false, setModalOpen: vi.fn(), setPaletteOpen: vi.fn(), theme: "dark", oidc: true, keptAliveIds: [], initialDashboards: null };
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn(), usePatchData: () => vi.fn() }));
 vi.mock("@/components/mobile/useIsMobile", () => ({ useIsMobile: () => false }));

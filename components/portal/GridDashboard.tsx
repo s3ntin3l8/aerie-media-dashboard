@@ -32,6 +32,10 @@ interface GridDashboardProps {
   renderWidget: (item: Tile, stacked: boolean) => React.ReactNode;
   onRemove: (uid: string) => void;
   onConfigure: (uid: string) => void;
+  // Force the single-column stacked layout regardless of measured width. Set by the
+  // mobile shell so a 721-768px phone (where useIsMobile is true but the container is
+  // wider than stackBelow) still gets the stacked dashboard, not the desktop grid.
+  forceStacked?: boolean;
   // Mobile-only overlay (custom stack order + mobile-hidden set) and its handlers.
   // Absent ⇒ the stacked view falls back to grid-position order, nothing hidden.
   mobileOverlay?: MobileOverlay;
@@ -104,7 +108,7 @@ function tileChrome(editing: boolean, isActive: boolean): CSS {
   };
 }
 
-export function GridDashboard({ layout, onChange, editing, renderWidget, onRemove, onConfigure, mobileOverlay, onMobileReorder, onMobileHide, onMobileShow }: GridDashboardProps) {
+export function GridDashboard({ layout, onChange, editing, renderWidget, onRemove, onConfigure, forceStacked, mobileOverlay, onMobileReorder, onMobileHide, onMobileShow }: GridDashboardProps) {
   const { cols, rowH, gap, stackBelow } = GRID;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(1180);
@@ -129,7 +133,7 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
     return () => ro.disconnect();
   }, []);
 
-  const stacked = W < stackBelow;
+  const stacked = forceStacked || W < stackBelow;
   const colW = Math.max(1, (W - gap * (cols - 1)) / cols);
   const cellW = colW + gap;
   const cellH = rowH + gap;

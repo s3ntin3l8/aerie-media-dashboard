@@ -7,7 +7,7 @@ import { useData } from "@/components/portal/DataProvider";
 import { MobileAppBar } from "@/components/mobile/MobileAppBar";
 import { MobileNav } from "@/components/mobile/MobileNav";
 import { MobileAdmin } from "@/components/mobile/screens/MobileAdmin";
-import { MobileHome } from "@/components/mobile/screens/MobileHome";
+import { MobileDashboard } from "@/components/mobile/screens/MobileDashboard";
 import { MobileStreams } from "@/components/mobile/screens/MobileStreams";
 import { MobileRequests } from "@/components/mobile/screens/MobileRequests";
 import { MobileStatus } from "@/components/mobile/screens/MobileStatus";
@@ -44,7 +44,7 @@ export function MobilePortal() {
     // secrets, visibility). It's not mobile-optimised but is fully functional
     // and far better than landing on Home with nothing working.
     if (pathname.startsWith("/admin")) return <Admin />;
-    return <MobileHome />;
+    return <MobileDashboard />;
   }
 
   return (

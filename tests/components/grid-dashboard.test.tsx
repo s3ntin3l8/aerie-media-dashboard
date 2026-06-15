@@ -288,4 +288,17 @@ describe("GridDashboard — stacked flag (StackedContext)", () => {
     );
     expect(screen.getByTestId("stacked")).toHaveTextContent("false");
   });
+
+  it("forceStacked pins the single-column path even at desktop width (mobile shell)", () => {
+    // Wide container (1180 ≥ stackBelow) would normally take the grid path; forceStacked overrides
+    // it so a 721-768px phone still stacks. Probe sees stacked=true and no resize chrome renders.
+    withGridWidth(1180);
+    render(
+      <GridDashboard layout={[tile({ uid: "f1" })]} onChange={vi.fn()} editing renderWidget={probeRender} onRemove={vi.fn()} onConfigure={vi.fn()} forceStacked />,
+    );
+    expect(screen.getByTestId("stacked")).toHaveTextContent("true");
+    // Stacked edit chrome uses "Hide on this device", never the grid's "Resize" grip.
+    expect(screen.queryByTitle("Resize")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Hide on this device")).toBeInTheDocument();
+  });
 });
