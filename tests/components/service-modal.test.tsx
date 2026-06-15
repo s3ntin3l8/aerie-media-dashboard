@@ -148,7 +148,7 @@ describe("ServiceModal — edit mode", () => {
   it("shows the live heartbeat block when editing a monitored service", () => {
     render(<ServiceModal {...baseProps} mode="edit" service={mkSvc({ beats: [{ t: 1, up: true }] })} />);
     // Uptime/status summary renders next to the heartbeat.
-    expect(screen.getByText(/99.9% · up/)).toBeInTheDocument();
+    expect(screen.getByText(/99\.90% · up/)).toBeInTheDocument();
   });
 });
 

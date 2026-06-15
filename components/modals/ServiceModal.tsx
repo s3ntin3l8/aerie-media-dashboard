@@ -562,14 +562,14 @@ export function ServiceModal({
 
         {/* MONITORING SOURCE (Gatus owns probing — live heartbeat shown when editing) */}
         <section>
-          <SectionLabel hint={editing && service ? `${service.uptime}% · last probe ${service.ms}ms` : "which Gatus endpoint tracks this service"}>Monitoring source</SectionLabel>
+          <SectionLabel hint={editing && service ? `${service.uptime.toFixed(2)}% · last probe ${service.ms}ms` : "which Gatus endpoint tracks this service"}>Monitoring source</SectionLabel>
           <MonitoringKeyPicker value={f.monitoringKey} onChange={(v) => set("monitoringKey", v)} />
           {editing && service && service.beats && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, padding: "9px 13px", borderRadius: 10, border: "1px solid var(--outline-variant)", background: "var(--surface-container-lowest)" }}>
               <Heartbeat beats={service.beats.slice(-22)} h={18} barW={3} />
               <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
                 <StatusDot status={service.status} size={7} />
-                {service.status === "unknown" ? "no data" : `${service.uptime}% · ${service.status}`}
+                {service.status === "unknown" ? "no data" : `${service.uptime.toFixed(2)}% · ${service.status}`}
               </span>
             </div>
           )}
