@@ -98,7 +98,8 @@ OIDC config lives here too (`oidcProviderId/Name/Icon`, `oidcScopes`, `oidcGroup
    in parallel and seeds the client `DataProvider`. `dynamic = "force-dynamic"` (never
    prerendered).
 3. `components/portal/DataProvider.tsx` — client; seeded with the server snapshot, then polls
-   `/api/snapshot` every 12s (pauses when tab hidden). `useData()` reads it; `useRefresh()`
+   `/api/snapshot` adaptively — every 3s while a stream is active, 12s when idle (pauses when
+   tab hidden). `useData()` reads it; `useRefresh()`
    forces an immediate refetch after a mutation.
 4. `app/api/snapshot/route.ts` — re-runs `getSnapshot()` for the polling feed.
 
@@ -112,8 +113,9 @@ on the `Snapshot` type.
   `cache: "no-store"` fetch that throws a typed `IntegrationError`. Use it for all upstream
   HTTP so the facade can degrade per-panel.
 - `clients.ts` — one normalizing function per upstream (Gatus, Tautulli, Jellyfin, Audiobookshelf,
-  Overseerr, Sonarr/Radarr, Prowlarr, Bazarr, NZBHydra2, Listenarr, NZBGet, qBittorrent, Wizarr,
-  Agregarr, Prometheus, Beszel, plus the read-only **Traefik** and **Authentik** insight clients).
+  Overseerr, Sonarr/Radarr (and the Lidarr/Readarr/Whisparr *arr family), Prowlarr, Bazarr,
+  NZBHydra2, Listenarr, LazyLibrarian, NZBGet, qBittorrent, Wizarr, Agregarr, Prometheus, Beszel,
+  Loki, plus the read-only **Traefik** and **Authentik** insight clients).
   They **throw** on missing config/errors; the facade catches.
   **Read-only service insight (Traefik/Authentik).** `traefikRoutes()` and `authentikApps()` don't
   drive a panel — they correlate to existing services **by host** and ride on each `Service` as

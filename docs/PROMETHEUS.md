@@ -3,10 +3,18 @@
 AERIE can connect to a Prometheus instance to embed it in the portal and query metrics from it.
 Access is restricted to **admins** — Prometheus is hidden from all other visibility groups by default.
 
+> **Prometheus or Beszel?** Prometheus and [Beszel](services/monitoring.md) are interchangeable
+> sources for the System Status cards. Configure either, or both — when both are present a
+> **Prometheus ⇄ Beszel toggle** appears in the section header, and the active choice persists as
+> the `metricsSource` deployment setting. This page covers Prometheus; see
+> [`services/monitoring.md`](services/monitoring.md) for Beszel.
+
 ## Prerequisites
 
 - A running Prometheus server reachable from the AERIE container (e.g. `http://prometheus:9090`).
 - Optional: a bearer token if your Prometheus is behind an auth proxy.
+- Optional: set `PROMETHEUS_INSTANCE` (or the in-UI `prometheusInstance` setting) to filter
+  node_exporter metrics to one host label, e.g. `pve` or `192.168.1.10:9100`.
 
 ## Adding Prometheus
 
