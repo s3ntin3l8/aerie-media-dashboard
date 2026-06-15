@@ -49,6 +49,17 @@ Only run `db:generate` when you change `lib/db/schema.ts`.
 - **pre-push** (Husky): the full `npm run typecheck && npm run lint && npm run build`. A push
   will be rejected locally if any of these fail.
 
+## Standard working mode
+
+The default delivery flow for any code change is: **work on a feature branch → run the gates
+(`lint`, `typecheck`, `test`, `build`) → commit → push → open a PR.** Never commit straight to
+`main`. Once a change is implemented and the gates are green, proceed to branch/commit/push/PR
+without waiting to be asked each time. Commit messages and PR bodies follow the footer
+conventions in this repo's Claude Code session guidance (co-author trailer on commits, the
+"Generated with Claude Code" line on PR bodies). Use Conventional Commit prefixes
+(`fix(scope):`, `feat(scope):`, `test(scope):`, …) — Release Please derives the changelog and
+version bumps from them.
+
 ## Architecture
 
 ### Real-data-or-empty (most important concept)
