@@ -22,9 +22,12 @@ const CONFIGS = [
 ];
 
 const logoOf = (c: { id: string; logoSlug: string | null }, slug: string) => c.logoSlug === slug || c.id === slug;
+// Default batched-secret reads: every service carries an apiKey, none carry forward-auth.
+const allKeysMap = () => new Map<string, string>(CONFIGS.map((c) => [c.id, "key"]));
 vi.mock("@/lib/integrations/registry", () => ({
   getServiceConfigs: vi.fn(async () => CONFIGS),
   getServiceSecret: vi.fn(async (_id: string, kind?: string) => (kind === "forwardAuth" ? null : "key")),
+  getAllServiceSecrets: vi.fn(async (kind?: string) => (kind === "forwardAuth" ? new Map<string, string>() : allKeysMap())),
   getServiceCredentials: vi.fn(async (id: string) => ({ baseUrl: `https://${id}.test`, apiKey: "key", insecureTls: false })),
   isConfigured: vi.fn(async () => true),
   configMatchesLogo: vi.fn((c: { id: string; logoSlug: string | null }, slug: string) => logoOf(c, slug)),
@@ -102,21 +105,23 @@ describe("getSnapshot — facade aggregation", () => {
 
   it("flags hasSecret per stored secret (boolean only, value never surfaced)", async () => {
     const registry = await import("@/lib/integrations/registry");
-    vi.mocked(registry.getServiceSecret).mockImplementation(async (id: string, kind?: string) => (kind === "forwardAuth" || id === "qbittorrent" ? null : "key"));
+    vi.mocked(registry.getAllServiceSecrets).mockImplementation(async (kind?: string) =>
+      kind === "forwardAuth" ? new Map() : new Map(CONFIGS.filter((c) => c.id !== "qbittorrent").map((c) => [c.id, "key"])),
+    );
     try {
       const snap = await getSnapshot();
       expect(snap.services.find((s) => s.id === "sonarr")?.hasSecret).toBe(true);
       expect(snap.services.find((s) => s.id === "qbittorrent")?.hasSecret).toBe(false);
     } finally {
-      vi.mocked(registry.getServiceSecret).mockImplementation(async (_id: string, kind?: string) => (kind === "forwardAuth" ? null : "key"));
+      vi.mocked(registry.getAllServiceSecrets).mockImplementation(async (kind?: string) => (kind === "forwardAuth" ? new Map() : allKeysMap()));
     }
   });
 
   it("surfaces stored forward-auth config (non-secret fields) without the password", async () => {
     const registry = await import("@/lib/integrations/registry");
     const cfg = { method: "bearer", tokenUrl: "https://auth.test/application/o/token/", clientId: "cid", username: "svc", password: "super-secret", scope: "openid" };
-    vi.mocked(registry.getServiceSecret).mockImplementation(async (id: string, kind?: string) =>
-      kind === "forwardAuth" ? (id === "sonarr" ? JSON.stringify(cfg) : null) : "key",
+    vi.mocked(registry.getAllServiceSecrets).mockImplementation(async (kind?: string) =>
+      kind === "forwardAuth" ? new Map([["sonarr", JSON.stringify(cfg)]]) : allKeysMap(),
     );
     try {
       const snap = await getSnapshot();
@@ -126,7 +131,7 @@ describe("getSnapshot — facade aggregation", () => {
       // services with no stored forward-auth carry no config
       expect(snap.services.find((s) => s.id === "radarr")?.forwardAuthConfig).toBeUndefined();
     } finally {
-      vi.mocked(registry.getServiceSecret).mockImplementation(async (_id: string, kind?: string) => (kind === "forwardAuth" ? null : "key"));
+      vi.mocked(registry.getAllServiceSecrets).mockImplementation(async (kind?: string) => (kind === "forwardAuth" ? new Map() : allKeysMap()));
     }
   });
 

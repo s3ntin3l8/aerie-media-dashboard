@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  getServiceConfigs, getServiceSecret, getServiceCredentials, isConfigured,
+  getServiceConfigs, getServiceSecret, getAllServiceSecrets, getServiceCredentials, isConfigured,
   getFavorites, setFavorites, getDashboards, setDashboards,
   getDeploymentSetting, setDeploymentSetting,
   getGroups, getVisibility, getMembers,
@@ -91,5 +91,22 @@ describe("registry — services & secrets", () => {
     await updateServiceVersion("radarr", "5.1.0");
     const cfg = (await getServiceConfigs()).find((c) => c.id === "radarr");
     expect(cfg?.version).toBe("5.1.0");
+  });
+
+  it("batch-reads all secrets of a kind in one pass", async () => {
+    await db.insert(schema.services).values({ id: "sonarr", name: "Sonarr", cat: "automation", icon: "tv", host: "sonarr.test", baseUrl: "https://sonarr.test", insecureTls: false });
+    const sonarr = encrypt("sonarr-key");
+    await db.insert(schema.serviceSecrets).values({ serviceId: "sonarr", kind: "apiKey", iv: sonarr.iv, authTag: sonarr.authTag, ciphertext: sonarr.ciphertext, updatedAt: new Date() });
+    const fa = encrypt('{"method":"basic","username":"svc","password":"pw"}');
+    await db.insert(schema.serviceSecrets).values({ serviceId: "sonarr", kind: "forwardAuth", iv: fa.iv, authTag: fa.authTag, ciphertext: fa.ciphertext, updatedAt: new Date() });
+
+    const apiKeys = await getAllServiceSecrets("apiKey");
+    expect(apiKeys.get("radarr")).toBe("super-secret-key"); // seeded by the previous case
+    expect(apiKeys.get("sonarr")).toBe("sonarr-key");
+    expect(apiKeys.has("forwardAuth")).toBe(false); // keyed by serviceId, not kind
+
+    const faSecrets = await getAllServiceSecrets("forwardAuth");
+    expect(faSecrets.get("sonarr")).toContain("basic");
+    expect(faSecrets.has("radarr")).toBe(false); // radarr has only an apiKey
   });
 });

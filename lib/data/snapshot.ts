@@ -7,9 +7,9 @@
 // ============================================================
 import "server-only";
 import type { LibraryStat, MediaRequest, NowPlaying, QueueItem, NzbgetStatus, QbittorrentStats, QueueSource, RecentItem, Service, TraefikRoute, TraefikInstance, AuthentikAccess, User, StorageMount, IssueItem, HealthIssue, UpcomingItem, DownloadEvent, TopStats, DiscoverItem } from "@/lib/types";
-import { getServiceConfigs, getServiceSecret, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, configMatchesLogo, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
+import { getServiceConfigs, getAllServiceSecrets, getGroups, getVisibility, getMembers, getDeploymentSetting, updateServiceVersion, configMatchesLogo, type GroupRow, type VisibilityRow } from "@/lib/integrations/registry";
 import { isTraefikSource } from "@/lib/servicePresets";
-import { getForwardAuthConfig } from "@/lib/integrations/forwardAuth";
+import { parseForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import {
   gatusHealth,
   traefikRoutes,
@@ -263,7 +263,16 @@ export async function getSnapshotFast(deadlineMs = 600): Promise<{ snapshot: Sna
 
 export async function getSnapshot(): Promise<Snapshot> {
   const tStart = Date.now();
-  const [configs, groups, visibility] = await Promise.all([getServiceConfigs(), getGroups(), getVisibility()]);
+  // One batched read of every stored secret per kind (apiKey + forwardAuth) instead of a
+  // per-service getServiceSecret()/getForwardAuthConfig() round-trip. has(), configuredIds and
+  // faConfigs below all derive from these two maps — no further secret awaits in this function.
+  const [configs, groups, visibility, apiKeySecrets, faSecrets] = await Promise.all([
+    getServiceConfigs(),
+    getGroups(),
+    getVisibility(),
+    getAllServiceSecrets("apiKey"),
+    getAllServiceSecrets("forwardAuth"),
+  ]);
 
   // Which services are eligible for a live call. A service marked inactive is fully
   // disabled — never polled — so isActive() gates every live call below (folded into
@@ -274,7 +283,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   const isActive = (id: string) => configs.some((c) => c.id === id && c.active);
   // Gatus and Prometheus only need a baseUrl (API key is optional), so gate them on config
   // existence rather than has() — using has() would silently skip no-auth deployments.
-  const has = async (id: string) => isActive(id) && (await getServiceSecret(id)) != null;
+  const has = (id: string) => isActive(id) && apiKeySecrets.has(id);
   const gatusOn = configs.some((c) => c.id === "gatus" && c.active);
   const promOn = configs.some((c) => c.id === "prometheus" && c.active);
   // Traefik's API can run open or behind basicAuth, so (like Gatus/Prometheus) gate on the row
@@ -286,13 +295,13 @@ export async function getSnapshot(): Promise<Snapshot> {
   // /api/snapshot inside traefikRoutes() / traefikInstances(), not from the logo here.
   const traefikOn = configs.some((c) => c.active && isTraefikSource(c));
   // Authentik's API requires a token, so gate on a stored secret (like Beszel).
-  const authentikOn = await has("authentik");
+  const authentikOn = has("authentik");
   // Loki: an active source (by logo "loki") gates the admin per-service "Logs" button. The log
   // tail is fetched on-demand via /api/loki/logs, so this is only a cheap config check (no network).
   const lokiOn = configs.some((c) => c.active && configMatchesLogo(c, "loki"));
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
-  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn, qbitOn] = await Promise.all([
+  const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn, qbitOn] = [
     has("tautulli"),
     has("jellyfin"),
     has("audiobookshelf"),
@@ -309,7 +318,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     isActive("nzbget"), // NZBGet can run without credentials (auth disabled)
     has("listenarr"),
     has("qbittorrent"),
-  ]);
+  ];
 
   // Active metrics source: honour the stored preference when its source is live,
   // otherwise fall back to whichever of Prometheus / Beszel is configured.
@@ -445,26 +454,22 @@ export async function getSnapshot(): Promise<Snapshot> {
 
   // Which services have a secret stored (encrypted) — surfaced to the client as a boolean only
   // (never the value) so the Admin UI can distinguish configured from unconfigured services.
-  const secretChecks = await Promise.all(
-    configs.map(async (c) => [c.id, (await getServiceSecret(c.id)) != null] as const),
-  );
-  const configuredIds = new Set(secretChecks.filter(([, has]) => has).map(([id]) => id));
+  const configuredIds = new Set(configs.filter((c) => apiKeySecrets.has(c.id)).map((c) => c.id));
 
   // Non-secret forward-auth config per service (method + account, never the password), so the
-  // Admin edit form can reflect what's stored instead of defaulting to "keep current".
+  // Admin edit form can reflect what's stored instead of defaulting to "keep current". Parsed
+  // from the batched forwardAuth secrets read at the top — no per-service DB round-trip.
   const faConfigs = new Map(
-    await Promise.all(
-      configs.map(async (c) => {
-        const fa = await getForwardAuthConfig(c.id);
-        if (!fa) return [c.id, undefined] as const;
-        // Surface only the non-secret fields — the password never leaves the server.
-        const rest: Service["forwardAuthConfig"] =
-          fa.method === "bearer"
-            ? { method: "bearer", username: fa.username, tokenUrl: fa.tokenUrl, clientId: fa.clientId, scope: fa.scope }
-            : { method: "basic", username: fa.username };
-        return [c.id, rest] as const;
-      }),
-    ),
+    configs.map((c) => {
+      const fa = parseForwardAuthConfig(faSecrets.get(c.id) ?? null);
+      if (!fa) return [c.id, undefined] as const;
+      // Surface only the non-secret fields — the password never leaves the server.
+      const rest: Service["forwardAuthConfig"] =
+        fa.method === "bearer"
+          ? { method: "bearer", username: fa.username, tokenUrl: fa.tokenUrl, clientId: fa.clientId, scope: fa.scope }
+          : { method: "basic", username: fa.username };
+      return [c.id, rest] as const;
+    }),
   );
 
   // Correlate Traefik routers to services by host (the only reliable join). First match wins.

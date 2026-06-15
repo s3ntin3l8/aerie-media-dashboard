@@ -86,6 +86,31 @@ export async function getServiceSecret(serviceId: string, kind = "apiKey"): Prom
   }
 }
 
+/**
+ * Batch read of every stored secret of a given kind → `Map<serviceId, decrypted value>`.
+ * One DB round-trip instead of one `getServiceSecret()` per service — the data facade calls
+ * this once per poll for both `apiKey` and `forwardAuth` kinds rather than walking each config.
+ * Rows that fail to decrypt are skipped (treated as absent, matching `getServiceSecret`'s
+ * null-on-error contract). Returns an empty map when the DB is unavailable.
+ */
+export async function getAllServiceSecrets(kind = "apiKey"): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    await ensureDb();
+    const rows = await db.select().from(schema.serviceSecrets).where(eq(schema.serviceSecrets.kind, kind));
+    for (const row of rows) {
+      try {
+        out.set(row.serviceId, decrypt({ iv: row.iv, authTag: row.authTag, ciphertext: row.ciphertext }));
+      } catch {
+        /* skip undecryptable row — same as getServiceSecret returning null */
+      }
+    }
+  } catch {
+    /* DB unavailable → empty map */
+  }
+  return out;
+}
+
 export interface ServiceCredentials {
   baseUrl: string;
   apiKey: string | null;
