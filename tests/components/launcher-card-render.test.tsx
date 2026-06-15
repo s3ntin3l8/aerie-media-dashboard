@@ -55,4 +55,14 @@ describe("Launcher desktop cards", () => {
     render(<Launcher />);
     expect(screen.getByTitle(/running in the background now/i)).toBeInTheDocument();
   });
+
+  it("renders the note on a single reserved line that truncates rather than wraps", () => {
+    vi.mocked(useData).mockReturnValue({ services: [{ ...plex, note: "A very long note that should stay on one line" }], visibility: [] } as never);
+    render(<Launcher />);
+    const note = screen.getByText("A very long note that should stay on one line");
+    expect(note.style.whiteSpace).toBe("nowrap");
+    expect(note.style.overflow).toBe("hidden");
+    // Fixed one-line height keeps the divider + stats aligned across cards in a row.
+    expect(note.style.height).toBe("17px");
+  });
 });
