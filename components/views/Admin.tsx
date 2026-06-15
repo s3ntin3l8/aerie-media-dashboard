@@ -8,11 +8,11 @@ import type { Service, OverseerrQuota } from "@/lib/types";
 import { useData, useRefresh, usePatchData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { setVisibility, upsertService, setServiceSecret, mergeServiceForwardAuth, clearServiceForwardAuth, setServiceActive, setServiceKeepAlive, deleteService, serviceExists, detectServiceVersion, probeServiceVersion, testStoredConnection, setUserOverseerrQuota, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
-import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar } from "@/components/primitives";
+import { Icon, Eyebrow, Pill, Chip, Avatar, Divider, ProgressBar, CatBadge } from "@/components/primitives";
 import { Toggle } from "@/components/modals/ModalShell";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
-import { PageHeader, RouteBadges, MetaBadges, KeepAliveCell } from "@/components/views/shared";
+import { PageHeader, RouteBadges, MetaBadges, KeepAliveCell, CertCell, SsoCell, AccessCell, RouteHealthBadge } from "@/components/views/shared";
 import { ServiceModal, type ServiceForm } from "@/components/modals/ServiceModal";
 import { LogsModal } from "@/components/modals/LogsModal";
 import { serviceRequiresKey, matchPreset, isTraefikSource } from "@/lib/servicePresets";
@@ -119,7 +119,8 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
   const logsModalEl = lokiConfigured && logsFor ? (
     <LogsModal open serviceId={logsFor.id} serviceName={logsFor.name} logoSlug={logsFor.logoSlug} onClose={() => setLogsFor(null)} />
   ) : null;
-  const cols = "1.6fr 1fr 0.6fr 0.6fr 0.7fr 1.1fr 0.5fr";
+  // Service · Category · Host · Cert · SSO · Access · Embed · Active · Keep alive · API key · actions
+  const cols = "1.5fr 0.6fr 1fr 0.85fr 0.6fr 0.85fr 0.5fr 0.5fr 0.6fr 1fr 0.7fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
   const [discoveredOpen, setDiscoveredOpen] = useState(false);
@@ -417,6 +418,26 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
     );
   }
 
+  // A sortable column header (Service / Host / Embed) — interleaved among the plain Eyebrow headers
+  // so each lands in its own grid column position.
+  const sortHead = (col: AdminSortCol, label: string) => {
+    const active = sort.col === col;
+    return (
+      <button
+        onClick={() => handleSortClick(col)}
+        style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+      >
+        <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined }}>{label}</Eyebrow>
+        <Icon
+          name={active ? (sort.dir === "asc" ? "expand_less" : "expand_more") : "unfold_more"}
+          size={13}
+          color={active ? "var(--on-surface)" : "var(--on-surface-variant)"}
+          style={{ opacity: active ? 1 : 0.4 }}
+        />
+      </button>
+    );
+  };
+
   return (
     <>
     {logsModalEl}
@@ -425,25 +446,13 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
     <div className="aerie-x-scroll">
       <div style={{ borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
-          {(["name", "host", "embed"] as AdminSortCol[]).map((col, i) => {
-            const labels: Record<AdminSortCol, string> = { name: "Service", host: "Host", embed: "Embed" };
-            const active = sort.col === col;
-            return (
-              <button
-                key={col}
-                onClick={() => handleSortClick(col)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
-              >
-                <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined }}>{labels[col]}</Eyebrow>
-                <Icon
-                  name={active ? (sort.dir === "asc" ? "expand_less" : "expand_more") : "unfold_more"}
-                  size={13}
-                  color={active ? "var(--on-surface)" : "var(--on-surface-variant)"}
-                  style={{ opacity: active ? 1 : 0.4 }}
-                />
-              </button>
-            );
-          })}
+          {sortHead("name", "Service")}
+          <Eyebrow>Category</Eyebrow>
+          {sortHead("host", "Host")}
+          <Eyebrow>Cert</Eyebrow>
+          <Eyebrow>SSO</Eyebrow>
+          <Eyebrow>Access</Eyebrow>
+          {sortHead("embed", "Embed")}
           <Eyebrow>Active</Eyebrow>
           <Eyebrow>Keep alive</Eyebrow>
           <Eyebrow>API key</Eyebrow>
@@ -464,12 +473,20 @@ function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered }: { i
                     <span style={{ fontWeight: 700, fontSize: 12.5, color: "var(--on-surface)" }}>{s.name}</span>
                     {!s.active && <Pill rawColor="var(--on-surface-variant)">inactive</Pill>}
                   </div>
-                  <div style={{ marginTop: 3 }}>
-                    <MetaBadges cat={s.cat} route={s.route} access={s.authentik} />
-                  </div>
+                  {/* Cert / SSO / Authentik moved to their own columns; only the route-health
+                      chip (shown when a route is unhealthy) stays inline here. */}
+                  {s.route && (
+                    <div style={{ marginTop: 3 }}>
+                      <RouteHealthBadge route={s.route} />
+                    </div>
+                  )}
                 </div>
               </div>
+              <span style={{ opacity: dim }}>{<CatBadge cat={s.cat} size="xs" />}</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", opacity: dim }}>{s.host}</span>
+              <span style={{ opacity: dim }}><CertCell route={s.route} reserve /></span>
+              <span style={{ opacity: dim }}><SsoCell route={s.route} reserve /></span>
+              <span style={{ opacity: dim }}><AccessCell access={s.authentik} reserve /></span>
               <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
               <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
               <span

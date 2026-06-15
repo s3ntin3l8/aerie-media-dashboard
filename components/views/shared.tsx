@@ -239,6 +239,13 @@ export function AccessBadges({ access }: { access: AuthentikAccess }) {
   );
 }
 
+/** Authentik-access cell for an aligned table column (mirrors CertCell/SsoCell): the access badge
+ *  when the service is Authentik-bound, else a muted "—" placeholder under `reserve`. */
+export function AccessCell({ access, reserve = false }: { access?: AuthentikAccess; reserve?: boolean }) {
+  if (!access) return reserve ? <DashCell /> : null;
+  return <AccessBadges access={access} />;
+}
+
 /** One compact, wrapping meta row for a service: an optional category pill followed by the
  *  Traefik route badges and the Authentik access badge. Replaces stacking each in its own
  *  margined line so service rows stay short (two lines instead of four). */
