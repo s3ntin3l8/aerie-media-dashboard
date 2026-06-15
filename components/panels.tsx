@@ -9,6 +9,7 @@ import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus, Upcomin
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setQueueSource } from "@/app/(portal)/admin/actions";
 import { usePortal } from "@/components/portal/PortalProvider";
+import { useStacked } from "@/components/portal/StackedContext";
 import { isVisible } from "@/lib/visibility";
 import { resolveBySource } from "@/lib/widgets/capabilities";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
@@ -170,6 +171,9 @@ export function PanelShell({
   /** When true, fill the parent's height (for grid tiles) and scroll the body internally. */
   fill?: boolean;
 }) {
+  // On the single-column mobile stack, tighten the header chrome (padding/title/icon) so the
+  // desktop-tuned figures don't read oversized on a phone. Layout/body are unchanged.
+  const stacked = useStacked();
   return (
     <section
       style={{
@@ -189,13 +193,13 @@ export function PanelShell({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "9px 16px 8px",
+          padding: stacked ? "8px 12px 7px" : "9px 16px 8px",
           borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-          {icon && <Icon name={icon} size={16} color={accent} />}
-          <h2 style={{ fontFamily: "var(--font-headline)", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--on-surface)", whiteSpace: "nowrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: stacked ? 8 : 9, minWidth: 0 }}>
+          {icon && <Icon name={icon} size={stacked ? 15 : 16} color={accent} />}
+          <h2 style={{ fontFamily: "var(--font-headline)", fontSize: stacked ? 11.5 : 12.5, fontWeight: 700, letterSpacing: stacked ? "0.11em" : "0.13em", textTransform: "uppercase", color: "var(--on-surface)", whiteSpace: "nowrap" }}>
             {title}
           </h2>
           {live && (
@@ -450,6 +454,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
 export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void; fill?: boolean }) {
   const { services, visibility } = useData();
   const { role } = usePortal();
+  const stacked = useStacked();
   const list = services.filter((s) => s.central && isVisible(s, role, visibility));
   // In the modular grid (fill) a tile is absolutely positioned, so returning null
   // would leave an empty hole — render a graceful empty card instead.
@@ -492,7 +497,7 @@ export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?:
       </div>
       <div
         className={fill ? "custom-scrollbar" : undefined}
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(248px, 1fr))", gap: 14, ...(fill ? { flex: 1, minHeight: 0, overflowY: "auto" } : {}) }}
+        style={{ display: "grid", gridTemplateColumns: stacked ? "1fr" : "repeat(auto-fit, minmax(248px, 1fr))", gap: stacked ? 10 : 14, ...(fill ? { flex: 1, minHeight: 0, overflowY: "auto" } : {}) }}
       >
         {list.map((s) => (
           <CentralCard key={s.id} s={s} onOpen={onOpen} />

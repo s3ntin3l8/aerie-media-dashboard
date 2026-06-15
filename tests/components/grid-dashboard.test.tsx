@@ -17,6 +17,7 @@ vi.mock("@/components/portal/widgetCatalog", () => ({
 }));
 
 import { GridDashboard } from "@/components/portal/GridDashboard";
+import { useStacked } from "@/components/portal/StackedContext";
 import type { Tile } from "@/components/portal/gridLayout";
 
 const tile = (over: Partial<Tile> = {}): Tile => ({
@@ -263,5 +264,28 @@ describe("GridDashboard — drag & resize handlers", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     const next = onChange.mock.calls[0][0] as Tile[];
     expect(next.find((t) => t.uid === "r1")).toBeDefined();
+  });
+});
+
+describe("GridDashboard — stacked flag (StackedContext)", () => {
+  // GridDashboard owns the 720px breakpoint and provides it to the widget subtree via context,
+  // so leaf panels can tighten their layout on mobile. A probe widget reads useStacked().
+  const Probe = () => <span data-testid="stacked">{String(useStacked())}</span>;
+  const probeRender = () => <Probe />;
+
+  it("provides stacked=true to widgets in the single-column (mobile) path", () => {
+    // jsdom clientWidth 0 → W < stackBelow → stacked branch.
+    render(
+      <GridDashboard layout={[tile({ uid: "s1" })]} onChange={vi.fn()} editing={false} renderWidget={probeRender} onRemove={vi.fn()} onConfigure={vi.fn()} />,
+    );
+    expect(screen.getByTestId("stacked")).toHaveTextContent("true");
+  });
+
+  it("provides stacked=false to widgets in the desktop grid path", () => {
+    withGridWidth(1180);
+    render(
+      <GridDashboard layout={[tile({ uid: "g1" })]} onChange={vi.fn()} editing={false} renderWidget={probeRender} onRemove={vi.fn()} onConfigure={vi.fn()} />,
+    );
+    expect(screen.getByTestId("stacked")).toHaveTextContent("false");
   });
 });
