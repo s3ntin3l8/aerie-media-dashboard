@@ -27,6 +27,7 @@ const patchData = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/mobile/useIsMobile", () => ({ useIsMobile: () => mobile.value }));
 vi.mock("@/app/(portal)/admin/actions", () => actions);
+vi.mock("@/app/(portal)/admin/plex-actions", () => ({ getPlexPanelData: vi.fn(async () => ({ configured: false, hasToken: false, sections: [], tasks: [] })), scanSectionAction: vi.fn(), analyzeSectionAction: vi.fn(), emptyTrashAction: vi.fn(), cleanBundlesAction: vi.fn(), optimizeDbAction: vi.fn(), runButlerTaskAction: vi.fn() }));
 vi.mock("@/components/portal/DataProvider", () => ({
   useData: vi.fn(),
   useRefresh: () => refresh,

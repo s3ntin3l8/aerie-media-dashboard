@@ -12,6 +12,7 @@ Per-service setup for every upstream AERIE integrates with. Common rules apply t
 | Doc | Services |
 |---|---|
 | [media-servers.md](media-servers.md) | Plex, Tautulli, Jellyfin/Emby, Audiobookshelf |
+| [plex.md](plex.md) | Plex maintenance actions (admin-only: scans, refresh, analyze, butler tasks) |
 | [requests.md](requests.md) | Overseerr / Jellyseerr |
 | [arr-suite.md](arr-suite.md) | Sonarr, Radarr, Lidarr, Readarr, Whisparr, Listenarr, LazyLibrarian, Prowlarr, NZBHydra2, Bazarr, Agregarr, Wizarr |
 | [download-clients.md](download-clients.md) | NZBGet, qBittorrent |

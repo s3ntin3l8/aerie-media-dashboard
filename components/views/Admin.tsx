@@ -15,6 +15,7 @@ import { useIsMobile } from "@/components/mobile/useIsMobile";
 import { AdminServices } from "@/components/views/admin/AdminServices";
 import { AdminMembers } from "@/components/views/admin/AdminMembers";
 import { AdminVisibility } from "@/components/views/admin/AdminVisibility";
+import { AdminPlex } from "@/components/views/admin/AdminPlex";
 
 // Optimistic (non-secret) forward-auth config for the local snapshot after a save, mirroring what
 // the server stores. "remove" clears it; an unset method keeps the prior value (server keeps it too).
@@ -35,7 +36,7 @@ const isIconName = (s: string) => /^[a-z_]+$/.test(s);
 
 export function Admin() {
   const router = useRouter();
-  const { groups, visibility, adminGroup, lokiConfigured = false } = useData();
+  const { groups, visibility, adminGroup, lokiConfigured = false, allServices } = useData();
   const refresh = useRefresh();
   const patchData = usePatchData();
   const isMobile = useIsMobile();
@@ -45,10 +46,13 @@ export function Admin() {
   // same id reconcile idempotently instead of tripping the duplicate-id guard.
   const lastAutoSavedId = useRef<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // The Plex Maintenance tab only appears once a Plex token is stored (maintenance actions need it).
+  const plexConfigured = allServices.some((s) => s.id === "plex" && s.hasSecret);
   const tabs: [string, string, string, string][] = [
     ["services", "Services & Secrets", "Services", "dns"],
     ["members", "Members", "Members", "group"],
     ["visibility", "Visibility", "Visibility", "visibility"],
+    ...(plexConfigured ? ([["plex", "Plex Maintenance", "Plex", "smart_display"]] as [string, string, string, string][]) : []),
   ];
   const openService = (s: Service) => router.push(`/s/${s.id}`);
   const flash = (msg: string) => {
@@ -227,6 +231,7 @@ export function Admin() {
           {tab === "services" && <AdminServices isMobile={isMobile} onOpenService={openService} onEdit={(s) => setSvcModal({ mode: "edit", service: s })} onAddDiscovered={(prefill) => { lastAutoSavedId.current = null; setSvcModal({ mode: "add", prefill }); }} />}
           {tab === "members" && <AdminMembers isMobile={isMobile} />}
           {tab === "visibility" && <AdminVisibility isMobile={isMobile} />}
+          {tab === "plex" && <AdminPlex isMobile={isMobile} flash={flash} />}
         </div>
       </div>
 
