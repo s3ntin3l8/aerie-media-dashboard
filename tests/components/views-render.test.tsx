@@ -11,6 +11,7 @@ vi.mock("@/app/(portal)/admin/actions", () => Object.fromEntries(
     "setServiceKeepAlive", "serviceExists", "deleteService", "detectServiceVersion", "probeServiceVersion",
     "testStoredConnection", "setPrometheusInstance", "setMetricsSource", "setQueueSource", "setBeszelSystem",
   ].map((n) => [n, vi.fn(async () => [])])));
+vi.mock("@/app/(portal)/admin/plex-actions", () => ({ getPlexPanelData: vi.fn(async () => ({ configured: false, hasToken: false, sections: [], tasks: [] })), scanSectionAction: vi.fn(), analyzeSectionAction: vi.fn(), emptyTrashAction: vi.fn(), cleanBundlesAction: vi.fn(), optimizeDbAction: vi.fn(), runButlerTaskAction: vi.fn() }));
 vi.mock("@/app/(portal)/requests/actions", () => Object.fromEntries(
   ["getQualityProfiles", "submitRequest", "reviewRequest", "deleteRequest", "editRequest",
     "getSeasonQuality", "getMediaDetail", "resolveDiscoverItem", "getWatchlist",
