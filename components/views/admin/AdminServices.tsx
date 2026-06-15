@@ -15,8 +15,9 @@ import { RouteBadges, MetaBadges, KeepAliveCell, ProxyAccessCell } from "@/compo
 import { type ServiceForm } from "@/components/modals/ServiceModal";
 import { LogsModal } from "@/components/modals/LogsModal";
 import { serviceRequiresKey, matchPreset, isTraefikSource } from "@/lib/servicePresets";
+import { CAT } from "@/lib/categories";
 
-type AdminSortCol = "name" | "host" | "embed";
+type AdminSortCol = "name" | "host" | "embed" | "cat" | "active" | "keep" | "key";
 type AdminSortDir = "asc" | "desc";
 
 // Small Gatus-health "light" overlaid on a service icon's top-right corner: green = up,
@@ -109,7 +110,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
     <LogsModal open serviceId={logsFor.id} serviceName={logsFor.name} logoSlug={logsFor.logoSlug} onClose={() => setLogsFor(null)} />
   ) : null;
   // Service · Category · Host · Proxy & access · Embed · Active · Keep · API key · actions
-  const cols = "1.4fr 0.7fr 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 1fr";
+  const cols = "1.4fr 96px 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 1fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
 
@@ -140,10 +141,14 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
   const sorted = useMemo(() => [...services].sort((a, b) => {
     const d = sort.dir === "asc" ? 1 : -1;
     switch (sort.col) {
-      case "name":  return a.name.localeCompare(b.name) * d;
-      case "host":  return (a.host ?? "").localeCompare(b.host ?? "") * d;
-      case "embed": return (Number(b.embeddable) - Number(a.embeddable)) * d;
-      default:      return 0;
+      case "name":   return a.name.localeCompare(b.name) * d;
+      case "host":   return (a.host ?? "").localeCompare(b.host ?? "") * d;
+      case "embed":  return (Number(b.embeddable) - Number(a.embeddable)) * d;
+      case "cat":    return CAT[a.cat].label.localeCompare(CAT[b.cat].label) * d;
+      case "active": return (Number(b.active) - Number(a.active)) * d;
+      case "keep":   return (Number(b.keepAlive) - Number(a.keepAlive)) * d;
+      case "key":    return (Number(b.hasSecret) - Number(a.hasSecret)) * d;
+      default:       return 0;
     }
   }), [services, sort]);
 
@@ -274,10 +279,15 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
         >
           <option value="name:asc">Name A→Z</option>
           <option value="name:desc">Name Z→A</option>
+          <option value="cat:asc">Category A→Z</option>
+          <option value="cat:desc">Category Z→A</option>
           <option value="host:asc">Host A→Z</option>
           <option value="host:desc">Host Z→A</option>
           <option value="embed:desc">Embeddable first</option>
           <option value="embed:asc">Non-embeddable first</option>
+          <option value="active:desc">Active first</option>
+          <option value="keep:desc">Kept alive first</option>
+          <option value="key:desc">API key set first</option>
         </select>
         {sorted.map((s) => {
           const pinned = favorites.includes(s.id);
@@ -408,13 +418,13 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
       <div style={{ minWidth: 960, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
           {sortHead("name", "Service")}
-          <Eyebrow style={{ whiteSpace: "nowrap" }}>Category</Eyebrow>
+          {sortHead("cat", "Category")}
           {sortHead("host", "Host")}
           <Eyebrow style={{ whiteSpace: "nowrap" }}>Proxy &amp; access</Eyebrow>
           {sortHead("embed", "Embed")}
-          <Eyebrow style={{ whiteSpace: "nowrap" }}>Active</Eyebrow>
-          <Eyebrow style={{ whiteSpace: "nowrap" }}>Keep</Eyebrow>
-          <Eyebrow style={{ whiteSpace: "nowrap" }}>API key</Eyebrow>
+          {sortHead("active", "Active")}
+          {sortHead("keep", "Keep")}
+          {sortHead("key", "API key")}
           <span />
         </div>
         {sorted.map((s, i) => {
@@ -434,8 +444,8 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
                   </div>
                 </div>
               </div>
-              <span style={{ opacity: dim }}><CatBadge cat={s.cat} size="xs" /></span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", ...TRUNCATE, opacity: dim }}>{s.host}</span>
+              <span style={{ opacity: dim, minWidth: 0, whiteSpace: "nowrap" }}><CatBadge cat={s.cat} size="xs" /></span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", ...TRUNCATE, minWidth: 0, opacity: dim }}>{s.host}</span>
               {/* Cert + SSO + route-health + Authentik access, consolidated into one column. */}
               <span style={{ opacity: dim, minWidth: 0 }}><ProxyAccessCell route={s.route} access={s.authentik} reserve /></span>
               <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
