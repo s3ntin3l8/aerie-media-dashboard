@@ -227,7 +227,7 @@ export function Admin() {
         ))}
       </div>
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
-        <div className="aerie-page-pad" style={{ maxWidth: 1080, margin: "0 auto" }}>
+        <div className="aerie-page-pad aerie-page-pad--readable">
           {tab === "services" && <AdminServices isMobile={isMobile} onOpenService={openService} onEdit={(s) => setSvcModal({ mode: "edit", service: s })} onAddDiscovered={(prefill) => { lastAutoSavedId.current = null; setSvcModal({ mode: "add", prefill }); }} />}
           {tab === "members" && <AdminMembers isMobile={isMobile} />}
           {tab === "visibility" && <AdminVisibility isMobile={isMobile} />}

@@ -147,6 +147,22 @@ textarea.input {
     padding: 18px 16px 48px;
   }
 }
+/* Content-width tiers: single source of truth for the per-page max-width.
+   --wide fills the viewport up to an ultrawide ceiling then centers (data-dense
+   dashboards); --readable keeps a tight cap for forms/tables. Padding (incl. the
+   ≤640px override above) stays on the base class, so mobile is unaffected. */
+:root {
+  --aerie-w-wide: 1920px;
+  --aerie-w-readable: 1080px;
+}
+.aerie-page-pad--wide {
+  max-width: var(--aerie-w-wide);
+  margin-inline: auto;
+}
+.aerie-page-pad--readable {
+  max-width: var(--aerie-w-readable);
+  margin-inline: auto;
+}
 
 /* Headers / toolbars wrap instead of overflowing */
 .aerie-header-row {

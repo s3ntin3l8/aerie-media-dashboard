@@ -56,8 +56,8 @@ export function Streams() {
         back={{ href: "/", label: "Dashboard" }}
       />
       <div
-        className="custom-scrollbar aerie-page-pad"
-        style={{ flex: 1, overflowY: "auto", maxWidth: 960, margin: "0 auto", width: "100%" }}
+        className="custom-scrollbar aerie-page-pad aerie-page-pad--wide"
+        style={{ flex: 1, overflowY: "auto", width: "100%" }}
       >
         <TabBar tab={tab} setTab={setTab} />
         {tab === "live" ? <StreamsView role={role} /> : <HistoryList isAdmin={isAdmin} />}

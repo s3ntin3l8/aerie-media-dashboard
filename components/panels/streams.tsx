@@ -415,7 +415,7 @@ export function StreamsView({ role }: { role: Role }) {
   return (
     <div>
       {role === "admin" && <StreamsSummary streams={visible} />}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(480px, 600px))", justifyContent: "center", gap: 14 }}>
         {visible.map((s) => (
           <StreamCard key={s.id} s={s} role={role} allServices={allServices} users={users} />
         ))}
