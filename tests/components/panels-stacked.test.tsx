@@ -15,7 +15,7 @@ vi.mock("@/components/portal/PortalProvider", () => ({
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn() }));
 
 import { useData } from "@/components/portal/DataProvider";
-import { CentralServices, LibraryStats, ServiceTiles, QueuePanel, DownloadsPanel } from "@/components/panels";
+import { CentralServices, LibraryStats, ServiceTiles, QueuePanel, DownloadsPanel, Empty } from "@/components/panels";
 import { StackedContext } from "@/components/portal/StackedContext";
 
 const data = (over: Record<string, unknown>) => vi.mocked(useData).mockReturnValue(over as never);
@@ -98,5 +98,33 @@ describe("Queue & Downloads — mobile stack render at natural height", () => {
     data({ downloads: [{ id: "d1", svc: "radarr", title: "A Download", when: "2026-06-16T00:00:00Z", size: "1 GB" }] });
     render(<Stacked><DownloadsPanel fill /></Stacked>);
     expect(screen.getByText("A Download")).toBeInTheDocument();
+  });
+
+  it("shows a card-filling empty placeholder when the queue is empty (#109)", () => {
+    // QueuePanel had no empty state before — an empty queue rendered a blank body.
+    data({ queue: [], queueSource: "arr", arrQueueConfigured: true, nzbgetConfigured: false, qbittorrentConfigured: false, qbittorrent: null });
+    const { container } = render(<QueuePanel fill />);
+    expect(screen.getByText(/no active downloads/i)).toBeInTheDocument();
+    // The idle-empty placeholder uses the card-filling `art` variant (badge ring present).
+    expect(byStyle(container, "boxShadow", "inset 0 0 0 1px var(--outline-variant)")).toBeTruthy();
+  });
+});
+
+describe("Empty — idle-empty (art) vs needs-setup (plain) variants", () => {
+  it("art variant fills the card and sets the icon in a tinted badge ring", () => {
+    const { container } = render(<Empty art icon="downloading" line="No active downloads" sub="Grabbed items appear here." />);
+    expect(screen.getByText("No active downloads")).toBeInTheDocument();
+    // Card-filling: the outer wrapper grows to the tile height (height:100%, flex:1)…
+    const filling = byStyle(container, "height", "100%");
+    expect(filling).toBeTruthy();
+    // …and the icon sits inside the tinted badge ring (distinct from the plain variant).
+    expect(byStyle(container, "boxShadow", "inset 0 0 0 1px var(--outline-variant)")).toBeTruthy();
+  });
+
+  it("plain variant stays compact with no badge ring, keeping idle vs needs-setup distinct", () => {
+    const { container } = render(<Empty icon="memory" line="No host metrics" sub="Add Prometheus or Beszel." />);
+    expect(screen.getByText("No host metrics")).toBeInTheDocument();
+    expect(byStyle(container, "height", "100%")).toBeFalsy();
+    expect(byStyle(container, "boxShadow", "inset 0 0 0 1px var(--outline-variant)")).toBeFalsy();
   });
 });

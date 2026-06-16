@@ -225,7 +225,34 @@ export function PanelShell({
   );
 }
 
-export function Empty({ icon, line, sub }: { icon: string; line: string; sub?: string }) {
+// `art` opts a list widget that is *idle-empty* (no data yet, but normally shows rows) into a
+// richer, card-filling placeholder: vertically centred, with the icon set in a tinted badge so a
+// short empty state doesn't read as a bare sliver in a tall desktop tile. "Needs setup / not
+// connected" empties keep the plain (art-less) variant so the two stay visually distinct. The
+// badge is built from CSS tokens, so it inverts correctly in dark mode for free.
+export function Empty({ icon, line, sub, art }: { icon: string; line: string; sub?: string; art?: boolean }) {
+  if (art) {
+    return (
+      <div style={{ display: "flex", flex: 1, height: "100%", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: "24px 16px", textAlign: "center" }}>
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: "var(--radius-full)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "color-mix(in srgb, var(--surface-container-high) 70%, transparent)",
+            boxShadow: "inset 0 0 0 1px var(--outline-variant)",
+          }}
+        >
+          <Icon name={icon} size={30} color="color-mix(in srgb, var(--on-surface-variant) 65%, transparent)" />
+        </div>
+        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--on-surface)" }}>{line}</div>
+        {sub && <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", maxWidth: 220 }}>{sub}</div>}
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: "32px 16px", textAlign: "center" }}>
       <Icon name={icon} size={28} color="color-mix(in srgb, var(--on-surface-variant) 55%, transparent)" />
@@ -822,7 +849,7 @@ export function RecentlyAdded({ fill, limit, mediaKind, title, source, onSelect 
   return (
     <PanelShell fill={fill} title={title && title.length > 0 ? title : "Recently Added"} icon="new_releases" accent="var(--primary)">
       {displayItems.length === 0 ? (
-        <Empty icon="new_releases" line="Nothing added yet" sub="Recently added media will appear here." />
+        <Empty art icon="new_releases" line="Nothing added yet" sub="Recently added media will appear here." />
       ) : (
         (() => {
           const renderItem = (r: (typeof displayItems)[number]) => {
@@ -935,6 +962,7 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
       ) : undefined}
     >
       <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill && !stacked ? { height: "100%", overflow: "hidden" } : {}) }}>
+        {queue.length === 0 && <Empty art icon="downloading" line="No active downloads" sub="Grabbed and importing items appear here." />}
         {slice.map((q, i) => (
           <div key={q.id} style={{ padding: rowPadding, borderTop: listDivider(i) }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
@@ -1011,7 +1039,7 @@ export function UpcomingPanel({ fill, limit, window: windowDays, title, onSelect
   return (
     <PanelShell fill={fill} title={title && title.length > 0 ? title : "Coming Soon"} icon="event_upcoming" accent="var(--originator-court)" count={countDisplay}>
       {windowFiltered.length === 0 ? (
-        <Empty icon="event_upcoming" line="Nothing upcoming" sub="Upcoming episodes and releases will appear here." />
+        <Empty art icon="event_upcoming" line="Nothing upcoming" sub="Upcoming episodes and releases will appear here." />
       ) : (
         (() => {
           const list = windowFiltered.slice(0, sliceCap);
@@ -1042,7 +1070,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
   if (!topStats || (topStats.users.length === 0 && topStats.media.length === 0))
     return fill ? (
       <PanelShell fill title={title && title.length > 0 ? title : "Most Active · 7d"} icon="leaderboard" accent="var(--originator-own)">
-        <Empty icon="leaderboard" line="No activity yet" sub="Most-active users and titles appear once Tautulli reports plays." />
+        <Empty art icon="leaderboard" line="No activity yet" sub="Most-active users and titles appear once Tautulli reports plays." />
       </PanelShell>
     ) : null;
   const displayUsers = limit != null ? topStats.users.slice(0, limit) : topStats.users;
@@ -1108,7 +1136,7 @@ export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; 
   if (downloads.length === 0)
     return fill ? (
       <PanelShell fill title={title && title.length > 0 ? title : "Recently Downloaded"} icon="download_done" accent="var(--originator-third-party)">
-        <Empty icon="download_done" line="No recent downloads" sub="Grabbed and imported items from Sonarr / Radarr appear here." />
+        <Empty art icon="download_done" line="No recent downloads" sub="Grabbed and imported items from Sonarr / Radarr appear here." />
       </PanelShell>
     ) : null;
   return (

@@ -234,7 +234,7 @@ export function ShortcutsWidget({ fill, links = [] }: { fill?: boolean; links?: 
 export function AnnouncementsWidget({ fill }: { fill?: boolean } = {}) {
   return (
     <PanelShell fill={fill} title="Announcements" icon="campaign" accent="var(--amber)">
-      <Empty icon="campaign" line="No announcements" sub="Broadcast notices will appear here once they can be posted from Admin." />
+      <Empty art icon="campaign" line="No announcements" sub="Broadcast notices will appear here once they can be posted from Admin." />
     </PanelShell>
   );
 }
@@ -519,7 +519,7 @@ export function HealthWidget({ fill, limit, title }: { fill?: boolean; limit?: n
   return (
     <PanelShell fill={fill} title={title && title.length > 0 ? title : "Service Warnings"} icon="warning" accent="var(--amber)" count={arrHealth.length ? `${arrHealth.length}` : undefined} live={arrHealth.length > 0}>
       {arrHealth.length === 0 ? (
-        <Empty icon="check_circle" line="No warnings" sub="Sonarr / Radarr / Listenarr health issues will appear here." />
+        <Empty art icon="check_circle" line="No warnings" sub="Sonarr / Radarr / Listenarr health issues will appear here." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {shown.map((h, i) => {
