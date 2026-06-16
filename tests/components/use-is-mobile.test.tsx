@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import React from "react";
 
 import { useIsMobile } from "@/components/mobile/useIsMobile";
+import { MobileProvider } from "@/components/mobile/MobileProvider";
 
 type ChangeListener = (e: MediaQueryListEvent) => void;
 
@@ -72,5 +74,25 @@ describe("useIsMobile", () => {
     expect(mm.listeners.size).toBe(1);
     unmount();
     expect(mm.listeners.size).toBe(0);
+  });
+
+  describe("seeded via MobileProvider", () => {
+    function MobileSeed({ children }: { children: React.ReactNode }) {
+      return <MobileProvider initialIsMobile={true}>{children}</MobileProvider>;
+    }
+
+    it("honours a mobile seed when matchMedia agrees", () => {
+      installMatchMedia(true);
+      const { result } = renderHook(() => useIsMobile(), { wrapper: MobileSeed });
+      expect(result.current).toBe(true);
+    });
+
+    it("lets matchMedia refine away from the seed after mount", () => {
+      // Seeded mobile (UA-derived) but the real viewport is wide: matchMedia stays
+      // authoritative and corrects to desktop after the mount effect runs.
+      installMatchMedia(false);
+      const { result } = renderHook(() => useIsMobile(), { wrapper: MobileSeed });
+      expect(result.current).toBe(false);
+    });
   });
 });
