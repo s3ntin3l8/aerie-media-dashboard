@@ -16,7 +16,12 @@ export default auth((req) => {
     pathname === "/icon.svg" ||
     pathname === "/apple-icon" ||
     pathname === "/opengraph-image" ||
-    pathname === "/twitter-image";
+    pathname === "/twitter-image" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js" ||
+    pathname === "/icon-192.png" ||
+    pathname === "/icon-512.png" ||
+    pathname === "/icon-maskable.png";
   const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || isBrandAsset;
   if (isPublic) return NextResponse.next();
 

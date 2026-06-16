@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { env } from "@/lib/env";
+import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
 
 // Design-system foundations (ported verbatim from the AERIE design bundle).
 import "../styles/fonts.css";
@@ -22,6 +23,9 @@ const jetbrainsMono = JetBrains_Mono({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Matches the dark-theme surface (--background) so the address bar and PWA
+  // status/title bar blend into the app.
+  themeColor: "#0b1326",
 };
 
 export const metadata: Metadata = {
@@ -30,6 +34,8 @@ export const metadata: Metadata = {
   metadataBase: new URL(env.portalUrl),
   title: "AERIE — Media Command Center",
   description: "Private media portal — every service, one vantage point.",
+  // iOS add-to-home-screen: standalone display + black status bar.
+  appleWebApp: { capable: true, title: "AERIE", statusBarStyle: "black-translucent" },
 };
 
 // Inline script that runs synchronously before first paint — reads the
@@ -51,7 +57,10 @@ export default function RootLayout({
         {/* Blocking theme script — must run before any paint */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <ServiceWorkerRegister />
+        {children}
+      </body>
     </html>
   );
 }
