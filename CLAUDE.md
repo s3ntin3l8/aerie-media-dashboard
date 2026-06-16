@@ -46,8 +46,8 @@ Only run `db:generate` when you change `lib/db/schema.ts`.
   - `release.yml` → Release Please (changelog + versioning on push to main)
   - `cleanup.yml` → GHCR untagged image cleanup (weekly)
 - **pre-commit** (Husky + lint-staged): `eslint --fix` on staged `*.{ts,tsx,js,mjs}`.
-- **pre-push** (Husky): the full `npm run typecheck && npm run lint && npm run build`. A push
-  will be rejected locally if any of these fail.
+- **pre-push** (Husky): the full `npm run typecheck && npm run lint && npm run test && npm run build`.
+  A push will be rejected locally if any of these fail.
 
 ## Standard working mode
 
