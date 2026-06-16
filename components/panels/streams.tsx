@@ -128,7 +128,7 @@ export function NowPlayingPanel({ role, big, onAll, fill, source, onSelect }: { 
       action={role === "admin" ? <SeeAll onClick={onAll} /> : undefined}
     >
       {visible.length === 0 ? (
-        <Empty icon="play_disabled" line="Nothing playing" sub="Your active stream will appear here." />
+        <Empty art icon="play_disabled" line="Nothing playing" sub="Your active stream will appear here." />
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {visible.map((s, i) => (
@@ -409,7 +409,7 @@ export function StreamsView({ role }: { role: Role }) {
     // The page (views/Streams.tsx) already renders a PageHeader title, so render
     // the empty state bare — no second PanelShell title.
     return (
-      <Empty icon="play_disabled" line="Nothing playing" sub="Active streams will appear here with full transcode, quality, client and network detail." />
+      <Empty art icon="play_disabled" line="Nothing playing" sub="Active streams will appear here with full transcode, quality, client and network detail." />
     );
   }
   return (

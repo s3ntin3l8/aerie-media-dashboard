@@ -265,7 +265,7 @@ export function Requests() {
           )}
 
           {filtered.length === 0 ? (
-            <Empty icon="bookmark_border" line="No requests here" sub="Search above to request a movie or show." />
+            <Empty art icon="bookmark_border" line="No requests here" sub="Search above to request a movie or show." />
           ) : (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>

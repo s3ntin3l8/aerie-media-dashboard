@@ -138,7 +138,7 @@ export function HistoryList({ isAdmin }: { isAdmin: boolean }) {
       ) : error ? (
         <Empty icon="error_outline" line="Couldn't load history" sub="Check that Tautulli is configured and connected." />
       ) : items.length === 0 ? (
-        <Empty icon="history" line="No streams in the last 7 days" sub="Completed streams from Tautulli will appear here." />
+        <Empty art icon="history" line="No streams in the last 7 days" sub="Completed streams from Tautulli will appear here." />
       ) : (
         slice.map((item, i) => <HistoryRow key={item.id} item={item} i={i} isAdmin={isAdmin} />)
       )}
