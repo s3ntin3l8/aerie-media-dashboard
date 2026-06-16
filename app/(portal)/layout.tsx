@@ -1,10 +1,13 @@
 import React from "react";
+import { headers } from "next/headers";
 import { PortalProvider } from "@/components/portal/PortalProvider";
 import { DataProvider } from "@/components/portal/DataProvider";
 import { MobileShell } from "@/components/mobile/MobileShell";
+import { MobileProvider } from "@/components/mobile/MobileProvider";
 import { getSessionUser } from "@/lib/session";
 import { getSnapshotFast } from "@/lib/data/snapshot";
 import { getFavorites, getDashboards } from "@/lib/integrations/registry";
+import { isMobileUserAgent } from "@/lib/viewport";
 import { authConfigured } from "@/lib/env";
 
 // Session + live data are request-scoped; never prerender the shell.
@@ -23,10 +26,15 @@ export default async function PortalLayout({ children }: { children: React.React
     getFavorites(user.id),
     user.id !== "anon" ? getDashboards(user.id) : Promise.resolve(null),
   ]);
+  // Seed the mobile/desktop shell from the request UA so the first paint is
+  // device-correct (matchMedia refines it after mount). See lib/viewport.ts.
+  const initialIsMobile = isMobileUserAgent((await headers()).get("user-agent"));
   return (
     <PortalProvider user={user} oidc={authConfigured} favorites={favorites} initialDashboards={dashboards}>
       <DataProvider initial={snapshot} initialStale={stale}>
-        <MobileShell>{children}</MobileShell>
+        <MobileProvider initialIsMobile={initialIsMobile}>
+          <MobileShell>{children}</MobileShell>
+        </MobileProvider>
       </DataProvider>
     </PortalProvider>
   );
