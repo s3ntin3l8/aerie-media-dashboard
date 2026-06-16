@@ -9,7 +9,7 @@ vi.mock("@/app/(portal)/admin/actions", () => ({ setQueueSource: vi.fn() }));
 vi.mock("@/app/(portal)/requests/actions", () => Object.fromEntries(["submitRequest", "getMediaDetail", "resolveDiscoverItem"].map((n) => [n, vi.fn(async () => [])])));
 
 import { useData } from "@/components/portal/DataProvider";
-import { NowPlayingPanel } from "@/components/panels/streams";
+import { NowPlayingPanel, StreamsView } from "@/components/panels/streams";
 import { Streams } from "@/components/views/Streams";
 
 // A richly-populated session exercises StreamRow + the StreamDetail sub-blocks
@@ -41,5 +41,27 @@ describe("now-playing detail rendering", () => {
   it("Streams view renders the session card with tech detail", () => {
     const { container } = render(<Streams />);
     expect(container.textContent).toContain("Inception");
+  });
+
+  it("Streams page body opts into the wide content tier (#101)", () => {
+    const { container } = render(<Streams />);
+    expect(container.querySelector(".aerie-page-pad.aerie-page-pad--wide")).not.toBeNull();
+  });
+
+  it("lays live session cards in a multi-column grid so they sit side by side (#101)", () => {
+    // Two concurrent sessions should be placed in a single grid track row, not a
+    // stacked flex column — that's what lets them sit side by side on wide screens.
+    const second = { ...session, id: "s2", title: "Arrival" };
+    vi.mocked(useData).mockReturnValue({ nowPlaying: [session, second], services: [], users: [], bandwidth: null } as never);
+    const { container } = render(<StreamsView role="admin" />);
+    const grid = Array.from(container.querySelectorAll<HTMLElement>("div")).find(
+      (el) => el.style.display === "grid" && el.style.gridTemplateColumns.includes("auto-fit"),
+    );
+    expect(grid).toBeDefined();
+    // Both sessions render as direct grid children (cards), centered.
+    expect(grid!.style.justifyContent).toBe("center");
+    expect(grid!.children.length).toBe(2);
+    expect(container.textContent).toContain("Inception");
+    expect(container.textContent).toContain("Arrival");
   });
 });
