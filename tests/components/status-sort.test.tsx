@@ -47,6 +47,12 @@ beforeEach(() => {
 });
 
 describe("Status — sort controls", () => {
+  it("wraps the body in the wide content tier (#101)", () => {
+    vi.mocked(useData).mockReturnValue(snap([aaa]) as never);
+    const { container } = render(<Status />);
+    expect(container.querySelector(".aerie-page-pad.aerie-page-pad--wide")).not.toBeNull();
+  });
+
   it("offers Cert + SSO sorts when route data exists and sorts by them", () => {
     vi.mocked(useData).mockReturnValue(snap([aaa, bbb, ccc]) as never);
     render(<Status />);

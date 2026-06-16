@@ -94,6 +94,13 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Admin — desktop column sorting", () => {
   beforeEach(() => seedData([alpha, bravo, charlie]));
 
+  it("wraps the body in the readable (capped) content tier, not the wide one (#101)", () => {
+    const { container } = render(<Admin />);
+    // Admin is forms + tables: it stays capped for legibility rather than going fluid.
+    expect(container.querySelector(".aerie-page-pad.aerie-page-pad--readable")).not.toBeNull();
+    expect(container.querySelector(".aerie-page-pad--wide")).toBeNull();
+  });
+
   it("defaults to name A→Z", () => {
     render(<Admin />);
     expect(order()).toEqual(["Alpha", "Bravo", "Charlie"]);

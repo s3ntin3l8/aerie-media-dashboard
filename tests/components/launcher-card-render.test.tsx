@@ -35,6 +35,11 @@ beforeEach(() => {
 });
 
 describe("Launcher desktop cards", () => {
+  it("wraps the body in the wide content tier (#101)", () => {
+    const { container } = render(<Launcher />);
+    expect(container.querySelector(".aerie-page-pad.aerie-page-pad--wide")).not.toBeNull();
+  });
+
   it("renders the service names and embed/launch pills", () => {
     render(<Launcher />);
     expect(screen.getByText("Sonarr")).toBeInTheDocument();

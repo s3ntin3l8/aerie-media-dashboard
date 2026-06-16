@@ -180,7 +180,7 @@ export function Requests() {
       )}
 
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
-        <div className="aerie-page-pad" style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+        <div className="aerie-page-pad aerie-page-pad--wide" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <div className="aerie-stat-row">
             {adminMode ? (
               <>

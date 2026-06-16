@@ -166,7 +166,7 @@ export function Launcher() {
       </PageHeader>
 
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
-        <div className="aerie-page-pad" style={{ maxWidth: 1180, margin: "0 auto", display: "flex", flexDirection: "column", gap: 26 }}>
+        <div className="aerie-page-pad aerie-page-pad--wide" style={{ display: "flex", flexDirection: "column", gap: 26 }}>
           {grouped.length === 0 && (
             <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)" }}>
               <Empty icon="apps" line="No services available" sub="Ask an admin to add services in Admin → Services." />

@@ -38,6 +38,11 @@ vi.mock("@/app/(portal)/requests/actions", () => ({
 import { Requests } from "@/components/views/Requests";
 
 describe("Requests view", () => {
+  it("wraps the body in the wide content tier (#101)", () => {
+    const { container } = render(<Requests />);
+    expect(container.querySelector(".aerie-page-pad.aerie-page-pad--wide")).not.toBeNull();
+  });
+
   it("renders the member's request card with status and resolution badge", () => {
     render(<Requests />);
     expect(screen.getByText("Dune")).toBeInTheDocument();

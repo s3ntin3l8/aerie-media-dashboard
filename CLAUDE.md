@@ -34,6 +34,19 @@ npm run db:seed     # tsx scripts/seed.ts
 
 The quality gates are `lint`, `typecheck`, `test:coverage`, and `build`. Match those before considering work done. CI runs `test:coverage` (which generates `coverage/coverage-summary.json` for Codecov upload and threshold enforcement); pre-push runs plain `test` (faster, no instrumentation).
 
+**Test coverage is a PR gate, not optional.** Codecov enforces both `project` (overall must
+not drop >1%) and `patch` (the lines you changed must be covered) status checks — see
+`codecov.yml`. Every PR that touches `app/**`, `components/**`, or `lib/**` must ship with
+tests that cover the new/changed lines, or the `codecov/patch` check fails. Write **meaningful**
+tests that assert the behavior or contract you changed (e.g. "this view uses the wide width
+tier", "this action calls the client then refreshes"), not coverage-padding that renders code
+without asserting anything. If you add or change a view, add/extend a render test in
+`tests/components/`; for server logic, a unit test in `tests/unit/`. Before pushing, you can
+check which changed lines are uncovered with `npm run test:coverage` and inspecting
+`coverage/lcov.info` (or the per-file summary in the run output). jsdom can't resolve
+`import "server-only"`, so component tests that transitively pull in a server action/`lib/db`
+must `vi.mock` that module (grep existing `tests/components/*.test.tsx` for the pattern).
+
 Migrations normally don't need to be run by hand: `lib/db/bootstrap.ts` lazily applies them
 and seeds from mock data on first DB use (`ensureDb()`), so a fresh deployment self-bootstraps.
 Only run `db:generate` when you change `lib/db/schema.ts`.

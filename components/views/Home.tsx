@@ -159,7 +159,7 @@ export function Home() {
       <HealthTicker onOpenStatus={() => router.push("/status")} />
 
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
-        <div className="aerie-page-pad" style={{ maxWidth: 1320, margin: "0 auto", paddingBottom: editing ? 110 : undefined }}>
+        <div className="aerie-page-pad aerie-page-pad--wide" style={{ paddingBottom: editing ? 110 : undefined }}>
           {services.length === 0 && !editing && (
             <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)", paddingBottom: 12, marginBottom: 18 }}>
               <Empty icon="dashboard_customize" line="No services configured yet" sub="Add your services and their API keys to light up live data." />
