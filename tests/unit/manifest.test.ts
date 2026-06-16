@@ -42,4 +42,22 @@ describe("app/manifest.ts", () => {
     // Android needs a >=512 maskable to avoid an OS-generated fallback badge.
     expect(byPurpose("maskable")[0]?.sizes).toBe("512x512");
   });
+
+  it("declares scope/identity and install metadata fields", () => {
+    expect(m.id).toBe("/");
+    expect(m.scope).toBe("/");
+    expect(m.lang).toBe("en");
+    expect(m.dir).toBe("ltr");
+    expect(m.orientation).toBe("any");
+    expect(m.categories?.length).toBeGreaterThan(0);
+  });
+
+  it("ships three in-scope shortcuts and never deep-links to admin", () => {
+    const shortcuts = m.shortcuts ?? [];
+    expect(shortcuts.map((s) => s.url)).toEqual(["/streams", "/requests", "/status"]);
+    // Admin is admin-only; a generic shortcut would just redirect non-admins.
+    expect(shortcuts.some((s) => s.url.startsWith("/admin"))).toBe(false);
+    // Every shortcut url is in-scope (under scope "/").
+    expect(shortcuts.every((s) => s.url.startsWith("/"))).toBe(true);
+  });
 });
