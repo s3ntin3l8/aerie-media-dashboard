@@ -20,7 +20,7 @@ Two principles drive the data path:
 
 ```bash
 npm install         # also installs Husky git hooks via the "prepare" script
-npm run dev         # dev server at http://localhost:3000 (mock mode, no config needed)
+npm run dev         # dev server at http://localhost:3001 (mock mode, no config needed)
 npm run build       # production build (this is what CI gates on)
 npm run start       # serve the production build
 npm run lint        # eslint
