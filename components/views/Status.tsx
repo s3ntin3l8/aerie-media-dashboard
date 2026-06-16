@@ -2,42 +2,18 @@
 // ============================================================
 // AERIE — Status / uptime dashboard (Gatus + Prometheus)
 // ============================================================
-import React, { useEffect, useMemo, useState, useTransition } from "react";
+import React, { useMemo, useState } from "react";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData, useRefresh } from "@/components/portal/DataProvider";
+import { useData } from "@/components/portal/DataProvider";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar, TRUNCATE, listDivider } from "@/components/primitives";
 import { PanelShell, timeAgo } from "@/components/panels";
 import { fmtBytes, fmtPercent } from "@/lib/format";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { PageHeader, StatTile, RouteHealthBadge, CertCell, SsoCell, KeepAliveCell } from "@/components/views/shared";
-import { setPrometheusInstance, setMetricsSource, setBeszelSystem } from "@/app/(portal)/admin/actions";
+import { SourceToggle, InstanceSelect, BeszelSystemSelect, useSecondsAgo, fmtUptime } from "@/components/status/metricsControls";
 
 const HEALTH_STATUS_ORDER: Record<string, number> = { up: 0, degraded: 1, down: 2, unknown: 3 };
-
-/** Shared style for the metrics-section pickers (node instance / Beszel system). */
-const PICKER_SELECT_STYLE: React.CSSProperties = {
-  marginLeft: "auto",
-  fontFamily: "var(--font-mono)",
-  fontSize: 11,
-  padding: "3px 8px",
-  borderRadius: 6,
-  border: "1px solid var(--outline-variant)",
-  background: "var(--surface-container)",
-  color: "var(--on-surface)",
-  cursor: "pointer",
-};
-
-/** seconds → compact uptime ("12d 4h", "4h 12m", "12m"). */
-function fmtUptime(sec: number | null): string {
-  if (sec == null) return "—";
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
 
 function MetricCard({ title, value, unit, color, data }: { title: string; value: string; unit: string; color: string; data: number[] }) {
   return (
@@ -50,131 +26,6 @@ function MetricCard({ title, value, unit, color, data }: { title: string; value:
       <Sparkline data={data} w={260} h={40} color={color} strokeW={1.5} />
     </div>
   );
-}
-
-function InstanceSelect({ current }: { current: string | null }) {
-  const refresh = useRefresh();
-  const [instances, setInstances] = useState<string[]>([]);
-  const [value, setValue] = useState<string>(current ?? "");
-  const [pending, startTransition] = useTransition();
-
-  useEffect(() => { setValue(current ?? ""); }, [current]);
-
-  useEffect(() => {
-    fetch("/api/prometheus/instances", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: string[]) => setInstances(d))
-      .catch(() => {});
-  }, []);
-
-  if (instances.length === 0) return null;
-
-  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const next = e.target.value;
-    setValue(next);
-    startTransition(async () => {
-      await setPrometheusInstance(next === "" ? null : next);
-      refresh();
-    });
-  }
-
-  return (
-    <select value={value} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
-      <option value="">All nodes</option>
-      {instances.map((inst) => (
-        <option key={inst} value={inst}>{inst}</option>
-      ))}
-    </select>
-  );
-}
-
-/** Segmented Prometheus ⇄ Beszel toggle, shown only when both sources are configured. */
-function SourceToggle({ current }: { current: "prometheus" | "beszel" }) {
-  const refresh = useRefresh();
-  const [pending, startTransition] = useTransition();
-  const pick = (src: "prometheus" | "beszel") => {
-    if (src === current || pending) return;
-    startTransition(async () => {
-      await setMetricsSource(src);
-      refresh();
-    });
-  };
-  const opts: { id: "prometheus" | "beszel"; label: string }[] = [
-    { id: "prometheus", label: "Prometheus" },
-    { id: "beszel", label: "Beszel" },
-  ];
-  return (
-    <div style={{ display: "inline-flex", borderRadius: 6, border: "1px solid var(--outline-variant)", overflow: "hidden", opacity: pending ? 0.5 : 1 }}>
-      {opts.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          onClick={() => pick(o.id)}
-          disabled={pending}
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 11,
-            padding: "3px 9px",
-            border: "none",
-            cursor: o.id === current ? "default" : "pointer",
-            background: o.id === current ? "var(--primary)" : "var(--surface-container)",
-            color: o.id === current ? "var(--on-primary)" : "var(--on-surface-variant)",
-          }}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Beszel system picker — option value = system id, label = system name. */
-function BeszelSystemSelect({ current }: { current: string | null }) {
-  const refresh = useRefresh();
-  const [systems, setSystems] = useState<{ id: string; name: string; status: string }[]>([]);
-  const [value, setValue] = useState<string>(current ?? "");
-  const [pending, startTransition] = useTransition();
-
-  useEffect(() => { setValue(current ?? ""); }, [current]);
-
-  useEffect(() => {
-    fetch("/api/beszel/systems", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { id: string; name: string; status: string }[]) => setSystems(d))
-      .catch(() => {});
-  }, []);
-
-  if (systems.length === 0) return null;
-  // Reflect the effective selection: the persisted id, else the first system.
-  const effective = value || systems[0]?.id || "";
-
-  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const next = e.target.value;
-    setValue(next);
-    startTransition(async () => {
-      await setBeszelSystem(next || null);
-      refresh();
-    });
-  }
-
-  return (
-    <select value={effective} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
-      {systems.map((s) => (
-        <option key={s.id} value={s.id}>{s.name}</option>
-      ))}
-    </select>
-  );
-}
-
-function useSecondsAgo(dep: unknown): string {
-  const [lastSeen, setLastSeen] = useState(() => Date.now());
-  const [ago, setAgo] = useState(0);
-  useEffect(() => { setLastSeen(Date.now()); setAgo(0); }, [dep]);
-  useEffect(() => {
-    const t = setInterval(() => setAgo(Math.floor((Date.now() - lastSeen) / 1000)), 1000);
-    return () => clearInterval(t);
-  }, [lastSeen]);
-  return ago < 5 ? "live" : `${ago}s ago`;
 }
 
 export function Status() {
