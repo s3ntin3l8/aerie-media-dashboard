@@ -222,8 +222,11 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
           const m = widgetMeta(item.type);
           const hUnits = Math.max(item.h, m.minH);
           return (
-            <div key={item.uid} style={{ position: "relative", height: hUnits * rowH + (hUnits - 1) * gap, borderRadius: "var(--radius-xl)" }}>
-              <div style={{ height: "100%", pointerEvents: editing ? "none" : "auto" }}>{renderWidget(item, true)}</div>
+            // Mobile single column: the grid `h` becomes a *minimum* height, not a fixed one,
+            // so a widget rendering its natural (taller) content pushes the next one down
+            // instead of overflowing and overlapping it. Inner element is left height:auto.
+            <div key={item.uid} style={{ position: "relative", minHeight: hUnits * rowH + (hUnits - 1) * gap, borderRadius: "var(--radius-xl)" }}>
+              <div style={{ pointerEvents: editing ? "none" : "auto" }}>{renderWidget(item, true)}</div>
               {editing && (
                 <div style={mobileCtrlBar}>
                   <button

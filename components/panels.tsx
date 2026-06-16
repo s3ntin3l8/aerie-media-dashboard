@@ -172,8 +172,11 @@ export function PanelShell({
   fill?: boolean;
 }) {
   // On the single-column mobile stack, tighten the header chrome (padding/title/icon) so the
-  // desktop-tuned figures don't read oversized on a phone. Layout/body are unchanged.
+  // desktop-tuned figures don't read oversized on a phone. `fill` (fill the grid tile's fixed
+  // height + scroll the body internally) is a desktop concept — on the stack a tile has no fixed
+  // height, so we render at natural content height instead (the page scrolls, not each widget).
   const stacked = useStacked();
+  const fillBox = fill && !stacked;
   return (
     <section
       style={{
@@ -184,7 +187,7 @@ export function PanelShell({
         borderRadius: "var(--radius-xl)",
         boxShadow: "var(--shadow-sm)",
         overflow: "hidden",
-        height: fill ? "100%" : undefined,
+        height: fillBox ? "100%" : undefined,
         ...style,
       }}
     >
@@ -213,8 +216,8 @@ export function PanelShell({
         {action}
       </header>
       <div
-        className={fill ? "custom-scrollbar" : undefined}
-        style={{ flex: 1, ...(fill ? { minHeight: 0, overflowY: "auto" } : {}), ...bodyStyle }}
+        className={fillBox ? "custom-scrollbar" : undefined}
+        style={{ flex: 1, ...(fillBox ? { minHeight: 0, overflowY: "auto" } : {}), ...bodyStyle }}
       >
         {children}
       </div>
@@ -477,8 +480,11 @@ export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?:
         : "Health unknown — connect Gatus to monitor uptime.";
   const hc = allGood ? "var(--originator-own)" : down.length ? "var(--error)" : deg.length ? "var(--amber)" : "var(--on-surface-variant)";
 
+  // On the mobile stack the tile has no fixed height, so don't fill/scroll internally — render
+  // at natural height (single column below) and let the page scroll.
+  const fillBox = fill && !stacked;
   return (
-    <div style={fill ? { height: "100%", display: "flex", flexDirection: "column" } : undefined}>
+    <div style={fillBox ? { height: "100%", display: "flex", flexDirection: "column" } : undefined}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 13 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 9, background: `color-mix(in srgb, ${hc} 13%, transparent)`, flexShrink: 0 }}>
           <Icon name={allGood ? "verified" : down.length || deg.length ? "warning" : "help"} size={18} color={hc} fill={allGood} />
@@ -496,8 +502,8 @@ export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?:
         )}
       </div>
       <div
-        className={fill ? "custom-scrollbar" : undefined}
-        style={{ display: "grid", gridTemplateColumns: stacked ? "1fr" : "repeat(auto-fit, minmax(248px, 1fr))", gap: stacked ? 10 : 14, ...(fill ? { flex: 1, minHeight: 0, overflowY: "auto" } : {}) }}
+        className={fillBox ? "custom-scrollbar" : undefined}
+        style={{ display: "grid", gridTemplateColumns: stacked ? "1fr" : "repeat(auto-fit, minmax(248px, 1fr))", gap: stacked ? 10 : 14, ...(fillBox ? { flex: 1, minHeight: 0, overflowY: "auto" } : {}) }}
       >
         {list.map((s) => (
           <CentralCard key={s.id} s={s} onOpen={onOpen} />
@@ -636,6 +642,7 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
 // ── LIBRARY STAT STRIP ─────────────────────────────────────
 export function LibraryStats({ fill, visibleIds, source }: { fill?: boolean; visibleIds?: string; source?: string } = {}) {
   const { libraryAll } = useData();
+  const stacked = useStacked();
   const resolved = resolveBySource(libraryAll ?? [], source, ["tautulli", "jellyfin"]);
   const visible = visibleIds
     ? (() => { const s = new Set(visibleIds.split(",").filter(Boolean)); return resolved.filter(l => s.has(l.id)); })()
@@ -647,7 +654,9 @@ export function LibraryStats({ fill, visibleIds, source }: { fill?: boolean; vis
       </PanelShell>
     ) : null;
   return (
-    <div className="aerie-lib-grid" style={fill ? { height: "100%", gridAutoRows: "1fr" } : undefined}>
+    // On the mobile stack don't pin to the tile's (now minimum) height — let the stat cards
+    // size to content so the second row can't overflow and overlap the next widget.
+    <div className="aerie-lib-grid" style={fill && !stacked ? { height: "100%", gridAutoRows: "1fr" } : undefined}>
       {visible.map((l) => (
         <div key={`${l.source ?? ""}:${l.id}`} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -710,6 +719,7 @@ function FlowGrid<T>({
   stretch?: boolean;
   render: (item: T, index: number) => React.ReactNode;
 }) {
+  const stacked = useStacked();
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -725,6 +735,17 @@ function FlowGrid<T>({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Mobile single column: the tile has no fixed height, so the measure-and-cap-rows /
+  // horizontal-scroll logic below doesn't apply. Show every item in a natural-height
+  // wrapping grid (auto-fill so posters/tiles pack from itemW upward) and let the page scroll.
+  if (stacked) {
+    return (
+      <div style={{ padding: `${padY}px ${padX}px`, display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${itemW}px, 1fr))`, gap, alignItems: "start" }}>
+        {items.map((item, i) => render(item, i))}
+      </div>
+    );
+  }
 
   const T_ = items.length;
   const innerW = box.w > 0 ? box.w - padX * 2 : 0;
@@ -879,6 +900,7 @@ function QueueSourceToggle({
 
 export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { queue, queueSource, arrQueueConfigured, nzbgetConfigured, nzbgetStatus, qbittorrentConfigured, qbittorrent } = useData();
+  const stacked = useStacked();
   // In a grid tile, show as many rows as fit the height (no scrolling); the rest
   // is reachable via the ‹ › pager.
   const [fitRef, fitRows] = useFitRows(dense ? 53 : 61);
@@ -912,7 +934,7 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
         </div>
       ) : undefined}
     >
-      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
+      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill && !stacked ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((q, i) => (
           <div key={q.id} style={{ padding: rowPadding, borderTop: listDivider(i) }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
@@ -1077,6 +1099,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
 // ── RECENTLY DOWNLOADED (*arr history) ─────────────────────
 export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { downloads } = useData();
+  const stacked = useStacked();
   // In a grid tile, show as many rows as fit the height; the rest pages via ‹ ›.
   const [fitRef, fitRows] = useFitRows(dense ? 28 : 36);
   const pageSize = limit ?? (fill ? fitRows : 10);
@@ -1097,7 +1120,7 @@ export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; 
       count={`${downloads.length}`}
       action={totalPages > 1 ? <PageControls page={page} totalPages={totalPages} setPage={setPage} /> : undefined}
     >
-      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill ? { height: "100%", overflow: "hidden" } : {}) }}>
+      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill && !stacked ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((d, i) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: rowPadding, borderTop: listDivider(i) }}>
             <Icon name={d.svc === "radarr" ? "movie" : d.svc === "listenarr" ? "headphones" : d.svc === "qbittorrent" ? "downloading" : "live_tv"} size={14} color="var(--originator-third-party)" />
