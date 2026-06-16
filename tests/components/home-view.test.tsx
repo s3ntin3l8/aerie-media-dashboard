@@ -23,8 +23,9 @@ vi.mock("@/components/portal/PortalProvider", () => ({
   usePortal: () => ({ setPaletteOpen: vi.fn(), user: { name: "Ada" }, initialDashboards: undefined }),
 }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: () => data }));
+const dash = { editing: false };
 vi.mock("@/components/portal/useDashboard", () => ({
-  useDashboard: () => ({ role: "admin", layout: [], editing: false, toggleEdit: vi.fn(), resetLayout: vi.fn() }),
+  useDashboard: () => ({ role: "admin", layout: [], editing: dash.editing, toggleEdit: vi.fn(), resetLayout: vi.fn() }),
 }));
 vi.mock("@/components/portal/DashboardBody", () => ({
   DashboardBody: () => <div data-testid="dashboard-body" />,
@@ -40,6 +41,7 @@ beforeEach(() => {
   data.services = [];
   data.nowPlaying = [];
   data.bandwidth = null;
+  dash.editing = false;
 });
 
 describe("Home view", () => {
@@ -47,9 +49,18 @@ describe("Home view", () => {
     const { container } = render(<Home />);
     // The page body opts into the fluid/dashboard width tier rather than a
     // hardcoded inline maxWidth — guards against a regression to the old caps.
-    const body = container.querySelector(".aerie-page-pad.aerie-page-pad--wide");
+    const body = container.querySelector<HTMLElement>(".aerie-page-pad.aerie-page-pad--wide");
     expect(body).not.toBeNull();
+    // Not editing: no extra bottom padding reserved for the edit toolbar.
+    expect(body!.style.paddingBottom).toBe("");
     expect(screen.getByTestId("dashboard-body")).toBeInTheDocument();
+  });
+
+  it("reserves bottom padding for the edit toolbar while editing", () => {
+    dash.editing = true;
+    const { container } = render(<Home />);
+    const body = container.querySelector<HTMLElement>(".aerie-page-pad.aerie-page-pad--wide");
+    expect(body!.style.paddingBottom).toBe("110px");
   });
 
   it("shows the no-services empty state and a 'No services configured' ticker when unconfigured", () => {
