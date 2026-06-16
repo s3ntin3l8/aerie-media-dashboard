@@ -281,15 +281,18 @@ describe("GridDashboard — stacked flag (StackedContext)", () => {
     expect(screen.getByTestId("stacked")).toHaveTextContent("true");
   });
 
-  it("gives stacked tiles a MIN height (not a fixed one) so tall content grows instead of overlapping", () => {
-    // jsdom clientWidth 0 → stacked branch. tile h=4, minH=2 → hUnits=4 → 4*30 + 3*14 = 162px.
+  it("sizes stacked tiles to content, reserving no desktop-derived height", () => {
+    // jsdom clientWidth 0 → stacked branch. The desktop grid `h` must NOT leak in as a
+    // reserved height: short/idle widgets should size to their natural content, not pad out
+    // to a desktop-tall blank (issue #110). Overlap is still prevented by the column flow + gap.
     render(
       <GridDashboard layout={[tile({ uid: "s1", h: 4 })]} onChange={vi.fn()} editing={false} renderWidget={renderWidget} onRemove={vi.fn()} onConfigure={vi.fn()} />,
     );
     // renderWidget body → inner pointer-events div → the stacked wrapper.
     const wrapper = screen.getByTestId("widget-s1").parentElement!.parentElement!;
-    expect(wrapper.style.minHeight).toBe("162px");
-    // A fixed height would re-introduce the overflow/overlap bug — it must NOT be set.
+    // Neither a fixed height (overflow/overlap regression of #88/#107) nor a reserved
+    // minHeight (the #110 gap) should be set — the tile is purely content-sized.
+    expect(wrapper.style.minHeight).toBe("");
     expect(wrapper.style.height).toBe("");
   });
 

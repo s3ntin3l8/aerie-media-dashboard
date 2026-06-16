@@ -219,13 +219,13 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
       <StackedContext.Provider value={stacked}>
       <div ref={wrapRef} style={{ display: "flex", flexDirection: "column", gap }}>
         {visible.map((item, i) => {
-          const m = widgetMeta(item.type);
-          const hUnits = Math.max(item.h, m.minH);
           return (
-            // Mobile single column: the grid `h` becomes a *minimum* height, not a fixed one,
-            // so a widget rendering its natural (taller) content pushes the next one down
-            // instead of overflowing and overlapping it. Inner element is left height:auto.
-            <div key={item.uid} style={{ position: "relative", minHeight: hUnits * rowH + (hUnits - 1) * gap, borderRadius: "var(--radius-xl)" }}>
+            // Mobile single column: each tile sizes to its widget's natural content height —
+            // the grid `h` (a desktop concept) is ignored here, so short/idle widgets don't
+            // reserve desktop-tall blank space. The page scrolls, not each widget; overlap is
+            // prevented by the column flow + gap (inner element is left height:auto), not by a
+            // reserved height. A fixed height here would re-introduce the #88/#107 overlap bug.
+            <div key={item.uid} style={{ position: "relative", borderRadius: "var(--radius-xl)" }}>
               <div style={{ pointerEvents: editing ? "none" : "auto" }}>{renderWidget(item, true)}</div>
               {editing && (
                 <div style={mobileCtrlBar}>
