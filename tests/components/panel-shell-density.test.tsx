@@ -38,4 +38,29 @@ describe("PanelShell — mobile density", () => {
 
     expect(mobile).toBeLessThan(desktop);
   });
+
+  it("fills + scrolls its body on desktop, but renders at natural height on the stack", () => {
+    // Desktop: fill → the body scrolls internally and the section fills the tile height.
+    const { unmount } = render(
+      <PanelShell fill title="Desktop" icon="bolt">
+        body
+      </PanelShell>,
+    );
+    const dBody = screen.getByText("body");
+    expect(dBody.style.overflowY).toBe("auto");
+    expect(dBody.closest("section")!.style.height).toBe("100%");
+    unmount();
+
+    // Stacked: the tile has no fixed height, so the body must NOT scroll internally — it grows.
+    render(
+      <StackedContext.Provider value={true}>
+        <PanelShell fill title="Mobile" icon="bolt">
+          body
+        </PanelShell>
+      </StackedContext.Provider>,
+    );
+    const mBody = screen.getByText("body");
+    expect(mBody.style.overflowY).toBe("");
+    expect(mBody.closest("section")!.style.height).toBe("");
+  });
 });
