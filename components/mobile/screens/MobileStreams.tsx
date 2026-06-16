@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import {
   Icon,
   Equalizer,
@@ -10,7 +10,52 @@ import { useData } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useStreamProgress } from "@/components/hooks/useStreamProgress";
 import { StreamQuality, StreamClient, StreamNetwork, StreamMeta, StreamTech, StreamAvatar } from "@/components/streams/StreamDetail";
+import { HistoryList } from "@/components/streams/HistoryList";
 import type { NowPlaying } from "@/lib/types";
+
+type Tab = "live" | "history";
+
+// Live / History segmented control — mirrors the desktop Streams tabs, styled to the mobile
+// chip aesthetic so the History view (shared HistoryList) is reachable on the phone too.
+function StreamTabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  const btn = (t: Tab, label: string) => {
+    const on = tab === t;
+    return (
+      <button
+        key={t}
+        onClick={() => setTab(t)}
+        style={{
+          flex: 1,
+          padding: "8px 0",
+          borderRadius: 10,
+          border: "none",
+          cursor: "pointer",
+          fontFamily: "var(--font-headline)",
+          fontWeight: 700,
+          fontSize: 12.5,
+          background: on ? "color-mix(in srgb, var(--primary) 14%, transparent)" : "transparent",
+          color: on ? "var(--primary)" : "var(--on-surface-variant)",
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 4,
+        padding: 4,
+        borderRadius: 13,
+        background: "var(--surface-container)",
+      }}
+    >
+      {btn("live", "Live")}
+      {btn("history", "History")}
+    </div>
+  );
+}
 
 function StreamCard({ s }: { s: NowPlaying }) {
   const { cur, pct } = useStreamProgress(s);
@@ -215,10 +260,11 @@ function StreamCard({ s }: { s: NowPlaying }) {
 export function MobileStreams() {
   const { nowPlaying } = useData();
   const { role, user } = usePortal();
-  const streams =
-    role === "admin"
-      ? nowPlaying
-      : nowPlaying.filter((s) => s.user === user.id);
+  const [tab, setTab] = useState<Tab>("live");
+  const isAdmin = role === "admin";
+  const streams = isAdmin
+    ? nowPlaying
+    : nowPlaying.filter((s) => s.user === user.id);
 
   return (
     <div
@@ -230,7 +276,11 @@ export function MobileStreams() {
         gap: 13,
       }}
     >
-      {streams.length === 0 ? (
+      <StreamTabs tab={tab} setTab={setTab} />
+
+      {tab === "history" ? (
+        <HistoryList isAdmin={isAdmin} />
+      ) : streams.length === 0 ? (
         <div
           style={{
             textAlign: "center",

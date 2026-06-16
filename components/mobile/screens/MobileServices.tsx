@@ -12,7 +12,7 @@ import type { Service } from "@/lib/types";
 export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
   const [q, setQ] = useState("");
   const services = useVisibleServices("launcher");
-  const { user, oidc, keptAliveIds } = usePortal();
+  const { user, oidc, keptAliveIds, favorites, toggleFavorite } = usePortal();
   const who = user.name || user.email || "session";
 
   const grouped = CAT_ORDER.map((cat) => ({
@@ -189,6 +189,15 @@ export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
                         {s.host}
                       </div>
                     </div>
+                    {/* Favorite pin — tap-stop so it toggles without opening the service. */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleFavorite(s.id); }}
+                      aria-label={favorites.includes(s.id) ? "Unpin" : "Pin to favorites"}
+                      title={favorites.includes(s.id) ? "Unpin" : "Pin to favorites"}
+                      style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: favorites.includes(s.id) ? "var(--amber)" : "var(--on-surface-variant)" }}
+                    >
+                      <Icon name="star" size={16} fill={favorites.includes(s.id)} />
+                    </button>
                     <Icon
                       name={s.embeddable ? "open_in_full" : "open_in_new"}
                       size={16}

@@ -401,6 +401,8 @@ export function RequestModal({
   onClose,
   onSubmit,
   onAct,
+  onEdit,
+  onCancel,
 }: {
   open: boolean;
   mode: "request" | "review" | "detail";
@@ -413,9 +415,13 @@ export function RequestModal({
   onClose: () => void;
   onSubmit: (pick: DiscoverItem, quality: string, seasons: Record<number, boolean>) => void | Promise<SubmitResult | void>;
   onAct: (id: string, action: "approve" | "decline", note?: string, mediaOverseerrId?: number) => void;
+  /** Opt-in (mobile): surface Edit/Cancel for the request owner/admin inside the review/detail
+      sheet. Desktop keeps these on the request card and passes neither. */
+  onEdit?: () => void;
+  onCancel?: () => void;
 }) {
   const { users, services } = useData();
-  const { user } = usePortal();
+  const { user, role } = usePortal();
   const router = useRouter();
   const me = users.find((u) => u.id === user.id) ?? users[0];
   const review = mode === "review";
@@ -572,6 +578,32 @@ export function RequestModal({
         Close
       </button>
     );
+  }
+
+  // Owner/admin Edit + Cancel — opt-in, surfaced inside the review/detail sheet (mobile). Mirrors
+  // the desktop request-card permissions: edit a pending request, cancel a pending/approved one.
+  if ((review || detail) && request && (onEdit || onCancel) && !decision) {
+    const isOwner = request.portalUser === user.id;
+    const admin = role === "admin";
+    const canEditReq = (admin || isOwner) && request.status === "pending";
+    const canCancelReq = (admin || isOwner) && (request.status === "pending" || request.status === "approved");
+    if ((onEdit && canEditReq) || (onCancel && canCancelReq)) {
+      footer = (
+        <>
+          {onEdit && canEditReq && (
+            <button onClick={onEdit} className="btn btn-secondary btn-sm">
+              <Icon name="edit" size={15} /> Edit
+            </button>
+          )}
+          {onCancel && canCancelReq && (
+            <button onClick={onCancel} className="btn btn-secondary btn-sm" style={{ color: "var(--error)" }}>
+              <Icon name="cancel" size={15} /> Cancel request
+            </button>
+          )}
+          {footer}
+        </>
+      );
+    }
   }
 
   // Watch actions (Plex/Jellyfin) sit on the left of the footer wherever the item is watchable.

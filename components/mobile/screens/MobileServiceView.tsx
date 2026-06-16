@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect } from "react";
-import { Icon, TRUNCATE } from "@/components/primitives";
+import { Icon, TRUNCATE, StatusDot, Heartbeat } from "@/components/primitives";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { LaunchScreen } from "@/components/views/Launcher";
 import { useEmbedProbe } from "@/components/hooks/useEmbedProbe";
@@ -12,8 +12,10 @@ import type { Service } from "@/lib/types";
 
 export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => void }) {
   const { embedState, badge, onLoad, onError, reload, reloadKey } = useEmbedProbe(s);
-  const { paletteOpen, modalOpen } = usePortal();
+  const { paletteOpen, modalOpen, favorites, toggleFavorite } = usePortal();
   const { nowPlaying = [] } = useData();
+  const pinned = favorites.includes(s.id);
+  const monitored = s.status !== "unknown";
   // Live sessions for this service (matched on the now-playing source id, e.g. "plex").
   const sessions = nowPlaying.filter((np) => np.src === s.id);
   const npAccent = s.id === "plex" ? "var(--originator-third-party)" : "var(--primary)";
@@ -71,6 +73,14 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
           <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", lineHeight: 1.1, ...TRUNCATE }}>{s.name}</div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>v{String(s.version).replace(/^v/i, "")} · {s.embeddable ? "embedded" : "external"}</div>
         </div>
+        <button
+          onClick={() => toggleFavorite(s.id)}
+          aria-label={pinned ? "Unpin" : "Pin to favorites"}
+          title={pinned ? "Unpin" : "Pin to favorites"}
+          style={{ width: 38, height: 38, borderRadius: 10, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: pinned ? "var(--amber)" : "var(--on-surface-variant)" }}
+        >
+          <Icon name="star" size={18} fill={pinned} />
+        </button>
         <a
           href={url}
           target="_blank"
@@ -81,6 +91,21 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
           <Icon name="open_in_new" size={18} />
         </a>
       </div>
+
+      {/* Slim health strip — status + uptime/latency + heartbeat for monitored services,
+          mirroring the desktop ServiceView header health, sized for the phone. */}
+      {monitored && (
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 60%, transparent)", background: "color-mix(in srgb, var(--surface-container) 40%, transparent)" }}>
+          <StatusDot status={s.status} size={7} />
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, fontWeight: 700, color: s.status === "up" ? "var(--on-surface)" : "var(--amber)" }}>
+            {s.uptime.toFixed(2)}%
+          </span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>· {s.ms}ms</span>
+          <span style={{ marginLeft: "auto" }}>
+            <Heartbeat beats={s.beats} h={14} barW={3} gap={1.5} />
+          </span>
+        </div>
+      )}
 
       {/* Live now-playing for this service (Plex/Jellyfin/ABS) — own strip so it's visible on mobile. */}
       {sessions.length > 0 && (
