@@ -67,7 +67,7 @@ Prometheus). The active source and selected system/instance persist as deploymen
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
+npm run dev      # http://localhost:3001
 npm run build    # production build + typecheck + lint
 npm run start    # serve the production build
 ```
