@@ -23,7 +23,7 @@ function MetricCard({ title, value, unit, color, data }: { title: string; value:
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{unit}</span>
       </div>
       <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 24, letterSpacing: "-0.02em", color: "var(--on-surface)", marginBottom: 10 }}>{value}</div>
-      <Sparkline data={data} w={260} h={40} color={color} strokeW={1.5} />
+      <Sparkline data={data} w={260} h={40} color={color} strokeW={1.5} fluid />
     </div>
   );
 }

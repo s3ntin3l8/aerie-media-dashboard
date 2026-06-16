@@ -295,6 +295,7 @@ export function Sparkline({
   color = "var(--primary)",
   fill = true,
   strokeW = 1.5,
+  fluid = false,
 }: {
   data: number[];
   w?: number;
@@ -302,6 +303,7 @@ export function Sparkline({
   color?: string;
   fill?: boolean;
   strokeW?: number;
+  fluid?: boolean;
 }) {
   const { line, area } = useMemo(() => {
     const max = Math.max(...data, 1),
@@ -313,8 +315,13 @@ export function Sparkline({
     return { line, area };
   }, [data, w, h]);
   const gid = useId();
+  // fluid: fill the container width while keeping the w×h geometry as the viewBox. The
+  // non-scaling-stroke keeps the line crisp/uniform despite the horizontal stretch.
+  const sizing = fluid
+    ? ({ width: "100%", height: h, viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: "none" } as const)
+    : ({ width: w, height: h } as const);
   return (
-    <svg width={w} height={h} style={{ display: "block", overflow: "visible" }}>
+    <svg {...sizing} style={{ display: "block", overflow: "visible" }}>
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.22" />
@@ -322,7 +329,15 @@ export function Sparkline({
         </linearGradient>
       </defs>
       {fill && <path d={area} fill={`url(#${gid})`} />}
-      <path d={line} fill="none" stroke={color} strokeWidth={strokeW} strokeLinejoin="round" strokeLinecap="round" />
+      <path
+        d={line}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeW}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        vectorEffect={fluid ? "non-scaling-stroke" : undefined}
+      />
     </svg>
   );
 }
