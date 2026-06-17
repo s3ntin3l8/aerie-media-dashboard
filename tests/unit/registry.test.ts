@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   getServiceConfigs, getServiceSecret, getAllServiceSecrets, getServiceCredentials, isConfigured,
   getFavorites, setFavorites, getDashboards, setDashboards,
