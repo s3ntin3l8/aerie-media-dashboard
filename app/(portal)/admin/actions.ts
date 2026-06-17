@@ -9,7 +9,7 @@ import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
 import { parseForwardAuthConfig, getForwardAuthConfig, type ForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import { getSessionUser } from "@/lib/session";
-import { setDeploymentSetting, getDeploymentSetting } from "@/lib/integrations/registry";
+import { setDeploymentSetting, getDeploymentSetting, invalidateRegistryCache } from "@/lib/integrations/registry";
 import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId } from "@/lib/integrations/clients";
 import type { OverseerrQuotaSettings } from "@/lib/integrations/clients";
 
@@ -26,6 +26,7 @@ export async function setVisibility(serviceId: string, groupName: string, visibl
     .insert(schema.serviceVisibility)
     .values({ serviceId, groupName, visible })
     .onConflictDoUpdate({ target: [schema.serviceVisibility.serviceId, schema.serviceVisibility.groupName], set: { visible } });
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -61,6 +62,7 @@ export async function setServiceSecret(serviceId: string, plaintext: string) {
         set: { iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() },
       });
   }
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -80,6 +82,7 @@ export async function setServiceForwardAuth(serviceId: string, config: ForwardAu
       target: [schema.serviceSecrets.serviceId, schema.serviceSecrets.kind],
       set: { iv: enc.iv, authTag: enc.authTag, ciphertext: enc.ciphertext, updatedAt: new Date() },
     });
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -112,6 +115,7 @@ export async function clearServiceForwardAuth(serviceId: string) {
   await db
     .delete(schema.serviceSecrets)
     .where(and(eq(schema.serviceSecrets.serviceId, serviceId), eq(schema.serviceSecrets.kind, "forwardAuth")));
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -164,6 +168,7 @@ export async function upsertService(input: ServiceInput) {
     .insert(schema.services)
     .values(values)
     .onConflictDoUpdate({ target: schema.services.id, set: values });
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -172,6 +177,7 @@ export async function setServiceActive(id: string, active: boolean) {
   await requireAdmin();
   await ensureDb();
   await db.update(schema.services).set({ active }).where(eq(schema.services.id, id));
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -181,6 +187,7 @@ export async function setServiceKeepAlive(id: string, keepAlive: boolean) {
   await requireAdmin();
   await ensureDb();
   await db.update(schema.services).set({ keepAlive }).where(eq(schema.services.id, id));
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -197,6 +204,7 @@ export async function deleteService(id: string) {
   await requireAdmin();
   await ensureDb();
   await db.delete(schema.services).where(eq(schema.services.id, id));
+  invalidateRegistryCache();
   revalidatePath("/admin");
 }
 
@@ -210,6 +218,7 @@ export async function detectServiceVersion(serviceId: string): Promise<string | 
   if (version) {
     await ensureDb();
     await db.update(schema.services).set({ version }).where(eq(schema.services.id, serviceId));
+    invalidateRegistryCache();
     revalidatePath("/admin");
   }
   return version;
@@ -234,6 +243,7 @@ export async function testStoredConnection(serviceId: string): Promise<string | 
   if (version) {
     await ensureDb();
     await db.update(schema.services).set({ version }).where(eq(schema.services.id, serviceId));
+    invalidateRegistryCache();
     revalidatePath("/admin");
   }
   return version;

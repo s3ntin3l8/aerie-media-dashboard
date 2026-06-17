@@ -12,6 +12,19 @@ import { hashPassword } from "@/lib/auth/password";
 import { matchPreset } from "@/lib/servicePresets";
 import type { Category, DashboardStore } from "@/lib/types";
 
+let configsCache: ServiceConfig[] | null = null;
+let configsCacheAt = 0;
+const CONFIGS_TTL = 5_000;
+
+const secretCache = new Map<string, { value: string | null; at: number }>();
+const SECRET_TTL = 5_000;
+
+export function invalidateRegistryCache(): void {
+  configsCache = null;
+  configsCacheAt = 0;
+  secretCache.clear();
+}
+
 export interface ServiceConfig {
   id: string;
   name: string;
@@ -40,10 +53,11 @@ export interface ServiceConfig {
 }
 
 export async function getServiceConfigs(): Promise<ServiceConfig[]> {
+  if (configsCache && Date.now() - configsCacheAt < CONFIGS_TTL) return configsCache;
   try {
     await ensureDb();
     const rows = await db.select().from(schema.services).orderBy(schema.services.sortOrder);
-    return rows.map((r) => ({
+    configsCache = rows.map((r) => ({
       id: r.id,
       name: r.name,
       cat: r.cat as Category,
@@ -64,6 +78,8 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       active: r.active,
       keepAlive: r.keepAlive,
     }));
+    configsCacheAt = Date.now();
+    return configsCache;
   } catch {
     return [];
   }
@@ -71,6 +87,9 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
 
 /** Decrypted secret for a service, or null if none / DB unavailable. */
 export async function getServiceSecret(serviceId: string, kind = "apiKey"): Promise<string | null> {
+  const cacheKey = `${serviceId}:${kind}`;
+  const hit = secretCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < SECRET_TTL) return hit.value;
   try {
     await ensureDb();
     const rows = await db
@@ -78,9 +97,9 @@ export async function getServiceSecret(serviceId: string, kind = "apiKey"): Prom
       .from(schema.serviceSecrets)
       .where(and(eq(schema.serviceSecrets.serviceId, serviceId), eq(schema.serviceSecrets.kind, kind)))
       .limit(1);
-    if (rows.length === 0) return null;
-    const row = rows[0];
-    return decrypt({ iv: row.iv, authTag: row.authTag, ciphertext: row.ciphertext });
+    const value = rows.length === 0 ? null : decrypt({ iv: rows[0].iv, authTag: rows[0].authTag, ciphertext: rows[0].ciphertext });
+    secretCache.set(cacheKey, { value, at: Date.now() });
+    return value;
   } catch {
     return null;
   }
@@ -354,5 +373,6 @@ export async function createLocalAdmin(u: { name: string; email: string; passwor
 export async function updateServiceVersion(serviceId: string, version: string): Promise<void> {
   await ensureDb();
   await db.update(schema.services).set({ version }).where(eq(schema.services.id, serviceId));
+  invalidateRegistryCache();
 }
 
