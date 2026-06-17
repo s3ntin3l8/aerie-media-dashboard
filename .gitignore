@@ -57,6 +57,7 @@ docker-compose.override.yml
 
 # Superpowers
 docs/superpowers/
+.opencode/
 coverage/
 
 # vitest junit output (CI)
