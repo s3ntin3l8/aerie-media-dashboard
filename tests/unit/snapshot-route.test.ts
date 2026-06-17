@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+vi.mock("next/server", () => ({
+  NextResponse: {
+    json: (body: unknown, init?: { headers?: Record<string, string> }) => {
+      const headers = new Headers(init?.headers);
+      return new Response(JSON.stringify(body), { headers });
+    },
+  },
+}));
+
 // The /api/snapshot GET handler is a thin pass-through over the data facade: it calls
 // getSnapshot() and serializes the result as no-store JSON for the client poller.
 vi.mock("@/lib/data/snapshot", () => ({ getSnapshot: vi.fn() }));
