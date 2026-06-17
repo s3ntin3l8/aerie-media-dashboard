@@ -12,6 +12,31 @@ import Credentials from "next-auth/providers/credentials";
 import { env, authConfigured } from "@/lib/env";
 import { normalizeGroups, deriveRole } from "@/lib/auth/role";
 
+// ── Brute-force rate limiter for local-credentials login ──
+const loginAttempts = new Map<string, { count: number; until: number }>();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1_000; // 15 min
+
+function isRateLimited(email: string): boolean {
+  const entry = loginAttempts.get(email);
+  if (!entry) return false;
+  if (Date.now() > entry.until) { loginAttempts.delete(email); return false; }
+  return entry.count >= MAX_ATTEMPTS;
+}
+
+function recordFailedAttempt(email: string): void {
+  const entry = loginAttempts.get(email);
+  if (!entry || Date.now() > entry.until) {
+    loginAttempts.set(email, { count: 1, until: Date.now() + WINDOW_MS });
+  } else {
+    entry.count++;
+  }
+}
+
+function clearAttempts(email: string): void {
+  loginAttempts.delete(email);
+}
+
 type OidcProfile = Record<string, unknown> & {
   sub?: string;
   name?: string;
@@ -45,17 +70,19 @@ const providers: NextAuthConfig["providers"] = authConfigured
   : [
       Credentials({
         credentials: { email: {}, password: {} },
-        async authorize(credentials) {
+async authorize(credentials) {
           const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
           const password = typeof credentials?.password === "string" ? credentials.password : "";
           if (!email || !password) return null;
+          if (isRateLimited(email)) return null;
           // Lazy import so the Node-only DB/crypto code stays out of the edge
           // (middleware) bundle — authorize only runs in the Node API route.
           const { getUserByEmail } = await import("@/lib/integrations/registry");
           const { verifyPassword } = await import("@/lib/auth/password");
           const user = await getUserByEmail(email);
-          if (!user?.passwordHash) return null;
-          if (!verifyPassword(password, user.passwordHash)) return null;
+          if (!user?.passwordHash) { recordFailedAttempt(email); return null; }
+          if (!verifyPassword(password, user.passwordHash)) { recordFailedAttempt(email); return null; }
+          clearAttempts(email);
           return {
             id: user.id,
             name: user.name,
@@ -69,9 +96,7 @@ const providers: NextAuthConfig["providers"] = authConfigured
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
-  // Real deployments must set AUTH_SECRET; this constant only keeps the
-  // unconfigured dev server from throwing MissingSecret.
-  secret: env.authSecret ?? "aerie-dev-only-insecure-secret-change-me",
+  secret: env.authSecret || undefined,
   providers,
   pages: { signIn: "/login" },
   // maxAge bounds Aerie's own session so it doesn't outlive the upstream SSO session that gates
