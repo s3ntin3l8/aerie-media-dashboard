@@ -11,31 +11,9 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { env, authConfigured } from "@/lib/env";
 import { normalizeGroups, deriveRole } from "@/lib/auth/role";
-
-// ── Brute-force rate limiter for local-credentials login ──
-const loginAttempts = new Map<string, { count: number; until: number }>();
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1_000; // 15 min
-
-function isRateLimited(email: string): boolean {
-  const entry = loginAttempts.get(email);
-  if (!entry) return false;
-  if (Date.now() > entry.until) { loginAttempts.delete(email); return false; }
-  return entry.count >= MAX_ATTEMPTS;
-}
-
-function recordFailedAttempt(email: string): void {
-  const entry = loginAttempts.get(email);
-  if (!entry || Date.now() > entry.until) {
-    loginAttempts.set(email, { count: 1, until: Date.now() + WINDOW_MS });
-  } else {
-    entry.count++;
-  }
-}
-
-function clearAttempts(email: string): void {
-  loginAttempts.delete(email);
-}
+// Brute-force rate limiter (keyed by client IP). Pure module — safe in the
+// edge-middleware bundle that imports this file.
+import { isRateLimited, recordFailedAttempt, clearAttempts, clientIp } from "@/lib/auth/rateLimit";
 
 type OidcProfile = Record<string, unknown> & {
   sub?: string;
@@ -70,19 +48,23 @@ const providers: NextAuthConfig["providers"] = authConfigured
   : [
       Credentials({
         credentials: { email: {}, password: {} },
-async authorize(credentials) {
+        async authorize(credentials, request) {
           const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
           const password = typeof credentials?.password === "string" ? credentials.password : "";
           if (!email || !password) return null;
-          if (isRateLimited(email)) return null;
+          // Rate-limit by client IP so an attacker rotating email addresses is
+          // still blocked, and knowing a valid email can't be used to DoS the
+          // account owner (email-keyed locking).
+          const ip = clientIp(request);
+          if (isRateLimited(ip)) return null;
           // Lazy import so the Node-only DB/crypto code stays out of the edge
           // (middleware) bundle — authorize only runs in the Node API route.
           const { getUserByEmail } = await import("@/lib/integrations/registry");
           const { verifyPassword } = await import("@/lib/auth/password");
           const user = await getUserByEmail(email);
-          if (!user?.passwordHash) { recordFailedAttempt(email); return null; }
-          if (!verifyPassword(password, user.passwordHash)) { recordFailedAttempt(email); return null; }
-          clearAttempts(email);
+          if (!user?.passwordHash) { recordFailedAttempt(ip); return null; }
+          if (!verifyPassword(password, user.passwordHash)) { recordFailedAttempt(ip); return null; }
+          clearAttempts(ip);
           return {
             id: user.id,
             name: user.name,

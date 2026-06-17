@@ -62,3 +62,34 @@ describe("proxy middleware — auth gate still enforced", () => {
     expect(isPassThrough(run("/admin", { user: { role: "admin" } }))).toBe(true);
   });
 });
+
+describe("proxy middleware — security response headers", () => {
+  // Headers must be present on every authenticated pass-through response.
+  const authedRes = () => run("/", { user: { role: "user" } });
+
+  it("sets X-Content-Type-Options: nosniff", () => {
+    expect(authedRes().headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("sets X-Frame-Options: SAMEORIGIN", () => {
+    expect(authedRes().headers.get("x-frame-options")).toBe("SAMEORIGIN");
+  });
+
+  it("sets Referrer-Policy: strict-origin-when-cross-origin", () => {
+    expect(authedRes().headers.get("referrer-policy")).toBe(
+      "strict-origin-when-cross-origin",
+    );
+  });
+
+  it("sets Permissions-Policy restricting camera/mic/geolocation", () => {
+    expect(authedRes().headers.get("permissions-policy")).toBe(
+      "camera=(), microphone=(), geolocation=()",
+    );
+  });
+
+  it("does NOT set security headers on public/unauthenticated responses", () => {
+    const res = run("/login", null);
+    // public routes skip the header-adding path
+    expect(res.headers.get("x-content-type-options")).toBeNull();
+  });
+});

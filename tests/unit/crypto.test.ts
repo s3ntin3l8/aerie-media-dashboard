@@ -56,12 +56,18 @@ describe("crypto", () => {
       expect(decrypt(encrypt(plain))).toBe(plain);
     });
 
-    it("throws when ENCRYPTION_KEY is not set", () => {
-      // env.encryptionKey is set at module load from process.env, so we can't
-      // easily clear it in this test. The throw path is verified by the
-      // encryptionConfigured guard — callers that check it first will never hit
-      // the throw. The production code's key() reads env.encryptionKey and
-      // throws if empty; this is coverage-accepted rather than unit-tested.
+    it("throws when ENCRYPTION_KEY is not set", async () => {
+      // env is captured at module-load time (lib/env.ts reads process.env on
+      // first import). resetModules() clears the cache so the next dynamic
+      // import re-evaluates lib/env with the stubbed (empty) var.
+      vi.stubEnv("ENCRYPTION_KEY", "");
+      vi.resetModules();
+      const { encrypt: freshEncrypt } = await import("@/lib/crypto");
+      expect(() => freshEncrypt("anything")).toThrow("ENCRYPTION_KEY is not set");
+      // Restore: unstub so the beforeEach stub wins for subsequent tests,
+      // and resetModules so they pick up the restored env on their next import.
+      vi.unstubAllEnvs();
+      vi.resetModules();
     });
   });
 
