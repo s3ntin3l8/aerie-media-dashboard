@@ -1,15 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mockHttp, mockClientsRegistry, mockEnv } from "./clientsMocks";
 
 vi.mock("@/lib/integrations/http", () => mockHttp());
 vi.mock("@/lib/integrations/registry", () => mockClientsRegistry());
 vi.mock("@/lib/env", () => mockEnv());
 
-import { fetchJson } from "@/lib/integrations/http";
+import { fetchJson, fetchRaw } from "@/lib/integrations/http";
 import { getServiceCredentials } from "@/lib/integrations/registry";
 import { detectVersion, probeVersion } from "@/lib/integrations/clients";
 
 const mockFetchJson = vi.mocked(fetchJson);
+const mockFetchRaw = vi.mocked(fetchRaw);
 const mockGetCreds = vi.mocked(getServiceCredentials);
 
 describe("serviceKind — via detectVersion and probeVersion", () => {
@@ -172,6 +173,121 @@ describe("serviceKind — via detectVersion and probeVersion", () => {
       mockFetchJson.mockRejectedValue(new Error("connection refused"));
       const result = await probeVersion("http://svc:8080", "key", "sonarr");
       expect(result).toBeNull();
+    });
+
+    it("detects Bazarr version via /api/system/status?apikey=", async () => {
+      mockFetchJson.mockResolvedValue({ data: { bazarr_version: "1.4.3" } });
+      expect(await probeVersion("http://bazarr:6767", "key", "bazarr")).toBe("1.4.3");
+      expect(mockFetchJson).toHaveBeenCalledWith(expect.stringContaining("/api/system/status?apikey="), expect.anything());
+    });
+
+    it("detects Agregarr version via /api/v1/status (public)", async () => {
+      mockFetchJson.mockResolvedValue({ version: "0.9.0" });
+      expect(await probeVersion("http://agregarr:80", "", "agregarr")).toBe("0.9.0");
+    });
+
+    it("detects Wizarr version via /api/swagger.json info.version", async () => {
+      mockFetchJson.mockResolvedValue({ info: { version: "4.1.2" } });
+      expect(await probeVersion("http://wizarr:5690", "key", "wizarr")).toBe("4.1.2");
+      expect(mockFetchJson).toHaveBeenCalledWith(expect.stringContaining("/api/swagger.json"), expect.anything());
+    });
+
+    it("returns empty string for Wizarr when version is absent", async () => {
+      mockFetchJson.mockResolvedValue({});
+      expect(await probeVersion("http://wizarr:5690", "key", "wizarr")).toBe("");
+    });
+
+    it("detects Audiobookshelf version via /status after validating /api/libraries", async () => {
+      mockFetchJson
+        .mockResolvedValueOnce([]) // /api/libraries (auth check)
+        .mockResolvedValueOnce({ serverVersion: "2.14.0" }); // /status
+      expect(await probeVersion("http://abs:13378", "tok", "audiobookshelf")).toBe("2.14.0");
+    });
+
+    it("detects NZBGet version via JSON-RPC", async () => {
+      mockFetchJson.mockResolvedValue({ result: "21.1" });
+      expect(await probeVersion("http://nzb:6789", "user:pass", "nzbget")).toBe("21.1");
+      expect(mockFetchJson).toHaveBeenCalledWith(expect.stringContaining("/jsonrpc"), expect.objectContaining({ method: "POST" }));
+    });
+
+    it("detects qBittorrent version via SID cookie session", async () => {
+      mockFetchRaw
+        .mockResolvedValueOnce({ status: 200, headers: { get: (k: string) => k === "set-cookie" ? "SID=abc123" : null } } as never)
+        .mockResolvedValueOnce({ ok: true, text: async () => "5.0.2" } as never);
+      expect(await probeVersion("http://qb:8080", "user:pass", "qbittorrent")).toBe("5.0.2");
+    });
+
+    it("qBittorrent: returns null on IP ban (403 from login)", async () => {
+      mockFetchRaw.mockResolvedValueOnce({ status: 403, headers: { get: () => null } } as never);
+      expect(await probeVersion("http://qb:8080", "user:pass", "qbittorrent")).toBeNull();
+    });
+
+    it("qBittorrent: returns null on invalid credentials (no set-cookie)", async () => {
+      mockFetchRaw.mockResolvedValueOnce({ status: 200, headers: { get: () => null } } as never);
+      expect(await probeVersion("http://qb:8080", "user:pass", "qbittorrent")).toBeNull();
+    });
+
+    it("qBittorrent: returns null when version fetch fails", async () => {
+      mockFetchRaw
+        .mockResolvedValueOnce({ status: 200, headers: { get: (k: string) => k === "set-cookie" ? "SID=tok" : null } } as never)
+        .mockResolvedValueOnce({ ok: false, status: 500 } as never);
+      expect(await probeVersion("http://qb:8080", "user:pass", "qbittorrent")).toBeNull();
+    });
+
+    it("detects NZBHydra2 version via /internalapi/updates/infos", async () => {
+      mockFetchJson.mockResolvedValue({ currentVersion: "7.8.0" });
+      expect(await probeVersion("http://hydra:5076", "key", "nzbhydra")).toBe("7.8.0");
+    });
+
+    it("detects Beszel version (empty string — PocketBase auth check)", async () => {
+      mockFetchJson
+        .mockResolvedValueOnce({ token: "jwt.tok.sig" }) // auth-with-password
+        .mockResolvedValueOnce({}); // /api/health
+      expect(await probeVersion("http://bz:8090", "admin@x:pw", "beszel")).toBe("");
+    });
+
+    it("Beszel: returns null when auth returns no token", async () => {
+      mockFetchJson.mockResolvedValueOnce({}); // no token
+      expect(await probeVersion("http://bz:8090", "admin@x:pw", "beszel")).toBeNull();
+    });
+
+    it("detects Unraid version via GraphQL /graphql", async () => {
+      mockFetchJson.mockResolvedValue({ data: { info: { versions: { core: { unraid: "7.1.4" } } } } });
+      expect(await probeVersion("http://unraid", "apikey", "unraid")).toBe("7.1.4");
+    });
+
+    it("Unraid: falls back to flat versions.unraid when nested is absent", async () => {
+      mockFetchJson
+        .mockResolvedValueOnce({ data: { info: { versions: { core: {} } } } }) // nested miss
+        .mockResolvedValueOnce({ data: { info: { versions: { unraid: "7.0.0" } } } }); // flat
+      expect(await probeVersion("http://unraid", "key", "unraid")).toBe("7.0.0");
+    });
+
+    it("detects LazyLibrarian version when Success=true", async () => {
+      mockFetchJson.mockResolvedValue({ Success: true, current_version: "v220-0g1234567" });
+      expect(await probeVersion("http://ll:5299", "key", "lazylibrarian")).toBe("220-0g1234567");
+    });
+
+    it("LazyLibrarian: returns null when Success=false (bad key)", async () => {
+      mockFetchJson.mockResolvedValue({ Success: false });
+      expect(await probeVersion("http://ll:5299", "badkey", "lazylibrarian")).toBeNull();
+    });
+
+    it("detects Listenarr version via /api/v1/system/info", async () => {
+      mockFetchJson.mockResolvedValue({ version: "1.2.3" });
+      expect(await probeVersion("http://listenarr:8686", "key", "listenarr")).toBe("1.2.3");
+      expect(mockFetchJson).toHaveBeenCalledWith(expect.stringContaining("/api/v1/system/info"), expect.anything());
+    });
+
+    it("detects Plex version via /identity (no auth needed)", async () => {
+      mockFetchJson.mockResolvedValue({ MediaContainer: { version: "1.40.5.9003" } });
+      expect(await probeVersion("http://plex:32400", "", "plex")).toBe("1.40.5.9003");
+      expect(mockFetchJson).toHaveBeenCalledWith(expect.stringContaining("/identity"), expect.anything());
+    });
+
+    it("Plex: returns empty string when version is absent from /identity", async () => {
+      mockFetchJson.mockResolvedValue({ MediaContainer: {} });
+      expect(await probeVersion("http://plex:32400", "", "plex")).toBe("");
     });
   });
 });

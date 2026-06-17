@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockHttp, mockClientsRegistry, mockEnv } from "./clientsMocks";
+import { mockHttp, mockClientsRegistry, mockEnv, MockIntegrationError } from "./clientsMocks";
 
 vi.mock("@/lib/integrations/http", () => mockHttp());
 vi.mock("@/lib/integrations/registry", () => mockClientsRegistry());
@@ -75,5 +75,53 @@ describe("beszelMetrics", () => {
     // root + extra filesystem, largest total first
     expect(m.filesystems.map((f) => f.mount)).toEqual(["/", "/mnt"]);
     expect(m.filesystems[0]).toEqual({ mount: "/", usedBytes: 40 * GIB, totalBytes: 100 * GIB });
+  });
+
+  it("auto-discovers first system when no beszelSystem deployment setting is stored", async () => {
+    mockCreds.mockResolvedValue({ baseUrl: "http://bz-nodeploy", apiKey: "admin@nd:pw", insecureTls: false } as never);
+    mockSetting.mockResolvedValue(null);
+    mockJson.mockImplementation(async (url: string) => {
+      if (url.includes("auth-with-password")) return { token: "tok-nd" } as never;
+      if (url.includes("perPage=100")) return { items: [{ id: "auto-sys", name: "auto-node", status: "up" }] } as never;
+      if (url.includes("auto-sys")) return { id: "auto-sys", name: "auto-node", status: "up", info: { u: 0 } } as never;
+      if (url.includes("system_stats")) return { items: [] } as never;
+      throw new Error(`unexpected url ${url}`);
+    });
+    const m = await beszelMetrics();
+    expect(m.instance).toBe("auto-node");
+  });
+
+  it("falls back to first system when the stored systemId returns 404", async () => {
+    // Use a distinct baseUrl so the Beszel token cache doesn't bleed from other tests
+    mockCreds.mockResolvedValue({ baseUrl: "http://bz-404", apiKey: "admin@f:pw", insecureTls: false } as never);
+    mockSetting.mockImplementation(async (k: string) => (k === "beszelSystem" ? "sys-deleted" : null));
+    mockJson.mockImplementation(async (url: string) => {
+      if (url.includes("auth-with-password")) return { token: "tok-404" } as never;
+      if (url.includes("sys-deleted")) throw new MockIntegrationError("beszel", "HTTP 404", 404);
+      if (url.includes("perPage=100")) return { items: [{ id: "sys-first", name: "fallback-node", status: "up" }] } as never;
+      if (url.includes("sys-first")) return { id: "sys-first", name: "fallback-node", status: "up", info: { u: 100 } } as never;
+      if (url.includes("system_stats")) return { items: [] } as never;
+      throw new Error(`unexpected url ${url}`);
+    });
+    const m = await beszelMetrics();
+    expect(m.instance).toBe("fallback-node");
+    expect(m.uptimeSec).toBe(100);
+  });
+});
+
+describe("beszelGet — 401 re-auth retry", () => {
+  it("re-authenticates and retries beszelSystems on 401", async () => {
+    // Unique baseUrl to bypass the token cache populated by other tests
+    mockCreds.mockResolvedValue({ baseUrl: "http://bz-retry", apiKey: "admin@r:pw", insecureTls: false } as never);
+    let authCalls = 0;
+    mockJson.mockImplementation(async (url: string) => {
+      if (url.includes("auth-with-password")) { authCalls++; return { token: `tok-${authCalls}` } as never; }
+      if (authCalls === 1) throw new MockIntegrationError("beszel", "HTTP 401", 401);
+      return { items: [{ id: "r1", name: "retry-node", status: "up" }] } as never;
+    });
+    const systems = await beszelSystems();
+    expect(systems[0].name).toBe("retry-node");
+    // Initial auth + force-refresh = 2 auth calls
+    expect(authCalls).toBe(2);
   });
 });

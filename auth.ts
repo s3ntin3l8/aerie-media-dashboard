@@ -11,6 +11,9 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { env, authConfigured } from "@/lib/env";
 import { normalizeGroups, deriveRole } from "@/lib/auth/role";
+// Brute-force rate limiter (keyed by client IP). Pure module — safe in the
+// edge-middleware bundle that imports this file.
+import { isRateLimited, recordFailedAttempt, clearAttempts, clientIp } from "@/lib/auth/rateLimit";
 
 type OidcProfile = Record<string, unknown> & {
   sub?: string;
@@ -45,17 +48,23 @@ const providers: NextAuthConfig["providers"] = authConfigured
   : [
       Credentials({
         credentials: { email: {}, password: {} },
-        async authorize(credentials) {
+        async authorize(credentials, request) {
           const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
           const password = typeof credentials?.password === "string" ? credentials.password : "";
           if (!email || !password) return null;
+          // Rate-limit by client IP so an attacker rotating email addresses is
+          // still blocked, and knowing a valid email can't be used to DoS the
+          // account owner (email-keyed locking).
+          const ip = clientIp(request);
+          if (isRateLimited(ip)) return null;
           // Lazy import so the Node-only DB/crypto code stays out of the edge
           // (middleware) bundle — authorize only runs in the Node API route.
           const { getUserByEmail } = await import("@/lib/integrations/registry");
           const { verifyPassword } = await import("@/lib/auth/password");
           const user = await getUserByEmail(email);
-          if (!user?.passwordHash) return null;
-          if (!verifyPassword(password, user.passwordHash)) return null;
+          if (!user?.passwordHash) { recordFailedAttempt(ip); return null; }
+          if (!verifyPassword(password, user.passwordHash)) { recordFailedAttempt(ip); return null; }
+          clearAttempts(ip);
           return {
             id: user.id,
             name: user.name,
@@ -69,9 +78,7 @@ const providers: NextAuthConfig["providers"] = authConfigured
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
-  // Real deployments must set AUTH_SECRET; this constant only keeps the
-  // unconfigured dev server from throwing MissingSecret.
-  secret: env.authSecret ?? "aerie-dev-only-insecure-secret-change-me",
+  secret: env.authSecret || undefined,
   providers,
   pages: { signIn: "/login" },
   // maxAge bounds Aerie's own session so it doesn't outlive the upstream SSO session that gates

@@ -23,11 +23,33 @@ const CONFIGS_TTL = 5_000;
 
 const secretCache = new Map<string, { value: string | null; at: number }>();
 const SECRET_TTL = 5_000;
+const SECRET_CACHE_MAX = 256;
+
+/** Evict stale entries and trim the cache if it exceeds the max size. */
+function trimSecretCache(): void {
+  const now = Date.now();
+  for (const [k, v] of secretCache) {
+    if (now - v.at >= SECRET_TTL) secretCache.delete(k);
+  }
+  if (secretCache.size > SECRET_CACHE_MAX) {
+    const entries = [...secretCache.entries()].sort((a, b) => a[1].at - b[1].at);
+    for (let i = 0; i < entries.length - SECRET_CACHE_MAX; i++) {
+      secretCache.delete(entries[i][0]);
+    }
+  }
+}
 
 export function invalidateRegistryCache(): void {
   configsCache = null;
   configsCacheAt = 0;
   secretCache.clear();
+}
+
+/** Periodically trim stale/oversized entries so the cache doesn't grow unbounded. */
+let lastTrimAt = 0;
+function maybeTrim(): void {
+  const now = Date.now();
+  if (now - lastTrimAt > 30_000) { trimSecretCache(); lastTrimAt = now; }
 }
 
 export interface ServiceConfig {
@@ -93,6 +115,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
 
 /** Decrypted secret for a service, or null if none / DB unavailable. */
 export async function getServiceSecret(serviceId: string, kind = "apiKey"): Promise<string | null> {
+  maybeTrim();
   const cacheKey = `${serviceId}:${kind}`;
   const hit = secretCache.get(cacheKey);
   if (hit && Date.now() - hit.at < SECRET_TTL) return hit.value;
