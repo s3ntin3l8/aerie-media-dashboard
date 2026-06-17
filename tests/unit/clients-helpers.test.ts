@@ -11,6 +11,7 @@ import {
   gatusHealth,
   jellyfinNowPlaying,
   tautulliActivity,
+  tautulliShowTmdb,
   arrCalendar,
   overseerrSearch,
   overseerrRequests,
@@ -744,5 +745,84 @@ describe("overseerrWatchlist — resolves status for items that arrive without m
     const items = await overseerrWatchlist();
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ id: "550", state: "available", plexUrl: "https://app.plex.tv/fc", arrId: 7 });
+  });
+});
+
+describe("tautulliActivity — WAN geo enrichment path", () => {
+  beforeEach(() => {
+    clearCache();
+    vi.clearAllMocks();
+  });
+
+  it("resolves geo for non-local sessions with a public IP", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://tautulli", apiKey: "key", insecureTls: false });
+    // Two mocked responses: get_activity + get_geoip_lookup
+    mockFetchJson.mockImplementation(async (url: string) => {
+      if (url.includes("get_activity")) {
+        return {
+          response: {
+            data: {
+              sessions: [makeTautulliSession({ local: "0", ip_address_public: "8.8.8.8" })],
+              total_bandwidth: 2000,
+              wan_bandwidth: 2000,
+            },
+          },
+        };
+      }
+      if (url.includes("get_geoip_lookup")) {
+        return { response: { result: "success", data: { city: "Mountain View", country: "US", code: "US" } } };
+      }
+      return {};
+    });
+
+    const result = await tautulliActivity();
+    expect(result.wanKbps).toBeGreaterThanOrEqual(0);
+    // geo should be resolved for the WAN session
+    const session = result.sessions[0];
+    expect(session.local).toBe(false);
+    expect(session.geo).toMatchObject({ city: "Mountain View", country: "US", code: "US" });
+  });
+
+  it("leaves geo undefined when geoip lookup returns non-success", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://tautulli", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockImplementation(async (url: string) => {
+      if (url.includes("get_activity")) {
+        return {
+          response: {
+            data: {
+              sessions: [makeTautulliSession({ local: "0", ip_address_public: "8.8.8.8" })],
+              total_bandwidth: 0, wan_bandwidth: 0,
+            },
+          },
+        };
+      }
+      if (url.includes("get_geoip_lookup")) {
+        return { response: { result: "error" } }; // GeoLite2 not installed
+      }
+      return {};
+    });
+    const result = await tautulliActivity();
+    expect(result.sessions[0].geo).toBeUndefined();
+  });
+});
+
+describe("tautulliShowTmdb", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("resolves a TMDB id from a Plex rating key via get_metadata guids", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://tautulli", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue({
+      response: { data: { guids: ["imdb://tt1234567", "tmdb://438631"] } },
+    });
+    const tmdbId = await tautulliShowTmdb("12345");
+    expect(tmdbId).toBe(438631);
+  });
+
+  it("returns undefined when no tmdb guid is present", async () => {
+    mockGetCreds.mockResolvedValue({ baseUrl: "http://tautulli", apiKey: "key", insecureTls: false });
+    mockFetchJson.mockResolvedValue({ response: { data: { guids: ["imdb://tt9999999"] } } });
+    expect(await tautulliShowTmdb("99")).toBeUndefined();
   });
 });
