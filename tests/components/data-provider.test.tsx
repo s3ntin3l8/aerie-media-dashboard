@@ -52,9 +52,10 @@ function Probe() {
   );
 }
 
-function jsonRes(body: unknown, ok = true): Response {
+function jsonRes(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
+    status,
     json: async () => body,
   } as unknown as Response;
 }
@@ -107,7 +108,8 @@ describe("DataProvider", () => {
     await act(async () => {
       vi.advanceTimersByTime(POLL_IDLE - POLL_ACTIVE);
     });
-    expect(fetchMock).toHaveBeenCalledWith("/api/snapshot", { cache: "no-store" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/snapshot");
     // flush the resolved fetch + setState
     await act(async () => {});
     expect(screen.getByTestId("np").textContent).toBe("1");
@@ -178,7 +180,8 @@ describe("DataProvider", () => {
       vi.setSystemTime(Date.now() + 5_000);
       screen.getByText("refresh").click();
     });
-    expect(fetchMock).toHaveBeenCalledWith("/api/snapshot", { cache: "no-store" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/snapshot");
     await act(async () => {});
     expect(screen.getByTestId("np").textContent).toBe("1");
     expect(screen.getByTestId("fetchedAt").textContent).not.toBe(before);

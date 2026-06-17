@@ -90,7 +90,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     type: "centralServices", name: "Central Services", icon: "verified", accent: "var(--originator-own)", group: "Overview",
     desc: "Big-figure uptime + heartbeat for your core streaming services.",
     defaultW: 12, defaultH: 6, minW: 5, minH: 4, maxW: 12, maxH: 10,
-    render: (c, _s) => <CentralServices fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/status")} />,
+    render: (c, _s) => <CentralServices fill onOpen={c.onOpenService} onAll={() => c.onNavigate("/status")} />,
   },
   libraryStats: {
     type: "libraryStats", name: "Library Stats", icon: "video_library", accent: "var(--primary)", group: "Overview",
@@ -118,13 +118,13 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     settings: [
       { key: "serviceIds", label: "Show only", type: "serviceIds", hint: "All on by default — toggle off to hide." },
     ],
-    render: (c, s) => <ServiceTiles fill role={c.role} onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} serviceIds={s.serviceIds as string | undefined} />,
+    render: (c, s) => <ServiceTiles fill onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} serviceIds={s.serviceIds as string | undefined} />,
   },
   status: {
     type: "status", name: "System Status", icon: "favorite", accent: "var(--originator-own)", group: "Monitoring",
     desc: "Per-service uptime — heartbeat strip per monitored service.",
     defaultW: 4, defaultH: 9, minW: 3, minH: 4, maxW: 12, maxH: 18,
-    render: (c, _s) => <StatusPanel fill role={c.role} onAll={() => c.onNavigate("/status")} />,
+    render: (c, _s) => <StatusPanel fill onAll={() => c.onNavigate("/status")} />,
   },
   myRequests: {
     type: "myRequests", name: "Requests", icon: "bookmark_added", accent: "var(--originator-court)", group: "Requests",

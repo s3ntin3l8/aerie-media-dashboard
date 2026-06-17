@@ -6,6 +6,7 @@ import { MobileShell } from "@/components/mobile/MobileShell";
 import { MobileProvider } from "@/components/mobile/MobileProvider";
 import { getSessionUser } from "@/lib/session";
 import { getSnapshotFast } from "@/lib/data/snapshot";
+import { scrubForMember } from "@/lib/data/scrub";
 import { getFavorites, getDashboards } from "@/lib/integrations/registry";
 import { isMobileUserAgent } from "@/lib/viewport";
 import { authConfigured } from "@/lib/env";
@@ -20,6 +21,7 @@ export default async function PortalLayout({ children }: { children: React.React
   // Don't block first paint on a cold upstream: getSnapshotFast serves the last good
   // snapshot if a fresh one would be slow, and refreshes in the background.
   const [user, { snapshot, stale }] = await Promise.all([getSessionUser(), getSnapshotFast()]);
+  const seed = user.role === "admin" ? snapshot : scrubForMember(snapshot);
   // Both prefs are per-user; the dashboards seed drives desktop Home *and* the mobile
   // dashboard from one source (the mobile shell never renders the page that fetched it).
   const [favorites, dashboards] = await Promise.all([
@@ -31,7 +33,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const initialIsMobile = isMobileUserAgent((await headers()).get("user-agent"));
   return (
     <PortalProvider user={user} oidc={authConfigured} favorites={favorites} initialDashboards={dashboards}>
-      <DataProvider initial={snapshot} initialStale={stale}>
+      <DataProvider initial={seed} initialStale={stale}>
         <MobileProvider initialIsMobile={initialIsMobile}>
           <MobileShell>{children}</MobileShell>
         </MobileProvider>

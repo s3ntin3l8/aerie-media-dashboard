@@ -63,10 +63,21 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
   const router = useRouter();
   const pathname = usePathname();
   const realRole = user.role;
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const saved = localStorage.getItem("aerie.theme") as Theme | null;
+      if (saved === "dark" || saved === "light") return saved;
+    } catch { /* ignore */ }
+    return "dark";
+  });
   const [role, setRole] = useState<Role>(realRole);
   const [favorites, setFavorites] = useState<string[]>(initialFavorites);
-  const [lastOpened, setLastOpened] = useState<string | null>(null);
+  const [lastOpened, setLastOpened] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("aerie.lastService");
+    } catch { /* ignore */ }
+    return null;
+  });
   const [keptAliveIds, setKeptAliveIds] = useState<string[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -75,16 +86,6 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
   useEffect(() => {
     modalOpenRef.current = modalOpen;
   }, [modalOpen]);
-
-  // Restore persisted theme on mount.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("aerie.theme") as Theme | null;
-      if (saved === "dark" || saved === "light") setTheme(saved);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   // Keep <html class="dark"> + storage in sync with theme.
   useEffect(() => {
@@ -95,16 +96,6 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
       /* ignore */
     }
   }, [theme]);
-
-  // Restore the last-opened service on mount (transient, per-device — like theme).
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("aerie.lastService");
-      if (saved) setLastOpened(saved);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   // Record the open whenever we land on a service page (/s/{id}). Navigating
   // away to Status/Requests intentionally leaves it set, so the rail keeps the

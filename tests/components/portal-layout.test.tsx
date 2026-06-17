@@ -16,6 +16,7 @@ vi.mock("@/lib/integrations/registry", () => ({
   getDashboards: vi.fn(async () => null),
 }));
 vi.mock("@/lib/env", () => ({ authConfigured: false }));
+vi.mock("@/lib/data/scrub", () => ({ scrubForMember: (s: unknown) => s }));
 // Stub the providers/shell so importing the layout doesn't pull their client/server deps.
 // Each stub keeps its own identity so we can locate it in the returned element tree.
 vi.mock("@/components/portal/PortalProvider", () => ({ PortalProvider: () => null }));
