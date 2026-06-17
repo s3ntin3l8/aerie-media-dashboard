@@ -79,7 +79,7 @@ describe("LibraryStats — mobile stack", () => {
 describe("ServiceTiles (FlowGrid) — mobile stack", () => {
   it("shows every tile in a wrapping grid with no horizontal-scroll container", () => {
     data({ services: [svc({ central: false }), svc({ id: "radarr", name: "Radarr", central: false })], visibility: [] });
-    const { container } = render(<Stacked><ServiceTiles role="admin" fill /></Stacked>);
+    const { container } = render(<Stacked><ServiceTiles fill /></Stacked>);
     expect(screen.getByText("Plex")).toBeInTheDocument();
     expect(screen.getByText("Radarr")).toBeInTheDocument();
     // The desktop FlowGrid is a horizontally-scrollable flex column; the stacked grid is not.

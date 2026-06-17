@@ -270,7 +270,7 @@ export const SeeAll = ({ onClick }: { onClick?: () => void }) => (
 
 /** Hint for opening a library item's detail modal (Now Playing / Recently Added). */
 // ── SERVICE TILES (stripe) ─────────────────────────────────
-export function ServiceTiles({ role, onOpen, onAll, services, fill, serviceIds }: { role: Role; onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[]; fill?: boolean; serviceIds?: string }) {
+export function ServiceTiles({ onOpen, onAll, services, fill, serviceIds }: { onOpen?: (s: Service) => void; onAll?: () => void; services?: Service[]; fill?: boolean; serviceIds?: string }) {
   const visibleServices = useVisibleServices("launcher");
   // Allow an explicit `services` prop override (e.g. admin panel passes a pre-filtered list).
   let list = services ?? visibleServices;
@@ -481,7 +481,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
   );
 }
 
-export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?: (s: Service) => void; onAll?: () => void; fill?: boolean }) {
+export function CentralServices({ onOpen, onAll, fill }: { onOpen?: (s: Service) => void; onAll?: () => void; fill?: boolean }) {
   const { services, visibility } = useData();
   const { role } = usePortal();
   const stacked = useStacked();
@@ -541,7 +541,7 @@ export function CentralServices({ onOpen, onAll, fill }: { role?: Role; onOpen?:
 }
 
 // ── STATUS (heartbeat) ─────────────────────────────────────
-export function StatusPanel({ role, onAll, fill }: { role: Role; onAll?: () => void; fill?: boolean }) {
+export function StatusPanel({ onAll, fill }: { onAll?: () => void; fill?: boolean }) {
   const list = useVisibleServices("status");
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;

@@ -4,7 +4,7 @@
 import React from "react";
 import { Icon, Avatar, Pill, PosterTile, TRUNCATE } from "@/components/primitives";
 import { REQ_TONE, REQ_LABEL } from "@/lib/display";
-import type { MediaRequest, Service } from "@/lib/types";
+import type { MediaRequest } from "@/lib/types";
 
 // ── SectionHead ────────────────────────────────────────────
 export function SectionHead({
