@@ -95,17 +95,25 @@ styles/                colors_and_type.css · components.css · fonts.css + font
 
 ## Contributing / quality gates
 
-- **CI** (`.github/workflows/ci.yml`): lint → typecheck → build, plus a Docker
-  image build, on every push and PR to `main`.
-- **pre-commit** (Husky + lint-staged): `eslint --fix` on staged files.
-- **pre-push** (Husky): `npm run typecheck && npm run lint && npm run build`.
+Four gates must pass before merging: `lint`, `typecheck`, `test`, and `build`. CI runs them on every push and PR to `main`; the pre-push Husky hook runs them locally.
 
 ```bash
-npm install        # installs hooks via the prepare script
+npm install               # installs hooks via the prepare script
 npm run lint
 npm run typecheck
+npm run test
 npm run build
 ```
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full workflow, testing patterns, and migration guide.
+
+## Security
+
+Report vulnerabilities privately — see [`SECURITY.md`](SECURITY.md).
+
+## Operations
+
+Backup/restore, `ENCRYPTION_KEY` rotation, deployment update, health check, and full env-var reference: [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
 
 ## License
 
