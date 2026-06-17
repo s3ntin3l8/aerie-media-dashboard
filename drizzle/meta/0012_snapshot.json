@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5ae063d7-2aee-4e1c-aa6f-7557b8b08126",
+  "id": "bd666452-8b78-4115-afe7-f5ec654f99e9",
   "prevId": "02b32fdb-567d-4350-b2e1-93ddedcfca59",
   "tables": {
     "account_links": {
@@ -514,7 +514,7 @@
         "users_email_idx": {
           "name": "users_email_idx",
           "columns": [
-            "email"
+            "lower(\"email\")"
           ],
           "isUnique": false
         }
@@ -533,6 +533,14 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {}
+    "indexes": {
+      "users_email_idx": {
+        "columns": {
+          "lower(\"email\")": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

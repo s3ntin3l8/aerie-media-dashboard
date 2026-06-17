@@ -3,15 +3,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/data/snapshot", () => ({ getSnapshot: vi.fn(async () => ({ services: [] })) }));
 vi.mock("@/lib/integrations/clients", () => ({ overseerrSearch: vi.fn() }));
 vi.mock("@/lib/integrations/registry", () => ({ getServiceSecret: vi.fn() }));
-vi.mock("@/lib/session", () => ({ getSessionUser: vi.fn() }));
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
 
-import { getSessionUser } from "@/lib/session";
+import { auth } from "@/auth";
 import { GET as snapshotGET } from "@/app/api/snapshot/route";
 import { GET as discoverGET } from "@/app/api/discover/route";
 import { GET as iconsGET } from "@/app/api/icons/route";
 
-const asAnon = () => vi.mocked(getSessionUser).mockResolvedValue({ id: "anon", name: "Guest", email: "", role: "user", groups: [] });
-const asUser = () => vi.mocked(getSessionUser).mockResolvedValue({ id: "u1", name: "User", email: "u@x", role: "user", groups: [] });
+const asAnon = () => vi.mocked(auth).mockResolvedValue(null as never);
+const asUser = () => vi.mocked(auth).mockResolvedValue({ user: { id: "u1", name: "User", email: "u@x" } } as never);
 
 beforeEach(() => vi.clearAllMocks());
 

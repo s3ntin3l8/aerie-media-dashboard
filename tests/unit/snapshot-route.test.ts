@@ -8,10 +8,10 @@ vi.mock("next/server", () => ({
     },
   },
 }));
-vi.mock("@/lib/session", () => ({ getSessionUser: vi.fn() }));
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/data/snapshot", () => ({ getSnapshot: vi.fn() }));
 
-import { getSessionUser } from "@/lib/session";
+import { auth } from "@/auth";
 import { getSnapshot } from "@/lib/data/snapshot";
 import { GET } from "@/app/api/snapshot/route";
 
@@ -19,7 +19,7 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("GET /api/snapshot", () => {
   it("returns the snapshot from getSnapshot() as JSON", async () => {
-    vi.mocked(getSessionUser).mockResolvedValue({ id: "u1", name: "User", email: "u@x", role: "user", groups: [] } as never);
+    vi.mocked(auth).mockResolvedValue({ user: { id: "u1", name: "User", email: "u@x" } } as never);
     const snap = { services: [{ id: "sonarr" }], nowPlaying: [], plays24h: [1, 2, 3] };
     vi.mocked(getSnapshot).mockResolvedValue(snap as never);
 
@@ -29,14 +29,14 @@ describe("GET /api/snapshot", () => {
   });
 
   it("sets a no-store Cache-Control header so the poller always gets fresh data", async () => {
-    vi.mocked(getSessionUser).mockResolvedValue({ id: "u1", name: "User", email: "u@x", role: "user", groups: [] } as never);
+    vi.mocked(auth).mockResolvedValue({ user: { id: "u1", name: "User", email: "u@x" } } as never);
     vi.mocked(getSnapshot).mockResolvedValue({ services: [] } as never);
     const res = await GET();
     expect(res.headers.get("Cache-Control")).toBe("no-store");
   });
 
   it("401s for anonymous guests", async () => {
-    vi.mocked(getSessionUser).mockResolvedValue({ id: "anon", name: "Guest", email: "", role: "user", groups: [] } as never);
+    vi.mocked(auth).mockResolvedValue(null as never);
     const res = await GET();
     expect(res.status).toBe(401);
   });

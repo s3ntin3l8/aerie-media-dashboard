@@ -12,6 +12,11 @@ import { hashPassword } from "@/lib/auth/password";
 import { matchPreset } from "@/lib/servicePresets";
 import type { Category, DashboardStore } from "@/lib/types";
 
+// In-process cache for the two most-frequent DB reads (service configs + secrets).
+// Cuts 20-40 redundant queries per snapshot poll. invalidateRegistryCache() is called
+// by every admin mutation so stale reads are bounded to the TTL window.
+// NOTE: cache is per-process — in a multi-replica deploy, cross-instance staleness
+// is up to CONFIGS_TTL / SECRET_TTL (5s). Acceptable for the single-container target.
 let configsCache: ServiceConfig[] | null = null;
 let configsCacheAt = 0;
 const CONFIGS_TTL = 5_000;
@@ -57,6 +62,7 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
   try {
     await ensureDb();
     const rows = await db.select().from(schema.services).orderBy(schema.services.sortOrder);
+    // Callers must treat the returned array as read-only (use .find()/.filter(), not mutation).
     configsCache = rows.map((r) => ({
       id: r.id,
       name: r.name,

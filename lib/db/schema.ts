@@ -4,6 +4,7 @@
 // Runtime health/stats are read live from monitoring, never stored.
 // ============================================================
 import { sqliteTable, text, integer, primaryKey, index } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 // Service registry (config only; status/uptime come from Gatus at runtime).
 export const services = sqliteTable("services", {
@@ -73,7 +74,9 @@ export const users = sqliteTable("users", {
   role: text("role").notNull().default("user"),
   passwordHash: text("password_hash"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-}, (t) => [index("users_email_idx").on(t.email)]);
+// Expression index: LOWER(email) matches getUserByEmail()'s WHERE clause so the
+// lookup is index-backed even when OIDC emails are stored in mixed case.
+}, (t) => [index("users_email_idx").on(sql`lower(${t.email})`)]);
 
 // Maps a portal user to their identity in each upstream (keyed by upstream
 // user IDs, NOT email — see plan §Identity linking).
