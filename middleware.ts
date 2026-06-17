@@ -8,6 +8,18 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 
+/** Apply the standard security headers to every outgoing response. */
+function withSecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "SAMEORIGIN");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  // CSP is kept minimal — the app embeds third-party iframes (services) and
+  // loads remote API data, so a strict CSP would break core functionality.
+  // Deployments behind a reverse proxy should add HSTS there.
+  return res;
+}
+
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   // Public metadata routes (favicon, social share cards) must be reachable
@@ -23,27 +35,21 @@ export default auth((req) => {
     pathname === "/icon-512.png" ||
     pathname === "/icon-maskable.png";
   const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || isBrandAsset;
-  if (isPublic) return NextResponse.next();
+  // Security headers apply to every route — including the login form — so that
+  // /login itself is protected against clickjacking and MIME-sniffing attacks.
+  if (isPublic) return withSecurityHeaders(NextResponse.next());
 
   if (!req.auth) {
     const url = new URL("/login", req.nextUrl.origin);
-    return NextResponse.redirect(url);
+    return withSecurityHeaders(NextResponse.redirect(url));
   }
 
   // Admin-only area (defence in depth — also checked in the page).
   if (pathname.startsWith("/admin") && req.auth.user?.role !== "admin") {
-    return NextResponse.redirect(new URL("/", req.nextUrl.origin));
+    return withSecurityHeaders(NextResponse.redirect(new URL("/", req.nextUrl.origin)));
   }
 
-  const res = NextResponse.next();
-  res.headers.set("X-Content-Type-Options", "nosniff");
-  res.headers.set("X-Frame-Options", "SAMEORIGIN");
-  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  // CSP is kept minimal — the app embeds third-party iframes (services) and
-  // loads remote API data, so a strict CSP would break core functionality.
-  // Deployments behind a reverse proxy should add HSTS there.
-  return res;
+  return withSecurityHeaders(NextResponse.next());
 });
 
 export const config = {
