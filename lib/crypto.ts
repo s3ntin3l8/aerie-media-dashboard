@@ -9,12 +9,10 @@ const ALGO = "aes-256-gcm";
 
 function key(): Buffer {
   const k = env.encryptionKey;
-  // Dev fallback (insecure) so the app runs without ENCRYPTION_KEY configured.
-  if (!k) return createHash("sha256").update("aerie-dev-insecure-key").digest();
+  if (!k) throw new Error("ENCRYPTION_KEY is not set. Generate one with: openssl rand -hex 32");
   if (/^[0-9a-fA-F]{64}$/.test(k)) return Buffer.from(k, "hex");
   const b64 = Buffer.from(k, "base64");
   if (b64.length === 32) return b64;
-  // Any other string → stretch to 32 bytes deterministically.
   return createHash("sha256").update(k).digest();
 }
 
