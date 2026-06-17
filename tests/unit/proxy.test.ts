@@ -64,32 +64,28 @@ describe("proxy middleware — auth gate still enforced", () => {
 });
 
 describe("proxy middleware — security response headers", () => {
-  // Headers must be present on every authenticated pass-through response.
-  const authedRes = () => run("/", { user: { role: "user" } });
+  // Headers must be present on ALL responses: authenticated, unauthenticated,
+  // public routes, and auth redirects — so the /login form is also protected
+  // against clickjacking and MIME-sniffing attacks.
 
-  it("sets X-Content-Type-Options: nosniff", () => {
-    expect(authedRes().headers.get("x-content-type-options")).toBe("nosniff");
+  it.each([
+    ["authenticated pass-through", () => run("/", { user: { role: "user" } })],
+    ["public /login (unauthenticated)", () => run("/login", null)],
+    ["brand asset /sw.js (unauthenticated)", () => run("/sw.js", null)],
+    ["unauthenticated redirect to /login", () => run("/", null)],
+    ["admin redirect to /", () => run("/admin", { user: { role: "user" } })],
+  ] as const)("sets X-Frame-Options on %s", (_label, getRes) => {
+    expect(getRes().headers.get("x-frame-options")).toBe("SAMEORIGIN");
   });
 
-  it("sets X-Frame-Options: SAMEORIGIN", () => {
-    expect(authedRes().headers.get("x-frame-options")).toBe("SAMEORIGIN");
-  });
-
-  it("sets Referrer-Policy: strict-origin-when-cross-origin", () => {
-    expect(authedRes().headers.get("referrer-policy")).toBe(
-      "strict-origin-when-cross-origin",
-    );
-  });
-
-  it("sets Permissions-Policy restricting camera/mic/geolocation", () => {
-    expect(authedRes().headers.get("permissions-policy")).toBe(
-      "camera=(), microphone=(), geolocation=()",
-    );
-  });
-
-  it("does NOT set security headers on public/unauthenticated responses", () => {
-    const res = run("/login", null);
-    // public routes skip the header-adding path
-    expect(res.headers.get("x-content-type-options")).toBeNull();
+  it.each([
+    ["authenticated pass-through", () => run("/", { user: { role: "user" } })],
+    ["public /login (unauthenticated)", () => run("/login", null)],
+  ] as const)("sets all four headers on %s", (_label, getRes) => {
+    const res = getRes();
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+    expect(res.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
   });
 });
