@@ -46,7 +46,8 @@ export async function createInitialAdmin(_prev: LoginState, formData: FormData):
   const confirmResult = validatePasswordConfirm(password, confirm);
   if (!confirmResult.ok) return { error: confirmResult.error };
 
-  await createLocalAdmin({ name, email, password });
+  const created = await createLocalAdmin({ name, email, password });
+  if (!created) return { error: "An admin account already exists." };
 
   try {
     await signIn("credentials", { email, password, redirectTo: "/" });

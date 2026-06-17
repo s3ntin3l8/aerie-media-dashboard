@@ -4,7 +4,7 @@ vi.mock("next-auth", () => ({ AuthError: class AuthError extends Error {} }));
 vi.mock("@/auth", () => ({ signIn: vi.fn(), signOut: vi.fn() }));
 vi.mock("@/lib/env", () => ({ authConfigured: false }));
 vi.mock("@/lib/integrations/registry", () => ({
-  createLocalAdmin: vi.fn(), localAdminExists: vi.fn(async () => false),
+  createLocalAdmin: vi.fn(async () => true), localAdminExists: vi.fn(async () => false),
   setFavorites: vi.fn(), setDashboards: vi.fn(),
 }));
 vi.mock("@/lib/session", () => ({ getSessionUser: vi.fn() }));
@@ -48,6 +48,12 @@ describe("createInitialAdmin", () => {
     const r = await createInitialAdmin({}, fd({ name: "Ada Lovelace", email: "ada@example.com", password: "longpassword1", confirm: "longpassword1" }));
     expect(r).toEqual({});
     expect(createLocalAdmin).toHaveBeenCalledWith({ name: "Ada Lovelace", email: "ada@example.com", password: "longpassword1" });
+  });
+
+  it("returns error when createLocalAdmin reports a conflict (race condition)", async () => {
+    vi.mocked(createLocalAdmin).mockResolvedValue(false);
+    const r = await createInitialAdmin({}, fd({ name: "Ada", email: "ada@x.com", password: "longpassword1", confirm: "longpassword1" }));
+    expect(r.error).toBe("An admin account already exists.");
   });
 });
 

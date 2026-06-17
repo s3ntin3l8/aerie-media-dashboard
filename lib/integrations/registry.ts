@@ -337,14 +337,17 @@ export async function localAdminExists(): Promise<boolean> {
 }
 
 /** Create the first-run local admin account. Caller must enforce the setup guard. */
-export async function createLocalAdmin(u: { name: string; email: string; password: string }): Promise<void> {
+export async function createLocalAdmin(u: { name: string; email: string; password: string }): Promise<boolean> {
   await ensureDb();
   const id = u.email.trim().toLowerCase();
   await db
     .insert(schema.users)
     .values({ id, name: u.name, email: id, role: "admin", passwordHash: hashPassword(u.password), createdAt: new Date() })
-    .onConflictDoUpdate({ target: schema.users.id, set: { name: u.name, email: id, role: "admin", passwordHash: hashPassword(u.password) } });
+    .onConflictDoNothing();
+  const [row] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.id, id)).limit(1);
+  if (!row) return false;
   await db.insert(schema.accountLinks).values({ portalUserId: id, linked: false }).onConflictDoNothing();
+  return true;
 }
 
 /** Persist a freshly-detected version string for a service. */

@@ -68,7 +68,8 @@ describe("registry — users & preferences", () => {
 
   it("creates a local admin with a verifiable password hash", async () => {
     expect(await localAdminExists()).toBe(false);
-    await createLocalAdmin({ name: "Root", email: "Root@Local", password: "s3cret-pw" });
+    const created = await createLocalAdmin({ name: "Root", email: "Root@Local", password: "s3cret-pw" });
+    expect(created).toBe(true);
     expect(await localAdminExists()).toBe(true);
     const admin = await getUserByEmail("root@local");
     expect(admin?.role).toBe("admin");
