@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 // route-protection handler directly with a synthetic request.
 vi.mock("@/auth", () => ({ auth: (handler: unknown) => handler }));
 
-import middleware from "@/proxy";
+import middleware from "@/middleware";
 
 type Auth = { user?: { role?: string } } | null;
 const handler = middleware as unknown as (req: unknown) => Response;

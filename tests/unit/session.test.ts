@@ -19,15 +19,21 @@ describe("getSessionUser", () => {
   });
 
   it("maps a full OIDC session and mirrors it", async () => {
-    vi.mocked(auth).mockResolvedValue({ user: { email: "ada@x", name: "Ada", role: "admin", groups: ["admins"] } } as never);
+    vi.mocked(auth).mockResolvedValue({ user: { id: "sub-123", email: "ada@x", name: "Ada", role: "admin", groups: ["admins"] } } as never);
     const u = await getSessionUser();
-    expect(u).toEqual({ id: "ada@x", name: "Ada", email: "ada@x", role: "admin", groups: ["admins"] });
-    expect(mirrorUser).toHaveBeenCalledWith({ id: "ada@x", name: "Ada", email: "ada@x", role: "admin" });
+    expect(u).toEqual({ id: "sub-123", name: "Ada", email: "ada@x", role: "admin", groups: ["admins"] });
+    expect(mirrorUser).toHaveBeenCalledWith({ id: "sub-123", name: "Ada", email: "ada@x", role: "admin" });
   });
 
-  it("falls back to name for id and defaults role/groups when fields are sparse", async () => {
+  it("falls back to email then name when session.user.id is absent", async () => {
+    vi.mocked(auth).mockResolvedValue({ user: { email: "bo@x", name: "Bo" } } as never);
+    const u = await getSessionUser();
+    expect(u.id).toBe("bo@x");
+  });
+
+  it("falls back to name when both id and email are absent", async () => {
     vi.mocked(auth).mockResolvedValue({ user: { name: "Bo" } } as never);
     const u = await getSessionUser();
-    expect(u).toMatchObject({ id: "Bo", name: "Bo", email: "", role: "user", groups: [] });
+    expect(u.id).toBe("Bo");
   });
 });

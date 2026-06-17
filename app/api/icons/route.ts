@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,8 @@ function score(slug: string, meta: IconMeta, q: string): number {
 }
 
 export async function GET(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim().toLowerCase();
   if (!q) return NextResponse.json([]);
 

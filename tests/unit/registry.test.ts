@@ -1,10 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   getServiceConfigs, getServiceSecret, getAllServiceSecrets, getServiceCredentials, isConfigured,
   getFavorites, setFavorites, getDashboards, setDashboards,
   getDeploymentSetting, setDeploymentSetting,
   getGroups, getVisibility, getMembers,
   mirrorUser, getUserByEmail, localAdminExists, createLocalAdmin,
+  invalidateRegistryCache,
 } from "@/lib/integrations/registry";
 import { verifyPassword } from "@/lib/auth/password";
 import { updateServiceVersion } from "@/lib/integrations/registry";
@@ -47,6 +48,7 @@ describe("registry — deployment settings", () => {
 });
 
 describe("registry — users & preferences", () => {
+  beforeEach(() => invalidateRegistryCache());
   it("mirrors an OIDC user and reads it back (case-insensitive email)", async () => {
     await mirrorUser({ id: "u1", name: "Ada", email: "Ada@Example.com", role: "user" });
     const members = await getMembers();
@@ -68,7 +70,8 @@ describe("registry — users & preferences", () => {
 
   it("creates a local admin with a verifiable password hash", async () => {
     expect(await localAdminExists()).toBe(false);
-    await createLocalAdmin({ name: "Root", email: "Root@Local", password: "s3cret-pw" });
+    const created = await createLocalAdmin({ name: "Root", email: "Root@Local", password: "s3cret-pw" });
+    expect(created).toBe(true);
     expect(await localAdminExists()).toBe(true);
     const admin = await getUserByEmail("root@local");
     expect(admin?.role).toBe("admin");
@@ -78,6 +81,7 @@ describe("registry — users & preferences", () => {
 });
 
 describe("registry — services & secrets", () => {
+  beforeEach(() => invalidateRegistryCache());
   it("decrypts a stored secret and resolves credentials, and updates the version", async () => {
     await db.insert(schema.services).values({ id: "radarr", name: "Radarr", cat: "automation", icon: "movie", host: "radarr.test", baseUrl: "https://radarr.test", insecureTls: true });
     const enc = encrypt("super-secret-key");
@@ -108,5 +112,20 @@ describe("registry — services & secrets", () => {
     const faSecrets = await getAllServiceSecrets("forwardAuth");
     expect(faSecrets.get("sonarr")).toContain("basic");
     expect(faSecrets.has("radarr")).toBe(false); // radarr has only an apiKey
+  });
+});
+
+describe("registry — caching", () => {
+  it("getServiceConfigs caches results within TTL", async () => {
+    const first = await getServiceConfigs();
+    const second = await getServiceConfigs();
+    expect(first).toBe(second);
+  });
+
+  it("invalidateRegistryCache clears the config cache", async () => {
+    const first = await getServiceConfigs();
+    invalidateRegistryCache();
+    const second = await getServiceConfigs();
+    expect(first).not.toBe(second);
   });
 });

@@ -4,6 +4,9 @@ import type { NextRequest } from "next/server";
 // Route handlers resolve the session, registry creds, and integration clients — all stubbed
 // so the tests exercise only the handler logic (auth gating, config-missing empties, success
 // shaping, and the catch → empty fallbacks).
+// /api/discover and /api/icons gate via auth() (not getSessionUser); mock @/auth so it doesn't
+// pull in the real next-auth module, and default to an authed session for business-logic tests.
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/session", () => ({ getSessionUser: vi.fn() }));
 vi.mock("@/lib/integrations/registry", () => ({ getServiceCredentials: vi.fn(), getServiceSecret: vi.fn(), getServiceConfigs: vi.fn() }));
 vi.mock("@/lib/integrations/clients", () => ({
@@ -18,6 +21,7 @@ vi.mock("@/lib/integrations/clients", () => ({
   lokiSelectorFor: vi.fn(),
 }));
 
+import { auth } from "@/auth";
 import { getSessionUser } from "@/lib/session";
 import { getServiceCredentials, getServiceSecret, getServiceConfigs } from "@/lib/integrations/registry";
 import { tautulliStreamHistory, gatusHealth, beszelSystems, prometheusInstances, overseerrSearch, traefikRoutes, authentikApps, lokiTail, lokiSelectorFor } from "@/lib/integrations/clients";
@@ -36,7 +40,12 @@ const admin = { id: "a", name: "Admin", email: "admin@x", role: "admin", groups:
 const user = (name: string, email: string) => ({ id: email, name, email, role: "user", groups: [] });
 const req = (qs = ""): NextRequest => ({ nextUrl: new URL(`http://localhost/api?${qs}`) }) as unknown as NextRequest;
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Default to an authenticated session so discover/icons business-logic tests
+  // pass the auth gate without each case needing to set it up explicitly.
+  vi.mocked(auth).mockResolvedValue({ user: { id: "u1", email: "u@x" } } as never);
+});
 
 describe("GET /api/history", () => {
   it("401s without a session", async () => {
