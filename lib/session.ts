@@ -17,7 +17,7 @@ export async function getSessionUser(): Promise<AppUser> {
     return { id: "anon", name: "Guest", email: "", role: "user", groups: [] };
   }
   const appUser: AppUser = {
-    id: (session.user.email || session.user.name || "user") as string,
+    id: (session.user.id || session.user.email || session.user.name || "user") as string,
     name: session.user.name || session.user.email || "Member",
     email: session.user.email || "",
     role: session.user.role ?? "user",
