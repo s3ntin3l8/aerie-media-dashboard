@@ -24,7 +24,8 @@ Per-service setup for every upstream AERIE integrates with. Common rules apply t
 
 Related: [`../AUTH.md`](../AUTH.md) (signing in via OIDC / local admin) ·
 [`../EMBEDDING.md`](../EMBEDDING.md) (iframe embedding + forward-auth) ·
-[`../PROMETHEUS.md`](../PROMETHEUS.md).
+[`../PROMETHEUS.md`](../PROMETHEUS.md) ·
+[`../OPERATIONS.md`](../OPERATIONS.md) (backup, key rotation, health check, env-var reference).
 
 Secret-format quick reference:
 
