@@ -75,6 +75,11 @@ describe("service CRUD + secrets", () => {
     expect(await serviceExists("ghost")).toBe(false);
   });
 
+  it("serviceExists rejects a non-admin caller", async () => {
+    asUser();
+    await expect(serviceExists("radarr")).rejects.toThrow("forbidden");
+  });
+
   it("setServiceActive flips the active flag", async () => {
     await setServiceActive("radarr", false);
     const [row] = await db.select().from(schema.services).where(eq(schema.services.id, "radarr"));

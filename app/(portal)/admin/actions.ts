@@ -186,6 +186,7 @@ export async function setServiceKeepAlive(id: string, keepAlive: boolean) {
 
 /** True if a service id already exists (used to guard add-mode slug collisions). */
 export async function serviceExists(id: string): Promise<boolean> {
+  await requireAdmin();
   await ensureDb();
   const rows = await db.select({ id: schema.services.id }).from(schema.services).where(eq(schema.services.id, id)).limit(1);
   return rows.length > 0;
