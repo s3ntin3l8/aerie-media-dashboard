@@ -14,16 +14,20 @@ function makeService(overrides: Partial<Service> = {}): Service {
     central: false,
     centralLabel: null,
     host: "sonarr.example.com",
-    baseUrl: "https://sonarr.example.com",
-    internalUrl: null,
+    scheme: "https",
     version: "4.0.0",
-    note: null,
-    sortOrder: 0,
-    monitoringKey: null,
-    lokiQuery: null,
-    insecureTls: false,
+    note: "",
     active: true,
     keepAlive: false,
+    status: "up",
+    uptime: 99.9,
+    ms: 50,
+    beats: [],
+    internalUrl: "http://sonarr:8989",
+    insecureTls: false,
+    monitoringKey: "sonarr",
+    lokiQuery: '{container="sonarr"}',
+    hasSecret: true,
     route: {
       router: "sonarr@docker",
       serviceId: "sonarr",
@@ -34,7 +38,7 @@ function makeService(overrides: Partial<Service> = {}): Service {
       cert: null,
     },
     authentik: { appSlug: "sonarr", everyone: true, groups: [], users: [], policyGated: false },
-    forwardAuthConfig: undefined,
+    forwardAuthConfig: { method: "bearer", username: "client", tokenUrl: "https://auth/token", clientId: "sonarr-id" },
     ...overrides,
   } as Service;
 }
@@ -60,9 +64,9 @@ function makeSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     queueSource: "nzbget",
     arrQueueConfigured: true,
     nzbgetConfigured: true,
-    nzbgetStatus: { downloadRate: 0, remainingMB: 0, paused: false, standby: true, downloadedMB: 0, postJobs: 0, freeDiskMB: 0, uptimeSec: 0 },
+    nzbgetStatus: { downloadRate: 5000, remainingMB: 100, paused: false, standby: false, downloadedMB: 500, postJobs: 0, freeDiskMB: 9999, uptimeSec: 3600 },
     qbittorrentConfigured: true,
-    qbittorrent: { dlSpeed: 0, upSpeed: 0, downloaded: 0, uploaded: 0, downloading: 0, seeding: 0, torrents: 0, connectionStatus: "connected" },
+    qbittorrent: { dlSpeed: 1000, upSpeed: 200, downloaded: 0, uploaded: 0, downloading: 1, seeding: 2, torrents: 3, connectionStatus: "connected" },
     topStats: null,
     groups: [{ name: "admins", label: "Admins" }],
     visibility: [{ serviceId: "sonarr", groupName: "admins", visible: true }],
@@ -87,7 +91,7 @@ function makeSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     traefikDismissed: ["old.host"],
     traefikInstances: [],
     authentikConfigured: true,
-    lokiConfigured: false,
+    lokiConfigured: true,
     ...overrides,
   } as Snapshot;
 }
@@ -103,46 +107,85 @@ describe("scrubForMember", () => {
     expect(scrubbed.traefikDiscovered).toEqual([]);
     expect(scrubbed.traefikDismissed).toEqual([]);
     expect(scrubbed.traefikInstances).toEqual([]);
+    expect(scrubbed.traefikConfigured).toBe(false);
+    expect(scrubbed.authentikConfigured).toBe(false);
     expect(scrubbed.arrHealth).toEqual([]);
     expect(scrubbed.downloads).toEqual([]);
     expect(scrubbed.queue).toEqual([]);
     expect(scrubbed.storage).toEqual([]);
     expect(scrubbed.arrQueueConfigured).toBe(false);
     expect(scrubbed.nzbgetConfigured).toBe(false);
+    expect(scrubbed.nzbgetStatus).toBeNull();
     expect(scrubbed.qbittorrentConfigured).toBe(false);
+    expect(scrubbed.qbittorrent).toBeNull();
     expect(scrubbed.prometheusConfigured).toBe(false);
     expect(scrubbed.beszelConfigured).toBe(false);
-    expect(scrubbed.traefikConfigured).toBe(false);
     expect(scrubbed.lokiConfigured).toBe(false);
     expect(scrubbed.beszelSystemId).toBeNull();
+    expect(scrubbed.wizarr).toBeNull();
+    expect(scrubbed.prowlarr).toBeNull();
+    expect(scrubbed.agregarr).toBeNull();
+    expect(scrubbed.nzbhydra).toBeNull();
   });
 
-  it("strips authentik from services but keeps route", () => {
+  it("strips admin-only per-service fields", () => {
     const s = makeSnapshot();
-    const scrubbed = scrubForMember(s);
-    expect(scrubbed.services[0].authentik).toBeUndefined();
-    expect(scrubbed.services[0].route).toBeDefined();
+    const svc = scrubForMember(s).services[0];
+    expect(svc.authentik).toBeUndefined();
+    expect(svc.internalUrl).toBeUndefined();
+    expect(svc.forwardAuthConfig).toBeUndefined();
+    expect(svc.hasSecret).toBeUndefined();
+    expect(svc.monitoringKey).toBeUndefined();
+    expect(svc.lokiQuery).toBeUndefined();
+    expect(svc.insecureTls).toBeUndefined();
   });
 
-  it("preserves member-visible fields", () => {
+  it("preserves member-visible per-service fields", () => {
+    const s = makeSnapshot();
+    const svc = scrubForMember(s).services[0];
+    expect(svc.id).toBe("sonarr");
+    expect(svc.name).toBe("Sonarr");
+    expect(svc.host).toBe("sonarr.example.com");
+    expect(svc.version).toBe("4.0.0");
+    expect(svc.status).toBe("up");
+    // route is kept (cert status is member-visible)
+    expect(svc.route).toBeDefined();
+    expect(svc.route?.tls).toBe(true);
+  });
+
+  it("preserves member-visible snapshot fields", () => {
     const s = makeSnapshot();
     const scrubbed = scrubForMember(s);
     expect(scrubbed.services).toHaveLength(1);
-    expect(scrubbed.services[0].id).toBe("sonarr");
     expect(scrubbed.nowPlaying).toEqual([]);
     expect(scrubbed.requests).toEqual([]);
     expect(scrubbed.library).toEqual([]);
     expect(scrubbed.recent).toEqual([]);
     expect(scrubbed.plays24h).toEqual([1, 2, 3]);
     expect(scrubbed.metricsSource).toBe("prometheus");
-    expect(scrubbed.nzbgetStatus).toBeDefined();
-    expect(scrubbed.qbittorrent).toBeDefined();
+    expect(scrubbed.metrics).toBeNull();
   });
 
   it("preserves discover and requestCounts for members", () => {
-    const s = makeSnapshot({ discover: { trending: [], popularMovies: [], popularTv: [], upcomingMovies: [], watchlist: [] }, requestCounts: { total: 5, pending: 1, approved: 2, processing: 1, failed: 0, available: 1 } });
+    const s = makeSnapshot({
+      discover: { trending: [], popularMovies: [], popularTv: [], upcomingMovies: [], watchlist: [] },
+      requestCounts: { total: 5, pending: 1, approved: 2, processing: 1, failed: 0, available: 1 },
+    });
     const scrubbed = scrubForMember(s);
     expect(scrubbed.discover).toBeDefined();
     expect(scrubbed.requestCounts).toBeDefined();
+  });
+
+  it("does not leak unrecognized future snapshot fields (allowlist not denylist)", () => {
+    const s = { ...makeSnapshot(), futureSensitiveField: "secret-value" } as unknown as Snapshot;
+    const scrubbed = scrubForMember(s);
+    expect((scrubbed as unknown as Record<string, unknown>).futureSensitiveField).toBeUndefined();
+  });
+
+  it("does not leak unrecognized future service fields", () => {
+    const svc = { ...makeService(), futureAdminField: "sensitive" } as unknown as Service;
+    const s = makeSnapshot({ services: [svc] });
+    const scrubbed = scrubForMember(s);
+    expect((scrubbed.services[0] as unknown as Record<string, unknown>).futureAdminField).toBeUndefined();
   });
 });
