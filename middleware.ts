@@ -34,7 +34,11 @@ export default auth((req) => {
     pathname === "/icon-192.png" ||
     pathname === "/icon-512.png" ||
     pathname === "/icon-maskable.png";
-  const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth") || isBrandAsset;
+  const isPublic =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/api/auth") ||
+    pathname === "/api/health" ||
+    isBrandAsset;
   // Security headers apply to every route — including the login form — so that
   // /login itself is protected against clickjacking and MIME-sniffing attacks.
   if (isPublic) return withSecurityHeaders(NextResponse.next());

@@ -36,4 +36,7 @@ RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
 USER nextjs
 EXPOSE 3000
+# Probe the health endpoint; Node 26's native fetch is available in the slim image.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/api/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]

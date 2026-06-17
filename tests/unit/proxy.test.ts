@@ -34,8 +34,8 @@ describe("proxy middleware — public asset exemptions (PWA)", () => {
     expect(redirectedTo(res)).toBeNull();
   });
 
-  it.each(["/login", "/login/setup", "/api/auth/callback/oidc"])(
-    "%s stays public (auth flow)",
+  it.each(["/login", "/login/setup", "/api/auth/callback/oidc", "/api/health"])(
+    "%s stays public (auth flow / health probe)",
     (path) => {
       expect(isPassThrough(run(path, null))).toBe(true);
     },
