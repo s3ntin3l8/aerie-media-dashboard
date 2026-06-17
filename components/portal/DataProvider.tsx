@@ -61,6 +61,7 @@ export function DataProvider({ initial, initialStale = false, children }: { init
   // Stable refs so callbacks never go stale without re-creating intervals
   const dataRef = useRef<Snapshot>(initial);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   // fetchRef breaks the scheduleNext ↔ fetchSnapshot circular dependency
   const fetchRef = useRef<() => Promise<void>>(async () => {});
 
@@ -83,8 +84,13 @@ export function DataProvider({ initial, initialStale = false, children }: { init
   }, []);
 
   const fetchSnapshot = useCallback(async () => {
+    // Abort any in-flight request so unmount/stale responses can't update state.
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     try {
-      const res = await fetch("/api/snapshot", { cache: "no-store" });
+      const res = await fetch("/api/snapshot", { cache: "no-store", signal: ac.signal });
+      if (res.status === 401) { scheduleNext(dataRef.current); return; }
       if (!res.ok) { scheduleNext(dataRef.current); return; }
       const next = (await res.json()) as Snapshot;
       const merged =
@@ -94,7 +100,8 @@ export function DataProvider({ initial, initialStale = false, children }: { init
       setData(merged);
       setFetchedAt(Date.now());
       scheduleNext(merged);
-    } catch {
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       /* keep last good snapshot, retry on next schedule */
       scheduleNext(dataRef.current);
     }
@@ -121,6 +128,7 @@ export function DataProvider({ initial, initialStale = false, children }: { init
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       if (timerRef.current != null) clearTimeout(timerRef.current);
+      abortRef.current?.abort();
     };
   }, [fetchSnapshot, scheduleNext, initialStale]);
 
