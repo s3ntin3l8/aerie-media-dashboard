@@ -35,7 +35,15 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/", req.nextUrl.origin));
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "SAMEORIGIN");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  // CSP is kept minimal — the app embeds third-party iframes (services) and
+  // loads remote API data, so a strict CSP would break core functionality.
+  // Deployments behind a reverse proxy should add HSTS there.
+  return res;
 });
 
 export const config = {
