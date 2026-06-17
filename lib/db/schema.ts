@@ -3,7 +3,7 @@
 // Stores portal *config* (services, visibility, links, prefs).
 // Runtime health/stats are read live from monitoring, never stored.
 // ============================================================
-import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, primaryKey, index } from "drizzle-orm/sqlite-core";
 
 // Service registry (config only; status/uptime come from Gatus at runtime).
 export const services = sqliteTable("services", {
@@ -67,14 +67,13 @@ export const serviceVisibility = sqliteTable("service_visibility", {
 // Portal users. Mirrored from the OIDC provider, or created locally
 // (with a password hash) via the first-run admin setup when OIDC is off.
 export const users = sqliteTable("users", {
-  id: text("id").primaryKey(), // sub or email
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull(),
-  role: text("role").notNull().default("user"), // admin | user
-  /** scrypt hash for local-credentials accounts; null for OIDC users. */
+  role: text("role").notNull().default("user"),
   passwordHash: text("password_hash"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-});
+}, (t) => [index("users_email_idx").on(t.email)]);
 
 // Maps a portal user to their identity in each upstream (keyed by upstream
 // user IDs, NOT email — see plan §Identity linking).

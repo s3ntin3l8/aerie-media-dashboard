@@ -4,7 +4,7 @@
 // results when the DB is unavailable (no mock fallback).
 // ============================================================
 import "server-only";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db/client";
 import { ensureDb } from "@/lib/db/bootstrap";
 import { decrypt } from "@/lib/crypto";
@@ -311,8 +311,9 @@ export async function getUserByEmail(email: string): Promise<LocalUser | null> {
         role: schema.users.role,
         passwordHash: schema.users.passwordHash,
       })
-      .from(schema.users);
-    const row = rows.find((r) => r.email.toLowerCase() === target);
+      .from(schema.users)
+      .where(sql`LOWER(${schema.users.email}) = ${target}`);
+    const row = rows[0];
     if (!row) return null;
     return { id: row.id, name: row.name, email: row.email, role: (row.role as "admin" | "user") ?? "user", passwordHash: row.passwordHash };
   } catch {
