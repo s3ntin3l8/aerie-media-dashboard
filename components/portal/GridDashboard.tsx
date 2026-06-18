@@ -283,7 +283,50 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
   }
 
   // ===========================================================
-  // GRID (desktop)
+  // GRID VIEW (desktop, non-editing) — CSS Grid, no JS measurement needed.
+  // Renders a native CSS grid so tile geometry is computed by the browser at
+  // paint time: fluid from the first pixel, identical on server and client,
+  // zero layout-shift on load. The editing path below still uses measured
+  // absolute pixels (it needs pxOf() for drag/resize hit-testing).
+  // ===========================================================
+  if (!editing) {
+    return (
+      <StackedContext.Provider value={stacked}>
+        <div
+          ref={wrapRef}
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+            gridAutoRows: `${rowH}px`,
+            gap: `${gap}px`,
+            minHeight: 120,
+          }}
+        >
+          {layout.map((item) => (
+            <div
+              key={item.uid}
+              style={{
+                gridColumn: `${item.x + 1} / span ${item.w}`,
+                gridRow: `${item.y + 1} / span ${item.h}`,
+                position: "relative",
+                borderRadius: "var(--radius-xl)",
+              }}
+            >
+              <div style={{ position: "absolute", inset: 0, borderRadius: "var(--radius-xl)", overflow: "hidden" }}>
+                {renderWidget(item, false)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </StackedContext.Provider>
+    );
+  }
+
+  // ===========================================================
+  // GRID EDIT (desktop, editing) — absolute-pixel layout.
+  // pxOf() requires the measured container width W; enter here
+  // only after the user has clicked Edit (post-mount, W is always
+  // the real measured value by then).
   // ===========================================================
   const view = act ? act.preview : layout;
   const maxB = view.reduce((m, it) => Math.max(m, it.y + it.h), 0);
