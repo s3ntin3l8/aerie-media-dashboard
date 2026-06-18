@@ -203,6 +203,45 @@ describe("GridDashboard — desktop grid path", () => {
     expect(screen.getByTestId("widget-g2")).toBeInTheDocument();
   });
 
+  it("view mode uses CSS Grid so tile geometry is correct from first paint (no measured-width flash)", () => {
+    // The key regression guard: view mode must NOT use absolute-pixel positioning driven by a
+    // measured container width. A native CSS grid is fluid and SSR-correct — no layout shift.
+    // We render without withGridWidth() so jsdom clientWidth=0 would have triggered the stacked
+    // path under the old code (W=0 < stackBelow=720). We force desktop via forceStacked=false
+    // and a wide clientWidth so the non-stacked view branch is taken.
+    withGridWidth(1180);
+    render(
+      <GridDashboard
+        layout={[tile({ uid: "g1", x: 0, w: 4, h: 3 }), tile({ uid: "g2", x: 4, w: 6, h: 2 })]}
+        onChange={vi.fn()}
+        editing={false}
+        renderWidget={renderWidget}
+        onRemove={vi.fn()}
+        onConfigure={vi.fn()}
+      />,
+    );
+    // DOM structure (view mode):
+    //   gridContainer   ← display:grid (StackedContext.Provider > div)
+    //     tileWrapper   ← gridColumn / gridRow spans (key={uid})
+    //       innerDiv    ← position:absolute, inset:0, overflow:hidden
+    //         widget    ← data-testid="widget-g1"
+    const body1 = screen.getByTestId("widget-g1");
+    const innerDiv = body1.parentElement!;
+    const tileWrapper = innerDiv.parentElement!;
+    const gridContainer = tileWrapper.parentElement!;
+    expect(gridContainer.style.display).toBe("grid");
+    expect(gridContainer.style.gridTemplateColumns).toContain("repeat(12");
+
+    // Tile g1: x=0,w=4 → gridColumn "1 / span 4"; y=0,h=3 → gridRow "1 / span 3"
+    expect(tileWrapper.style.gridColumn).toBe("1 / span 4");
+    expect(tileWrapper.style.gridRow).toBe("1 / span 3");
+
+    // Tile g2: x=4,w=6 → gridColumn "5 / span 6"; y=0,h=2 → gridRow "1 / span 2"
+    const wrapper2 = screen.getByTestId("widget-g2").parentElement!.parentElement!;
+    expect(wrapper2.style.gridColumn).toBe("5 / span 6");
+    expect(wrapper2.style.gridRow).toBe("1 / span 2");
+  });
+
   it("measures width through ResizeObserver on mount (grid path)", () => {
     class RO {
       cb: () => void;
