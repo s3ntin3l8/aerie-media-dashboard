@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceCredentials } from "@/lib/integrations/registry";
+import { auth } from "@/auth";
 
 // Server-side cover-art proxy. Resolves the upstream image URL with the
 // service's stored credentials (never exposed to the client) and streams
@@ -32,6 +33,21 @@ export function isPlainPath(ref: string): boolean {
   return ref.startsWith("/") && !ref.startsWith("//") && !ref.includes("\\");
 }
 
+// Tautulli's `pms_image_proxy?img=` will fetch ANY URL it's handed, so an unconstrained `ref`
+// lets an authenticated user pivot a second-order SSRF through the Tautulli host (internal
+// services, cloud-metadata endpoints). Constrain it to what legitimately flows through: a plain
+// Plex image path (e.g. /library/metadata/…/thumb/…), or an https plex.tv host (the user_thumb
+// avatars the comment below references). Everything else is rejected.
+export function isTautulliRef(ref: string): boolean {
+  if (isPlainPath(ref)) return true;
+  try {
+    const u = new URL(ref);
+    return u.protocol === "https:" && (u.hostname === "plex.tv" || u.hostname.endsWith(".plex.tv"));
+  } catch {
+    return false;
+  }
+}
+
 function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: string, kind: Kind): string | null {
   const base = baseUrl.replace(/\/$/, "");
   const { w, h } = DIMS[kind];
@@ -40,6 +56,8 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
       if (!apiKey) return null;
       // pms_image_proxy proxies both Plex library image paths and external URLs
       // (e.g. a plex.tv user_thumb avatar), so the same call serves every kind.
+      // Constrain `ref` first — see isTautulliRef — so it can't be aimed at internal hosts.
+      if (!isTautulliRef(ref)) return null;
       return `${base}/api/v2?apikey=${apiKey}&cmd=pms_image_proxy&img=${encodeURIComponent(ref)}&width=${w}&height=${h}&fallback=${kind === "backdrop" ? "art" : "poster"}`;
     case "jellyfin": {
       if (kind === "avatar") {
@@ -71,6 +89,12 @@ function upstreamUrl(svc: string, baseUrl: string, apiKey: string | null, ref: s
 }
 
 export async function GET(req: NextRequest) {
+  // In-handler auth gate (defence in depth — middleware also protects this route). This route
+  // streams bytes fetched with stored service credentials and is an SSRF surface, so never serve
+  // it to an unauthenticated caller even if middleware is ever misconfigured.
+  const session = await auth();
+  if (!session?.user) return new NextResponse("unauthorized", { status: 401 });
+
   const svc = req.nextUrl.searchParams.get("svc") || "";
   const ref = req.nextUrl.searchParams.get("ref") || "";
   const kindParam = req.nextUrl.searchParams.get("kind") || "poster";

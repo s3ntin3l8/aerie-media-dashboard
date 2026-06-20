@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 // The route resolves credentials from the registry (server-only, DB-backed). Stub it so the
@@ -6,9 +6,17 @@ import type { NextRequest } from "next/server";
 vi.mock("@/lib/integrations/registry", () => ({
   getServiceSecret: vi.fn(), getServiceCredentials: vi.fn(),
 }));
+// The route now gates on a live session; stub auth() so most tests run "authenticated".
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
 
-import { GET, isPlainPath } from "@/app/api/artwork/route";
+import { GET, isPlainPath, isTautulliRef } from "@/app/api/artwork/route";
 import { getServiceCredentials } from "@/lib/integrations/registry";
+import { auth } from "@/auth";
+
+// Default every test to an authenticated session; the 401 test overrides this.
+beforeEach(() => {
+  vi.mocked(auth).mockResolvedValue({ user: { role: "user" } } as never);
+});
 
 const mockCreds = (creds: { baseUrl: string; apiKey: string | null } | null) =>
   vi.mocked(getServiceCredentials).mockResolvedValue(creds as never);
@@ -31,12 +39,42 @@ describe("isPlainPath", () => {
   });
 });
 
+describe("isTautulliRef", () => {
+  it("accepts a plain Plex image path", () => {
+    expect(isTautulliRef("/library/metadata/123/thumb/456")).toBe(true);
+  });
+
+  it("accepts an https plex.tv host (user_thumb avatars)", () => {
+    expect(isTautulliRef("https://plex.tv/users/abc/avatar")).toBe(true);
+    expect(isTautulliRef("https://i2.wp.plex.tv/x.png")).toBe(true);
+  });
+
+  it("rejects internal/external SSRF targets", () => {
+    expect(isTautulliRef("http://169.254.169.254/latest/meta-data/")).toBe(false);
+    expect(isTautulliRef("http://192.168.1.1/")).toBe(false);
+    expect(isTautulliRef("https://evil.com/x.png")).toBe(false);
+    expect(isTautulliRef("https://plex.tv.evil.com/x.png")).toBe(false);
+    expect(isTautulliRef("//evil.com/x.png")).toBe(false);
+  });
+});
+
 describe("GET /api/artwork", () => {
   const originalFetch = globalThis.fetch;
 
   afterEach(() => {
     vi.clearAllMocks();
     globalThis.fetch = originalFetch;
+  });
+
+  it("returns 401 when there is no session", async () => {
+    vi.mocked(auth).mockResolvedValue(null as never);
+    expect((await GET(req("svc=jellyfin&ref=abc"))).status).toBe(401);
+  });
+
+  it("blocks a tautulli ref aimed at an internal host (SSRF) with 400", async () => {
+    mockCreds({ baseUrl: "https://tautulli.local", apiKey: "k" });
+    const res = await GET(req("svc=tautulli&ref=" + encodeURIComponent("http://169.254.169.254/")));
+    expect(res.status).toBe(400);
   });
 
   it("returns 400 when svc or ref is missing", async () => {

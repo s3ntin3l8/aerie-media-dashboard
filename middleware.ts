@@ -14,9 +14,15 @@ function withSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set("X-Frame-Options", "SAMEORIGIN");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  // CSP is kept minimal — the app embeds third-party iframes (services) and
-  // loads remote API data, so a strict CSP would break core functionality.
-  // Deployments behind a reverse proxy should add HSTS there.
+  // Baseline CSP. These three directives harden against the highest-value injection sinks
+  // (plugin/object embedding, <base> hijacking, clickjacking) and do NOT constrain the app's
+  // iframe embedding or remote API loads — those are frame-src/connect-src, left unset here.
+  // A nonce-based script-src is the natural next step but needs Next.js nonce plumbing, so it's
+  // tracked as a follow-up rather than bundled here. HSTS is added at the reverse proxy.
+  res.headers.set(
+    "Content-Security-Policy",
+    "object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
+  );
   return res;
 }
 

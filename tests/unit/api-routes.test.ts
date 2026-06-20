@@ -48,8 +48,10 @@ beforeEach(() => {
 });
 
 describe("GET /api/history", () => {
-  it("401s without a session", async () => {
-    vi.mocked(getSessionUser).mockResolvedValue(null as never);
+  it("401s without a session (gates on auth(), not the never-null getSessionUser)", async () => {
+    vi.mocked(auth).mockResolvedValue(null as never);
+    // Even if the guest fallback resolves a "user", no live session ⇒ 401.
+    vi.mocked(getSessionUser).mockResolvedValue({ id: "anon", name: "Guest", email: "", role: "user", groups: [] } as never);
     expect((await historyGET()).status).toBe(401);
   });
 
