@@ -85,6 +85,22 @@ describe("serviceKind — via detectVersion and probeVersion", () => {
       expect(await detectVersion("authentik")).toBeNull();
     });
 
+    it("detects Portainer version via /api/system/version with an X-API-Key", async () => {
+      mockFetchJson.mockResolvedValue({ ServerVersion: "2.39.3" });
+      const result = await probeVersion("https://portainer.test", "ptr_tok", "portainer");
+      expect(result).toBe("2.39.3");
+      expect(mockFetchJson).toHaveBeenCalledWith(
+        expect.stringContaining("/api/system/version"),
+        expect.objectContaining({ service: "version-detect", headers: { "X-API-Key": "ptr_tok" } }),
+      );
+    });
+
+    it("detectVersion('portainer') returns null when the token is rejected (401 throws)", async () => {
+      mockGetCreds.mockResolvedValue({ baseUrl: "https://portainer.test", apiKey: "bad", insecureTls: false });
+      mockFetchJson.mockRejectedValue(new Error("[version-detect] HTTP 401"));
+      expect(await detectVersion("portainer")).toBeNull();
+    });
+
     it("detects Jellyseerr as overseerr kind", async () => {
       mockFetchJson.mockResolvedValue({ version: "2.0.0" });
       const result = await probeVersion("http://jellyseerr:5055", "key", "jellyseerr");
