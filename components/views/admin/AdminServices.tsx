@@ -4,11 +4,12 @@
 // ============================================================
 import React, { useMemo, useState, useTransition } from "react";
 import type { Service, TraefikRoute } from "@/lib/types";
-import { useData, usePatchData } from "@/components/portal/DataProvider";
+import { useData, usePatchData, useRefresh } from "@/components/portal/DataProvider";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { setServiceActive, setServiceKeepAlive, dismissTraefikHost, restoreTraefikHost } from "@/app/(portal)/admin/actions";
+import { setServiceActive, setServiceKeepAlive, dismissTraefikHost, restoreTraefikHost, restartServiceContainer } from "@/app/(portal)/admin/actions";
 import { Icon, Eyebrow, Pill, CatBadge, ExpandableSection, Divider, TRUNCATE, listDivider } from "@/components/primitives";
-import { Toggle } from "@/components/modals/ModalShell";
+import { Toggle, ModalShell } from "@/components/modals/ModalShell";
+import { Toast } from "@/components/modals/Toast";
 import { ServiceLogo } from "@/components/ServiceLogo";
 import { statusColor, statusWord, uptimeText } from "@/lib/display";
 import { RouteBadges, MetaBadges, KeepAliveCell, ProxyAccessCell } from "@/components/views/shared";
@@ -103,12 +104,61 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
   const { allServices: services, traefikDiscovered = [], traefikDismissed = [], traefikInstances = [], lokiConfigured = false } = useData();
   const { favorites, toggleFavorite, keptAliveIds } = usePortal();
   const patchData = usePatchData();
+  const refresh = useRefresh();
   const [, startActiveTransition] = useTransition();
   // The service whose log tail is open in the Loki viewer (admin-only; gated on lokiConfigured).
   const [logsFor, setLogsFor] = useState<Service | null>(null);
   const logsModalEl = lokiConfigured && logsFor ? (
     <LogsModal open serviceId={logsFor.id} serviceName={logsFor.name} logoSlug={logsFor.logoSlug} onClose={() => setLogsFor(null)} />
   ) : null;
+
+  // Container restart (Portainer): a confirm modal + transient toast. Gated per-row on
+  // `s.canRestart` (container name set AND a Portainer instance configured); the action
+  // re-checks admin server-side.
+  const [restartFor, setRestartFor] = useState<Service | null>(null);
+  const [restarting, startRestart] = useTransition();
+  const [restartToast, setRestartToast] = useState<string | null>(null);
+  const flashRestart = (msg: string) => { setRestartToast(msg); setTimeout(() => setRestartToast(null), 2600); };
+  const doRestart = (s: Service) => {
+    startRestart(async () => {
+      try {
+        await restartServiceContainer(s.id);
+        setRestartFor(null);
+        refresh();
+        flashRestart(`Restarting ${s.name}…`);
+      } catch (e) {
+        setRestartFor(null);
+        flashRestart(e instanceof Error ? e.message : `Failed to restart ${s.name}`);
+      }
+    });
+  };
+  const restartModalEl = restartFor ? (
+    <ModalShell
+      open
+      onClose={() => setRestartFor(null)}
+      accent="var(--error)"
+      logoSlug={restartFor.logoSlug || undefined}
+      icon={restartFor.logoSlug ? undefined : "restart_alt"}
+      title={`Restart ${restartFor.name}?`}
+      sub="Bounces the service's container via Portainer."
+      width={440}
+      footer={(
+        <>
+          <button onClick={() => setRestartFor(null)} className="btn btn-secondary btn-sm" style={{ marginLeft: "auto" }}>Cancel</button>
+          <button onClick={() => doRestart(restartFor)} disabled={restarting} className="btn btn-danger btn-sm">
+            <Icon name="restart_alt" size={15} /> {restarting ? "Restarting…" : "Restart"}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ padding: "18px 20px", fontSize: 13, color: "var(--on-surface-variant)", lineHeight: 1.5 }}>
+        The container <code style={{ fontFamily: "var(--font-mono)", color: "var(--on-surface)" }}>{restartFor.containerName}</code> will be restarted
+        {restartFor.portainerEndpointId ? <> on Portainer endpoint <code style={{ fontFamily: "var(--font-mono)", color: "var(--on-surface)" }}>{restartFor.portainerEndpointId}</code></> : null}.
+        Any in-flight activity on this service may be interrupted.
+      </div>
+    </ModalShell>
+  ) : null;
+  const restartToastEl = <Toast message={restartToast} />;
   // Service · Category · Host · Proxy & access · Embed · Active · Keep · API key · actions
   const cols = "1.4fr 96px 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 1fr";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
@@ -267,6 +317,8 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {logsModalEl}
+        {restartModalEl}
+        {restartToastEl}
         {discoveredEl}
         {nodesEl}
         <select
@@ -381,6 +433,16 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
                     <Icon name="receipt_long" size={18} />Logs
                   </button>
                 )}
+                {s.canRestart && (
+                  <button
+                    onClick={() => setRestartFor(s)}
+                    className="btn btn-ghost btn-sm"
+                    style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6, color: "var(--error)" }}
+                    title="Restart container"
+                  >
+                    <Icon name="restart_alt" size={18} />Restart
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -412,6 +474,8 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
   return (
     <>
     {logsModalEl}
+    {restartModalEl}
+    {restartToastEl}
     {discoveredEl}
     {nodesEl}
     <div className="aerie-x-scroll">
@@ -425,7 +489,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
           {sortHead("active", "Active")}
           {sortHead("keep", "Keep")}
           {sortHead("key", "API key")}
-          <span />
+          <Eyebrow style={{ textAlign: "right", whiteSpace: "nowrap" }}>Actions</Eyebrow>
         </div>
         {sorted.map((s, i) => {
           const pinned = favorites.includes(s.id);
@@ -467,6 +531,11 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
                 {lokiConfigured && (
                   <button onClick={() => setLogsFor(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="View logs">
                     <Icon name="receipt_long" size={15} />
+                  </button>
+                )}
+                {s.canRestart && (
+                  <button onClick={() => setRestartFor(s)} className="btn btn-ghost btn-sm" style={{ padding: 6, color: "var(--error)" }} title="Restart container">
+                    <Icon name="restart_alt" size={15} />
                   </button>
                 )}
                 <button onClick={() => onEdit(s)} className="btn btn-ghost btn-sm" style={{ padding: 6 }} title="Edit">

@@ -434,7 +434,7 @@ export function ServiceModal({
               </Field>
             )}
             {portainerConfigured && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "60% 40%", gap: 12 }}>
                 <Field label="Container name" hint="optional — enables the admin restart control">
                   <input
                     className="input"
