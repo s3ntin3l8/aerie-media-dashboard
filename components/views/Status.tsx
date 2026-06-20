@@ -1,23 +1,30 @@
 "use client";
 // ============================================================
-// AERIE — Status / uptime dashboard (Gatus + Prometheus)
+// AERIE — Services (merged browse + launch + health)
+// ─────────────────────────────────────────────────────────────
+// Formerly two separate views at /services (Launcher) and
+// /status (health table). Now a single enhanced card grid at
+// /status: browse all services by category, launch them, and
+// see live Gatus health signals on every card.
+//
+// Admin-only sections below the grid: Service Warnings
+// (*arr health), system metrics (Prometheus/Beszel), Filesystems.
+// Per-service container restart stays in Admin → Services.
 // ============================================================
-import React, { useMemo, useState, useTransition } from "react";
-import type { Service } from "@/lib/types";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData, useRefresh } from "@/components/portal/DataProvider";
-import { restartServiceContainer } from "@/app/(portal)/admin/actions";
-import { Toast } from "@/components/modals/Toast";
+import { useData } from "@/components/portal/DataProvider";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
-import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar, TRUNCATE, listDivider } from "@/components/primitives";
-import { PanelShell, timeAgo } from "@/components/panels";
+import { Icon, Pill, Eyebrow, StatusDot, Sparkline, ProgressBar, SearchField, TRUNCATE, listDivider } from "@/components/primitives";
+import { PanelShell, Empty } from "@/components/panels";
 import { fmtBytes, fmtPercent } from "@/lib/format";
-import { ServiceLogo } from "@/components/ServiceLogo";
-import { PageHeader, StatTile, RouteHealthBadge, CertCell, SsoCell, KeepAliveCell } from "@/components/views/shared";
+import { ServiceCard } from "@/components/views/ServiceCard";
+import { CAT, CAT_ORDER, catColor } from "@/lib/categories";
+import { PageHeader, StatTile } from "@/components/views/shared";
 import { SourceToggle, InstanceSelect, BeszelSystemSelect, useSecondsAgo, fmtUptime } from "@/components/status/metricsControls";
 
-const HEALTH_STATUS_ORDER: Record<string, number> = { up: 0, degraded: 1, down: 2, unknown: 3 };
-
+// Admin-only system-metrics card (CPU / memory / network / etc.).
 function MetricCard({ title, value, unit, color, data }: { title: string; value: string; unit: string; color: string; data: number[] }) {
   return (
     <div style={{ padding: 16, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
@@ -31,62 +38,10 @@ function MetricCard({ title, value, unit, color, data }: { title: string; value:
   );
 }
 
-// Admin-only restart control for a Status row. Idle → one ghost restart icon; armed (two-click
-// confirm, since the repo has no confirm-modal pattern) → confirm + cancel; disabled while the
-// restart server action is in flight. Renders nothing when the service isn't restartable.
-function RestartCell({ service, armed, pending, onArm, onConfirm, onCancel }: {
-  service: Service;
-  armed: boolean;
-  pending: boolean;
-  onArm: () => void;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  if (!service.canRestart) return null;
-  const iconBtn: React.CSSProperties = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24,
-    borderRadius: 7, border: "1px solid var(--outline-variant)", background: "transparent", cursor: "pointer",
-  };
-  if (armed) {
-    return (
-      <div style={{ display: "flex", gap: 4 }}>
-        <button onClick={onConfirm} disabled={pending} style={{ ...iconBtn, borderColor: "color-mix(in srgb, var(--error) 45%, transparent)" }} title={`Restart ${service.name} container`}>
-          <Icon name="check" size={14} color="var(--error)" />
-        </button>
-        <button onClick={onCancel} disabled={pending} style={iconBtn} title="Cancel">
-          <Icon name="close" size={14} color="var(--on-surface-variant)" />
-        </button>
-      </div>
-    );
-  }
-  return (
-    <button onClick={onArm} disabled={pending} style={iconBtn} title="Restart container">
-      <Icon name={pending ? "hourglass_empty" : "restart_alt"} size={15} color="var(--on-surface-variant)" />
-    </button>
-  );
-}
-
 export function Status() {
-  const { role, keptAliveIds } = usePortal();
+  const router = useRouter();
+  const { role } = usePortal();
   const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured, beszelSystemId } = useData();
-  const refresh = useRefresh();
-  // Admin-only container restart: two-click confirm (armed row id) + transient toast feedback.
-  const [restartArmed, setRestartArmed] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [isRestarting, startRestart] = useTransition();
-  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
-  const doRestart = (s: Service) => {
-    setRestartArmed(null);
-    startRestart(async () => {
-      try {
-        await restartServiceContainer(s.id);
-        refresh();
-        flash(`Restarting ${s.name}…`);
-      } catch (e) {
-        flash(e instanceof Error ? e.message : `Failed to restart ${s.name}`);
-      }
-    });
-  };
   const metricsAge = useSecondsAgo(metrics);
   const bothConfigured = prometheusConfigured && beszelConfigured;
   const sourceMeta = metricsSource === "beszel"
@@ -99,44 +54,39 @@ export function Status() {
     : (prometheusConfigured
         ? "Prometheus unreachable — check the service baseUrl in Admin → Services."
         : "Prometheus not configured — add the service and set a baseUrl in Admin → Services.");
-  const list = useVisibleServices("status");
-  const [healthSort, setHealthSort] = useState<"name" | "status" | "uptime" | "ms" | "cert" | "sso">("name");
-  const sortedList = useMemo(() => [...list].sort((a, b) => {
-    switch (healthSort) {
-      case "name":   return a.name.localeCompare(b.name);
-      case "status": return HEALTH_STATUS_ORDER[a.status] - HEALTH_STATUS_ORDER[b.status];
-      case "uptime": return b.uptime - a.uptime;
-      case "ms":     return (a.ms ?? Infinity) - (b.ms ?? Infinity);
-      // Soonest-expiring cert first; services with no cert sink to the bottom. SSO-protected
-      // services first. Both fall back to name so ties read in a stable, alphabetical order.
-      case "cert":   return ((a.route?.cert?.daysRemaining ?? Infinity) - (b.route?.cert?.daysRemaining ?? Infinity)) || a.name.localeCompare(b.name);
-      case "sso":    return ((b.route?.forwardAuth ? 1 : 0) - (a.route?.forwardAuth ? 1 : 0)) || a.name.localeCompare(b.name);
-      default:       return 0;
-    }
-  }), [list, healthSort]);
-  // Cert / SSO sorts are only meaningful when Traefik route data exists, so only offer them
-  // when at least one visible service actually carries that data.
-  const sortOpts = useMemo(() => {
-    const opts: Array<"name" | "status" | "uptime" | "ms" | "cert" | "sso"> = ["name", "status", "uptime", "ms"];
-    if (list.some((s) => s.route?.cert)) opts.push("cert");
-    if (list.some((s) => s.route?.forwardAuth)) opts.push("sso");
-    return opts;
-  }, [list]);
+
+  // "launcher" mode: excludes infra + prometheus/beszel for non-admins; admins see all.
+  // Consistent with the old Launcher view (and CommandPalette) — health signals surface
+  // on each card rather than in a separate status table.
+  const list = useVisibleServices("launcher");
+
+  // Search filter — wires the previously-decorative SearchField (Launcher had no value/onChange).
+  const [q, setQ] = useState("");
+  const ql = q.toLowerCase();
+  const filtered = ql
+    ? list.filter((s) => s.name.toLowerCase().includes(ql) || s.host.toLowerCase().includes(ql))
+    : list;
+
+  // Category groups for the card grid (same grouping logic as the old Launcher).
+  const grouped = CAT_ORDER
+    .map((cat) => ({ cat, items: filtered.filter((s) => s.cat === cat) }))
+    .filter((g) => g.items.length > 0);
+
+  // Summary stats — derived from all visible services (not filtered) so the stat row
+  // stays stable while the user types in the search field.
   const up = list.filter((s) => s.status === "up").length;
   const deg = list.filter((s) => s.status === "degraded").length;
   const down = list.filter((s) => s.status === "down").length;
-  // Averages only over services with real Gatus data — never let an
-  // unmonitored ("unknown") service skew uptime/latency to a fake number.
   const monitored = list.filter((s) => s.status !== "unknown");
   const avgMsText = monitored.length ? `${Math.round(monitored.reduce((a, s) => a + s.ms, 0) / monitored.length)}ms` : "—";
   const avgUpText = monitored.length ? `${(monitored.reduce((a, s) => a + s.uptime, 0) / monitored.length).toFixed(2)}%` : "—";
-  // 24h average only over monitored services that actually report a 24h figure (Gatus may omit it).
   const monitored24h = monitored.filter((s) => s.uptime24h != null);
   const avgUp24hText = monitored24h.length ? `${(monitored24h.reduce((a, s) => a + (s.uptime24h ?? 0), 0) / monitored24h.length).toFixed(2)}%` : "—";
 
   return (
     <section style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface)" }}>
-      <PageHeader eyebrow="Gatus · live health" title="System Status" icon="favorite" accent="var(--originator-own)" sub="Uptime, response latency and incident history across every service.">
+      <PageHeader eyebrow="Service directory · live health" title="Services" icon="apps" accent="var(--primary)" sub={`${list.length} services · embeddable ones open in-portal, the rest launch in a new tab.`}>
+        {/* Operational status pill */}
         <span
           style={{
             display: "inline-flex",
@@ -144,113 +94,56 @@ export function Status() {
             gap: 7,
             padding: "7px 13px",
             borderRadius: 9999,
-            background: down ? "color-mix(in srgb, var(--error) 12%, transparent)" : deg ? "color-mix(in srgb, var(--amber) 12%, transparent)" : up > 0 ? "color-mix(in srgb, var(--originator-own) 12%, transparent)" : "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)",
+            background: down ? "color-mix(in srgb, var(--error) 12%, transparent)" : deg ? "color-mix(in srgb, var(--amber) 12%, transparent)" : up > 0 ? "color-mix(in srgb, var(--primary) 12%, transparent)" : "color-mix(in srgb, var(--on-surface-variant) 12%, transparent)",
           }}
         >
           <StatusDot status={down ? "down" : deg ? "degraded" : up > 0 ? "up" : "unknown"} size={8} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: down ? "var(--error)" : deg ? "var(--amber)" : up > 0 ? "var(--originator-own)" : "var(--on-surface-variant)" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: down ? "var(--error)" : deg ? "var(--amber)" : up > 0 ? "var(--primary)" : "var(--on-surface-variant)" }}>
             {down ? "Incident" : deg ? "Degraded" : up > 0 ? "Operational" : "No data"}
           </span>
         </span>
+        <SearchField placeholder="Filter services…" width={240} value={q} onChange={setQ} />
       </PageHeader>
 
       <div className="custom-scrollbar" style={{ flex: 1, overflowY: "auto" }}>
         <div className="aerie-page-pad aerie-page-pad--wide" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+          {/* 5-tile health stat row */}
           <div className="aerie-stat-row">
-            <StatTile label="Services up" value={`${up}/${list.length}`} color="var(--originator-own)" icon="check_circle" />
+            <StatTile label="Services up" value={`${up}/${list.length}`} color="var(--primary)" icon="check_circle" />
             <StatTile label="Avg uptime 24h" value={avgUp24hText} color="var(--on-surface)" icon="schedule" />
             <StatTile label="Avg uptime 30d" value={avgUpText} color="var(--on-surface)" icon="trending_up" />
             <StatTile label="Avg response" value={avgMsText} color="var(--primary)" icon="bolt" />
             <StatTile label="Incidents" value={deg + down} color={deg + down ? "var(--amber)" : "var(--on-surface)"} icon="warning" />
           </div>
 
-          <PanelShell title="Service Health" icon="favorite" accent="var(--originator-own)" count={`${list.length}`}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent)" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", marginRight: 4 }}>Sort</span>
-                {sortOpts.map((opt) => {
-                  const labels: Record<string, string> = { name: "Name", status: "Status", uptime: "Uptime", ms: "Response", cert: "Cert", sso: "SSO" };
-                  const active = healthSort === opt;
-                  return (
-                    <button
-                      key={opt}
-                      onClick={() => setHealthSort(opt)}
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: 10.5,
-                        padding: "4px 10px",
-                        borderRadius: 9999,
-                        cursor: "pointer",
-                        border: "1px solid " + (active ? "color-mix(in srgb, var(--originator-own) 40%, transparent)" : "var(--outline-variant)"),
-                        background: active ? "color-mix(in srgb, var(--originator-own) 13%, transparent)" : "transparent",
-                        color: active ? "var(--originator-own)" : "var(--on-surface-variant)",
-                      }}
-                    >
-                      {labels[opt]}
-                    </button>
-                  );
-                })}
+          {/* Category-grouped enhanced card grid */}
+          {list.length === 0 && (
+            <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)" }}>
+              <Empty icon="apps" line="No services available" sub="Ask an admin to add services in Admin → Services." />
+            </section>
+          )}
+          {list.length > 0 && filtered.length === 0 && (
+            <section style={{ background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-sm)" }}>
+              <Empty icon="search_off" line="No services match" sub="Try a different name or host." />
+            </section>
+          )}
+          {grouped.map((g) => (
+            <div key={g.cat}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 13 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: catColor(g.cat) }} />
+                <h2 style={{ fontFamily: "var(--font-headline)", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--on-surface)" }}>{CAT[g.cat].label}</h2>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>{g.items.length}</span>
               </div>
-              {sortedList.map((s, i) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderTop: listDivider(i) }}>
-                  <ServiceLogo service={s} size={30} radius={8} />
-                  <div style={{ flex: "0 0 200px", minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <StatusDot status={s.status} size={7} />
-                      <span style={{ fontWeight: 700, fontSize: 13, color: "var(--on-surface)" }}>{s.name}</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, rowGap: 4, marginTop: 2 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-                        {s.lastIncidentAt ? `incident ${timeAgo(s.lastIncidentAt)}` : s.host}
-                      </span>
-                      {s.route && <RouteHealthBadge route={s.route} />}
-                    </div>
-                  </div>
-                  <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-                    <Heartbeat beats={s.beats} h={24} barW={5} />
-                  </div>
-                  {/* Cert + SSO get their own reserved columns (a muted "—" when a service carries
-                      no Traefik/Authentik data) so they line up across rows like response/uptime. */}
-                  <div style={{ flex: "0 0 78px", display: "flex", justifyContent: "flex-end" }}>
-                    <CertCell route={s.route} reserve />
-                  </div>
-                  <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }}>
-                    <SsoCell route={s.route} reserve />
-                  </div>
-                  {/* Keep-alive: dedicated reserved column (muted "—" when off) so it lines up
-                      with Cert/SSO across rows. Filled + glowing when the embed is live now. */}
-                  <div style={{ flex: "0 0 46px", display: "flex", justifyContent: "flex-end" }}>
-                    <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} reserve iconOnly />
-                  </div>
-                  {/* Admin-only container restart (Portainer). Reserved 58px so admin rows stay
-                      aligned whether or not a given service is restartable. */}
-                  {role === "admin" && (
-                    <div style={{ flex: "0 0 58px", display: "flex", justifyContent: "flex-end" }}>
-                      <RestartCell
-                        service={s}
-                        armed={restartArmed === s.id}
-                        pending={isRestarting}
-                        onArm={() => setRestartArmed(s.id)}
-                        onConfirm={() => doRestart(s)}
-                        onCancel={() => setRestartArmed(null)}
-                      />
-                    </div>
-                  )}
-                  {/* Always reserve this column (even when empty) so heartbeats stay aligned
-                      across monitored and unmonitored rows. */}
-                  <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }} title="response time, last 30 checks">
-                    {s.msHistory && s.msHistory.length > 1 && (
-                      <Sparkline data={s.msHistory} w={64} h={24} color="var(--primary)" strokeW={1.25} />
-                    )}
-                  </div>
-                  <div style={{ flex: "0 0 60px", textAlign: "right" }}>
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: s.status === "down" ? "var(--error)" : s.status === "degraded" ? "var(--amber)" : "var(--on-surface)" }}>{s.status === "unknown" ? "—" : `${s.uptime.toFixed(2)}%`}</div>
-                    <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>{s.status === "unknown" ? "—" : `${s.ms}ms`}</div>
-                  </div>
-                </div>
-              ))}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(248px, 1fr))", gap: 13 }}>
+                {g.items.map((s) => (
+                  <ServiceCard key={s.id} s={s} onOpen={() => router.push(`/s/${s.id}`)} />
+                ))}
+              </div>
             </div>
-          </PanelShell>
+          ))}
+
+          {/* ── Admin-only sections ─────────────────────────────────── */}
 
           {role === "admin" && arrHealth.length > 0 && (
             <PanelShell title="Service Warnings" icon="warning" accent="var(--amber)" count={`${arrHealth.length}`}>
@@ -280,9 +173,7 @@ export function Status() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <Icon name={sourceMeta.icon} size={16} color="var(--primary)" />
                 <h2 style={{ fontFamily: "var(--font-headline)", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--on-surface)" }}>{sourceMeta.title}</h2>
-                <Pill tone="primary" style={{ marginLeft: 4 }}>
-                  Admin
-                </Pill>
+                <Pill tone="primary" style={{ marginLeft: 4 }}>Admin</Pill>
                 {bothConfigured && <SourceToggle current={metricsSource} />}
                 {metrics != null && (
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: metricsAge === "live" ? "var(--originator-own)" : "var(--on-surface-variant)", marginLeft: 2 }}>
@@ -299,65 +190,17 @@ export function Status() {
                 </div>
               ) : (
                 <div className="aerie-metrics-grid">
-                  <MetricCard
-                    title="CPU load"
-                    value={metrics.cpuPct != null ? `${metrics.cpuPct.toFixed(1)}%` : "—"}
-                    unit={metrics.instance ? `node: ${metrics.instance}` : "all nodes"}
-                    color="var(--primary)"
-                    data={metrics.cpuHistory}
-                  />
-                  <MetricCard
-                    title="Memory"
-                    value={fmtBytes(metrics.memUsedBytes)}
-                    unit={`of ${fmtBytes(metrics.memTotalBytes)}`}
-                    color="var(--originator-court)"
-                    data={metrics.memHistory}
-                  />
-                  <MetricCard
-                    title="Network out"
-                    value={metrics.netOutBps != null ? `${(metrics.netOutBps / 1e6).toFixed(1)} Mbps` : "—"}
-                    unit="transmit"
-                    color="var(--originator-third-party)"
-                    data={metrics.netHistory}
-                  />
-                  <MetricCard
-                    title="Network in"
-                    value={metrics.netInBps != null ? `${(metrics.netInBps / 1e6).toFixed(1)} Mbps` : "—"}
-                    unit="receive"
-                    color="var(--originator-court)"
-                    data={metrics.netInHistory}
-                  />
-                  <MetricCard
-                    title="Disk"
-                    value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${fmtPercent(metrics.diskUsedBytes, metrics.diskTotalBytes)}%` : "—"}
-                    unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`}
-                    color="var(--amber)"
-                    data={metrics.diskHistory}
-                  />
-                  <MetricCard
-                    title="System load"
-                    value={metrics.sysLoad != null ? metrics.sysLoad.toFixed(2) : "—"}
-                    unit={metrics.load5 != null && metrics.load15 != null ? `${metrics.load5.toFixed(2)} · ${metrics.load15.toFixed(2)} (5m·15m)` : "1-min avg"}
-                    color="var(--originator-own)"
-                    data={metrics.sysLoadHistory}
-                  />
+                  <MetricCard title="CPU load" value={metrics.cpuPct != null ? `${metrics.cpuPct.toFixed(1)}%` : "—"} unit={metrics.instance ? `node: ${metrics.instance}` : "all nodes"} color="var(--primary)" data={metrics.cpuHistory} />
+                  <MetricCard title="Memory" value={fmtBytes(metrics.memUsedBytes)} unit={`of ${fmtBytes(metrics.memTotalBytes)}`} color="var(--originator-court)" data={metrics.memHistory} />
+                  <MetricCard title="Network out" value={metrics.netOutBps != null ? `${(metrics.netOutBps / 1e6).toFixed(1)} Mbps` : "—"} unit="transmit" color="var(--originator-third-party)" data={metrics.netHistory} />
+                  <MetricCard title="Network in" value={metrics.netInBps != null ? `${(metrics.netInBps / 1e6).toFixed(1)} Mbps` : "—"} unit="receive" color="var(--originator-court)" data={metrics.netInHistory} />
+                  <MetricCard title="Disk" value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${fmtPercent(metrics.diskUsedBytes, metrics.diskTotalBytes)}%` : "—"} unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`} color="var(--amber)" data={metrics.diskHistory} />
+                  <MetricCard title="System load" value={metrics.sysLoad != null ? metrics.sysLoad.toFixed(2) : "—"} unit={metrics.load5 != null && metrics.load15 != null ? `${metrics.load5.toFixed(2)} · ${metrics.load15.toFixed(2)} (5m·15m)` : "1-min avg"} color="var(--originator-own)" data={metrics.sysLoadHistory} />
                   {metrics.swapTotalBytes != null && metrics.swapTotalBytes > 0 && (
-                    <MetricCard
-                      title="Swap"
-                      value={fmtBytes(metrics.swapUsedBytes)}
-                      unit={`of ${fmtBytes(metrics.swapTotalBytes)}`}
-                      color="var(--originator-third-party)"
-                      data={[]}
-                    />
+                    <MetricCard title="Swap" value={fmtBytes(metrics.swapUsedBytes)} unit={`of ${fmtBytes(metrics.swapTotalBytes)}`} color="var(--originator-third-party)" data={[]} />
                   )}
                   {metrics.uptimeSec != null && (
-                    <MetricCard
-                      title="Uptime"
-                      value={fmtUptime(metrics.uptimeSec)}
-                      unit="since boot"
-                      color="var(--primary)"
-                      data={[]}
-                    />
+                    <MetricCard title="Uptime" value={fmtUptime(metrics.uptimeSec)} unit="since boot" color="var(--primary)" data={[]} />
                   )}
                 </div>
               )}
@@ -387,9 +230,9 @@ export function Status() {
               )}
             </>
           )}
+
         </div>
       </div>
-      <Toast message={toast} />
     </section>
   );
 }

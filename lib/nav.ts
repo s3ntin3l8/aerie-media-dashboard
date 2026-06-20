@@ -55,12 +55,14 @@ export const NAV_ITEMS: NavItem[] = [
     isActive: (p) => p === "/streams" || p.startsWith("/streams/"),
   },
   {
-    id: "services",
-    href: "/services",
+    id: "status",
+    href: "/status",
     icon: "apps",
     label: "Services",
     gKey: "s",
-    isActive: (p) => p === "/services" || p.startsWith("/s/"),
+    // Also active on /s/* (individual service embed) and the legacy /services path
+    // (which server-redirects to /status, but kept here for client-side transitions).
+    isActive: (p) => p.startsWith("/status") || p.startsWith("/s/") || p === "/services",
   },
   {
     id: "requests",
@@ -69,14 +71,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: "My Requests",
     gKey: "r",
     isActive: (p) => p.startsWith("/requests"),
-  },
-  {
-    id: "status",
-    href: "/status",
-    icon: "favorite",
-    label: "Status",
-    gKey: "u",
-    isActive: (p) => p.startsWith("/status"),
   },
   {
     id: "admin",

@@ -64,7 +64,7 @@ describe("PortalProvider", () => {
     renderAs("admin");
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "s" });
-    expect(push).toHaveBeenCalledWith("/services");
+    expect(push).toHaveBeenCalledWith("/status");
   });
 
   it("⌘D toggles the theme", () => {

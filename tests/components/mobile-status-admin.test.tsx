@@ -3,19 +3,24 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 import type { NodeMetrics } from "@/lib/integrations/clients";
 
-// MobileStatus parity: the admin metrics / warnings / filesystems sections and the
-// monitored-only average fix. The empty-data smoke test elsewhere doesn't exercise these.
+// MobileServices (merged browse + health): the admin metrics / warnings / filesystems sections
+// and the monitored-only average fix. These were formerly in MobileStatus; the content is now
+// in MobileServices (the merged screen routed from /status on mobile).
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/status" }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn() }));
 vi.mock("@/app/(portal)/admin/actions", () => ({
   setMetricsSource: vi.fn(async () => {}), setPrometheusInstance: vi.fn(async () => {}), setBeszelSystem: vi.fn(async () => {}),
 }));
 
-const portal: { role: string; keptAliveIds: string[] } = { role: "admin", keptAliveIds: [] };
+const portal: { role: string; keptAliveIds: string[]; favorites: string[]; toggleFavorite: () => void; user: object; oidc: boolean } = {
+  role: "admin", keptAliveIds: [], favorites: [], toggleFavorite: vi.fn(), user: { name: "Ada", email: "a@x" }, oidc: true,
+};
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
 
+import { fireEvent } from "@testing-library/react";
 import { useData } from "@/components/portal/DataProvider";
-import { MobileStatus } from "@/components/mobile/screens/MobileStatus";
+import { MobileServices } from "@/components/mobile/screens/MobileServices";
 
 const beats = new Array(30).fill(1);
 const svc = (over: Record<string, unknown>) => ({
@@ -47,13 +52,14 @@ const baseSnap = {
 
 beforeEach(() => {
   portal.role = "admin";
+  portal.favorites = [];
   vi.stubGlobal("fetch", vi.fn(async () => ({ json: async () => [] })) as never);
 });
 
-describe("MobileStatus — admin metrics + averages", () => {
+describe("MobileServices — admin metrics + averages", () => {
   it("excludes unmonitored (unknown) services from the 30d-uptime average", () => {
     vi.mocked(useData).mockReturnValue(baseSnap as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     // (99.5 + 99.9) / 2 = 99.70 — NOT (99.5 + 99.9 + 50) / 3 = 83.13. (Both the 24h and 30d
     // tiles read 99.70% here, since the unknown service is dropped from each average.)
     expect(screen.getAllByText("99.70%").length).toBeGreaterThan(0);
@@ -62,7 +68,7 @@ describe("MobileStatus — admin metrics + averages", () => {
 
   it("renders the metric tiles, filesystems and warnings for admins", () => {
     vi.mocked(useData).mockReturnValue(baseSnap as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     expect(screen.getByText("CPU load")).toBeInTheDocument();
     expect(screen.getByText("Memory")).toBeInTheDocument();
     expect(screen.getByText("Network out")).toBeInTheDocument();
@@ -79,7 +85,7 @@ describe("MobileStatus — admin metrics + averages", () => {
 
   it("shows the unconfigured message when there is no metrics source", () => {
     vi.mocked(useData).mockReturnValue({ ...baseSnap, metrics: null, prometheusConfigured: false, beszelConfigured: false } as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     expect(screen.getByText(/Prometheus not configured/)).toBeInTheDocument();
     expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
   });
@@ -87,19 +93,98 @@ describe("MobileStatus — admin metrics + averages", () => {
   it("hides admin-only metrics, warnings and filesystems from members", () => {
     portal.role = "user";
     vi.mocked(useData).mockReturnValue(baseSnap as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
     expect(screen.queryByText("Service Warnings")).not.toBeInTheDocument();
     expect(screen.queryByText("Filesystems")).not.toBeInTheDocument();
   });
 
-  it("renders the route-health badge for a service with an unhealthy route", () => {
-    const withBadRoute = [
-      svc({ id: "d", name: "Delta", status: "down", uptime: 90, ms: 0,
-        route: { serviceId: "d", router: "d@docker", rule: "", hosts: ["d.test"], status: "enabled", tls: true, forwardAuth: false, middlewares: [], serverStatus: "down" } }),
-    ];
-    vi.mocked(useData).mockReturnValue({ ...baseSnap, services: withBadRoute } as never);
-    render(<MobileStatus />);
-    expect(screen.getByText("route")).toBeInTheDocument();
+  it("shows 'Beszel Metrics' heading when metricsSource is beszel", () => {
+    vi.mocked(useData).mockReturnValue({ ...baseSnap, metricsSource: "beszel" } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("Beszel Metrics")).toBeInTheDocument();
+  });
+
+  it("shows error icon and 'docs →' link for arrHealth entries with type error and wikiUrl", () => {
+    vi.mocked(useData).mockReturnValue({
+      ...baseSnap,
+      arrHealth: [
+        { svc: "radarr", type: "error", message: "Database error", wikiUrl: "https://wiki.example.com/radarr" },
+        { svc: "sonarr", type: "warning", message: "Indexer unavailable" },
+      ],
+    } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("docs →")).toBeInTheDocument();
+    expect(screen.getByText("Database error")).toBeInTheDocument();
+    expect(screen.getByText("Indexer unavailable")).toBeInTheDocument();
+  });
+
+  it("shows 'No services configured.' when there are no services", () => {
+    vi.mocked(useData).mockReturnValue({ ...baseSnap, services: [] } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("No services configured.")).toBeInTheDocument();
+  });
+});
+
+describe("MobileServices — browse interactions", () => {
+  it("filters the service list when the search input changes", () => {
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    const input = screen.getByPlaceholderText("Filter services…");
+    fireEvent.change(input, { target: { value: "Bravo" } });
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.getByText("Bravo")).toBeInTheDocument();
+  });
+
+  it("calls onOpen with the service when a card is clicked", () => {
+    const onOpen = vi.fn();
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={onOpen} />);
+    fireEvent.click(screen.getByText("Alpha").closest("[class*='card']") ?? screen.getByText("Alpha"));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("pin button calls toggleFavorite without triggering card open", () => {
+    const onOpen = vi.fn();
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={onOpen} />);
+    const pinBtn = screen.getAllByTitle("Pin to favorites")[0];
+    fireEvent.click(pinBtn);
+    expect(portal.toggleFavorite).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Unpin' title on the pin button for a service already in favorites", () => {
+    portal.favorites = ["a"];
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByTitle("Unpin")).toBeInTheDocument();
+  });
+
+  it("renders the service note when a service has one", () => {
+    vi.mocked(useData).mockReturnValue({
+      ...baseSnap,
+      services: [svc({ id: "a", name: "Alpha", note: "important note" })],
+    } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("important note")).toBeInTheDocument();
+  });
+
+  it("shows 'No services match.' when the search filter produces no results", () => {
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    const input = screen.getByPlaceholderText("Filter services…");
+    fireEvent.change(input, { target: { value: "zzz" } });
+    expect(screen.getByText("No services match.")).toBeInTheDocument();
+  });
+
+  it("shows the service status text for a down service (neither up nor unknown)", () => {
+    vi.mocked(useData).mockReturnValue({
+      ...baseSnap,
+      services: [svc({ id: "a", name: "Alpha", status: "down", uptime: 0, ms: 0 })],
+    } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("down")).toBeInTheDocument();
   });
 });

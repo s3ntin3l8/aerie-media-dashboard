@@ -10,7 +10,6 @@ import { MobileAdmin } from "@/components/mobile/screens/MobileAdmin";
 import { MobileDashboard } from "@/components/mobile/screens/MobileDashboard";
 import { MobileStreams } from "@/components/mobile/screens/MobileStreams";
 import { MobileRequests } from "@/components/mobile/screens/MobileRequests";
-import { MobileStatus } from "@/components/mobile/screens/MobileStatus";
 import { MobileServices } from "@/components/mobile/screens/MobileServices";
 import { MobileServiceView } from "@/components/mobile/screens/MobileServiceView";
 import { Admin } from "@/components/views/Admin";
@@ -31,13 +30,14 @@ export function MobilePortal() {
 
   function renderScreen() {
     if (isServiceView && activeService) {
-      return <MobileServiceView s={activeService} onClose={() => router.push("/services")} />;
+      return <MobileServiceView s={activeService} onClose={() => router.push("/status")} />;
     }
     if (pathname === "/streams") return <MobileStreams />;
     if (pathname.startsWith("/requests")) return <MobileRequests />;
-    if (pathname.startsWith("/status")) return <MobileStatus />;
-    if (pathname === "/services" || pathname.startsWith("/s/")) {
-      // /s/:id falls here only when the id isn't in the services list yet (loading)
+    // /status and /services both render the merged screen (MobileServices = browse + health).
+    // /services server-redirects to /status; this handles the client-side transition too.
+    if (pathname.startsWith("/status") || pathname === "/services" || pathname.startsWith("/s/")) {
+      // /s/:id falls here only when the service id isn't in the live list yet (loading race).
       return <MobileServices onOpen={(s) => router.push(`/s/${s.id}`)} />;
     }
     // Admin management — render the real desktop Admin view (service modals,

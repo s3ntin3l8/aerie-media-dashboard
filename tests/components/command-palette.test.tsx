@@ -84,9 +84,10 @@ describe("CommandPalette", () => {
   });
 
   it("filters nav items by label", () => {
+    // "Status" nav item is gone — merged into "Services". Filter by "admin" to test nav filtering.
     render(<CommandPalette />);
-    fireEvent.change(input(), { target: { value: "status" } });
-    expect(screen.getByText("Status")).toBeInTheDocument();
+    fireEvent.change(input(), { target: { value: "admin" } });
+    expect(screen.getByText("Admin")).toBeInTheDocument();
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
   });
 
@@ -97,9 +98,11 @@ describe("CommandPalette", () => {
   });
 
   it("navigates to a nav href and closes on click", () => {
+    // Filter to "admin" so only the Admin nav item matches (unambiguous click target).
     render(<CommandPalette />);
-    fireEvent.click(screen.getByText("Status"));
-    expect(push).toHaveBeenCalledWith("/status");
+    fireEvent.change(input(), { target: { value: "admin" } });
+    fireEvent.click(screen.getByText("Admin"));
+    expect(push).toHaveBeenCalledWith("/admin");
     expect(setPaletteOpen).toHaveBeenCalledWith(false);
   });
 
