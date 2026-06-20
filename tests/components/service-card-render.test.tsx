@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 import type { Service } from "@/lib/types";
 
@@ -16,6 +16,8 @@ const portal = {
   favorites: [], toggleFavorite: vi.fn(), keptAliveIds: ["sonarr"],
 };
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
+
+beforeEach(() => { vi.clearAllMocks(); portal.favorites = []; });
 
 import { ServiceCard } from "@/components/views/ServiceCard";
 
@@ -84,5 +86,33 @@ describe("ServiceCard", () => {
     expect(note.style.whiteSpace).toBe("nowrap");
     expect(note.style.overflow).toBe("hidden");
     expect(note.style.height).toBe("17px");
+  });
+
+  it("clicking the pin button calls toggleFavorite and stops event propagation", () => {
+    const onOpen = vi.fn();
+    render(<ServiceCard s={sonarr} onOpen={onOpen} />);
+    const pinBtn = screen.getByTitle("Pin to rail");
+    fireEvent.click(pinBtn);
+    expect(portal.toggleFavorite).toHaveBeenCalledWith("sonarr");
+    // The card itself must NOT fire onOpen when the pin button is clicked.
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("hovering the pin button changes opacity to 1; leaving restores it", () => {
+    render(<ServiceCard s={sonarr} onOpen={vi.fn()} />);
+    const pinBtn = screen.getByTitle("Pin to rail");
+    fireEvent.mouseEnter(pinBtn);
+    expect(pinBtn.style.opacity).toBe("1");
+    fireEvent.mouseLeave(pinBtn);
+    // Sonarr is not pinned (favorites=[]), so opacity reverts to 0.55.
+    expect(pinBtn.style.opacity).toBe("0.55");
+  });
+
+  it("calls onOpen when the card body is clicked", () => {
+    const onOpen = vi.fn();
+    const { container } = render(<ServiceCard s={plex} onOpen={onOpen} />);
+    // The outer card div is the clickable area; click it directly.
+    fireEvent.click(container.firstChild as HTMLElement);
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 });
