@@ -71,6 +71,10 @@ export interface ServiceConfig {
   monitoringKey: string | null;
   /** optional LogQL stream selector for the admin Loki logs viewer; null → inferred {container="<id>"} */
   lokiQuery: string | null;
+  /** Docker/Portainer container name for the admin-only restart control; null → not restartable */
+  containerName: string | null;
+  /** Portainer endpoint (environment) id the container lives on; null → auto-resolve (single endpoint) */
+  portainerEndpointId: string | null;
   /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts) */
   insecureTls: boolean;
   /** false → fully disabled: hidden from every end-user surface and never polled (config kept) */
@@ -102,6 +106,8 @@ export async function getServiceConfigs(): Promise<ServiceConfig[]> {
       sortOrder: r.sortOrder,
       monitoringKey: r.monitoringKey ?? null,
       lokiQuery: r.lokiQuery ?? null,
+      containerName: r.containerName ?? null,
+      portainerEndpointId: r.portainerEndpointId ?? null,
       insecureTls: r.insecureTls,
       active: r.active,
       keepAlive: r.keepAlive,

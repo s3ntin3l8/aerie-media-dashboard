@@ -44,6 +44,14 @@ services:
     centralLabel: Stream
     note: "Embeds in portal"
     apiKey: ${JELLYFIN_API_KEY}
+    # containerName: the Docker container to bounce with the admin-only "restart" control in
+    # System Status. Needs a Portainer service WITH a token (see the portainer entry under Infra).
+    # A container NAME (not a volatile id) is used, so it survives image pulls / recreations.
+    containerName: jellyfin
+    # portainerEndpointId: the Portainer environment id this container lives on. Omit to
+    # auto-resolve when your Portainer manages exactly one environment; set it when several
+    # agent-connected environments exist (find it in the Portainer URL: …/endpoints/<id>/…).
+    # portainerEndpointId: "2"
 
   # ── Requests ───────────────────────────────────────────────
   - id: overseerr
@@ -198,6 +206,24 @@ services:
     host: auth.aerie.tv
     embeddable: false
     note: "Identity · OIDC"
+
+  - id: portainer
+    name: Portainer
+    cat: infra
+    icon: dns
+    logoSlug: portainer
+    host: portainer.aerie.tv
+    # internalUrl: server-side API calls go here (keep the API off the public proxy with a LAN
+    # address). Falls back to https://<host> when omitted.
+    internalUrl: https://portainer.lan:9443
+    embeddable: false
+    note: "Container control · admin"
+    # Portainer powers the admin-only "restart container" control on each System Status row. The
+    # token is a Portainer ACCESS TOKEN (Settings → My account → Access tokens), sent as X-API-Key.
+    # AERIE never mounts the Docker socket — it only calls Portainer's proxied Docker API with this
+    # token. Set a service's `containerName` (see jellyfin above) to make it restartable. There can
+    # be ONE Portainer instance; it may manage many environments via Portainer agents.
+    apiKey: ${PORTAINER_TOKEN}   # Portainer access token (X-API-Key)
 
   - id: traefik
     name: Traefik

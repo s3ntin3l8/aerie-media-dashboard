@@ -27,6 +27,10 @@ export const services = sqliteTable("services", {
   monitoringKey: text("monitoring_key"),
   /** optional LogQL stream selector for the admin Loki logs viewer; blank → inferred {container="<id>"} */
   lokiQuery: text("loki_query"),
+  /** Docker/Portainer container name for the admin-only restart control; null → not restartable */
+  containerName: text("container_name"),
+  /** Portainer endpoint (environment) id the container lives on; null → auto-resolve (single endpoint) */
+  portainerEndpointId: text("portainer_endpoint_id"),
   /** skip TLS cert verification for this service's server-side API calls (self-signed LAN hosts, e.g. Unraid) */
   insecureTls: integer("insecure_tls", { mode: "boolean" }).notNull().default(false),
   /** false → service is fully disabled: hidden from every end-user surface and never polled (config kept) */

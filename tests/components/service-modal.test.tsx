@@ -290,3 +290,27 @@ describe("ServiceModal — loki + spotlight", () => {
     expect(screen.getByText("Spotlight label")).toBeInTheDocument();
   });
 });
+
+describe("ServiceModal — Portainer container fields", () => {
+  it("hides the container fields when no Portainer instance is configured", () => {
+    render(<ServiceModal {...baseProps} mode="add" />);
+    expect(screen.queryByText("Container name")).not.toBeInTheDocument();
+    expect(screen.queryByText("Endpoint id")).not.toBeInTheDocument();
+  });
+
+  it("shows and edits the container name + endpoint id when Portainer is configured", () => {
+    render(<ServiceModal {...baseProps} mode="add" portainerConfigured />);
+    const container = screen.getByPlaceholderText("e.g. jellyfin") as HTMLInputElement;
+    const endpoint = screen.getByPlaceholderText("auto") as HTMLInputElement;
+    fireEvent.change(container, { target: { value: "jellyfin" } });
+    fireEvent.change(endpoint, { target: { value: "3" } });
+    expect(container.value).toBe("jellyfin");
+    expect(endpoint.value).toBe("3");
+  });
+
+  it("seeds the container fields from the edited service", () => {
+    render(<ServiceModal {...baseProps} mode="edit" service={mkSvc({ containerName: "sonarr", portainerEndpointId: "2" })} portainerConfigured />);
+    expect((screen.getByPlaceholderText("e.g. jellyfin") as HTMLInputElement).value).toBe("sonarr");
+    expect((screen.getByPlaceholderText("auto") as HTMLInputElement).value).toBe("2");
+  });
+});

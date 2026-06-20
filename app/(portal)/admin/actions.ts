@@ -9,8 +9,8 @@ import { ensureDb } from "@/lib/db/bootstrap";
 import { encrypt } from "@/lib/crypto";
 import { parseForwardAuthConfig, getForwardAuthConfig, type ForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import { getSessionUser } from "@/lib/session";
-import { setDeploymentSetting, getDeploymentSetting, invalidateRegistryCache } from "@/lib/integrations/registry";
-import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId } from "@/lib/integrations/clients";
+import { setDeploymentSetting, getDeploymentSetting, invalidateRegistryCache, getServiceConfigs, getServiceSecret, configMatchesLogo } from "@/lib/integrations/registry";
+import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId, portainerEndpoints, portainerRestartContainer } from "@/lib/integrations/clients";
 import type { OverseerrQuotaSettings } from "@/lib/integrations/clients";
 
 async function requireAdmin() {
@@ -135,6 +135,8 @@ export interface ServiceInput {
   note?: string | null;
   monitoringKey?: string | null;
   lokiQuery?: string | null;
+  containerName?: string | null;
+  portainerEndpointId?: string | null;
   insecureTls?: boolean;
   active?: boolean;
   keepAlive?: boolean;
@@ -160,6 +162,8 @@ export async function upsertService(input: ServiceInput) {
     note: input.note ?? null,
     monitoringKey: input.monitoringKey ?? null,
     lokiQuery: input.lokiQuery?.trim() || null,
+    containerName: input.containerName?.trim() || null,
+    portainerEndpointId: input.portainerEndpointId?.trim() || null,
     insecureTls: input.insecureTls ?? false,
     active: input.active ?? true,
     keepAlive: input.keepAlive ?? false,
@@ -206,6 +210,49 @@ export async function deleteService(id: string) {
   await db.delete(schema.services).where(eq(schema.services.id, id));
   invalidateRegistryCache();
   revalidatePath("/admin");
+}
+
+/**
+ * Restart a service's container via Portainer (admin-only). Resolves the single configured
+ * Portainer instance (an active service carrying the `portainer` logo + a stored token), the
+ * target service's container name and endpoint, then calls Portainer's proxied Docker restart
+ * endpoint. The control plane is never in the client bundle — this is a server action, not a
+ * route — and admin is re-checked here (defence in depth), not just hidden in the UI. AERIE
+ * never mounts the Docker socket; everything goes through the stored Portainer token.
+ *
+ * Throws a human-readable Error on any gap (no container name, no Portainer, ambiguous endpoint)
+ * so the Status view can surface it in a toast.
+ */
+export async function restartServiceContainer(serviceId: string): Promise<void> {
+  await requireAdmin();
+  const configs = await getServiceConfigs();
+  const target = configs.find((c) => c.id === serviceId);
+  if (!target) throw new Error("Service not found");
+  if (!target.containerName) throw new Error("No container name configured for this service");
+
+  // The Portainer instance: an active service carrying the portainer logo WITH a stored token
+  // (same gate as the snapshot's `portainerOn`, so the button and the action agree — a tokenless
+  // portainer-logo service sorted first never shadows a configured one).
+  const portainerCandidates = configs.filter((c) => c.active && configMatchesLogo(c, "portainer"));
+  let portainerCfg: (typeof portainerCandidates)[number] | undefined;
+  let token: string | null = null;
+  for (const c of portainerCandidates) {
+    const t = await getServiceSecret(c.id);
+    if (t) { portainerCfg = c; token = t; break; }
+  }
+  if (!portainerCfg || !token) {
+    throw new Error(portainerCandidates.length ? "Portainer API token is not set" : "Portainer is not configured");
+  }
+
+  // Resolve the endpoint: the service's pinned id, or auto-detect when the instance has exactly one.
+  let endpointId = target.portainerEndpointId?.trim() || "";
+  if (!endpointId) {
+    const endpoints = await portainerEndpoints(portainerCfg.id);
+    if (endpoints.length === 1) endpointId = String(endpoints[0].Id);
+    else throw new Error(endpoints.length === 0 ? "No Portainer endpoints found" : "Multiple Portainer endpoints — set the endpoint id on the service");
+  }
+
+  await portainerRestartContainer(portainerCfg.id, endpointId, target.containerName);
 }
 
 /**

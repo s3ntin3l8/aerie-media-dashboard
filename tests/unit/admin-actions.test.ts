@@ -13,6 +13,8 @@ vi.mock("@/lib/integrations/clients", () => ({
   overseerrUsers: vi.fn(),
   overseerrUpdateUserQuota: vi.fn(),
   matchOverseerrUserId: vi.fn(),
+  portainerEndpoints: vi.fn(),
+  portainerRestartContainer: vi.fn(),
 }));
 
 import { db, schema } from "@/lib/db/client";
@@ -25,7 +27,7 @@ import {
   upsertService, setServiceKeepAlive, setVisibility, setServiceSecret, setServiceForwardAuth, mergeServiceForwardAuth, clearServiceForwardAuth, setServiceActive,
   serviceExists, deleteService, detectServiceVersion, setMetricsSource, setQueueSource,
   setBeszelSystem, setPrometheusInstance, setUserOverseerrQuota,
-  dismissTraefikHost, restoreTraefikHost,
+  dismissTraefikHost, restoreTraefikHost, restartServiceContainer,
 } from "@/app/(portal)/admin/actions";
 
 const asAdmin = () => vi.mocked(getSessionUser).mockResolvedValue({ role: "admin" } as never);
@@ -245,5 +247,74 @@ describe("setUserOverseerrQuota", () => {
 
   it("throws when the portal user is unknown", async () => {
     await expect(setUserOverseerrQuota("missing", {} as never)).rejects.toThrow(/User not found/);
+  });
+});
+
+describe("restartServiceContainer", () => {
+  // Stand up a Portainer instance (logo + stored token) and a target service in the in-memory DB.
+  const seed = async (target: { containerName?: string | null; portainerEndpointId?: string | null }) => {
+    await upsertService({ id: "portainer", name: "Portainer", cat: "infra", icon: "dns", logoSlug: "portainer", host: "ptr.test" });
+    await setServiceSecret("portainer", "ptr_tok");
+    await upsertService({
+      id: "jellyfin", name: "Jellyfin", cat: "stream", icon: "dns", logoSlug: "jellyfin", host: "jf.test",
+      containerName: target.containerName ?? null, portainerEndpointId: target.portainerEndpointId ?? null,
+    });
+  };
+
+  it("rejects a non-admin (defence in depth)", async () => {
+    asUser();
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow("forbidden");
+  });
+
+  it("restarts via the pinned endpoint id", async () => {
+    asAdmin();
+    await seed({ containerName: "jellyfin", portainerEndpointId: "3" });
+    vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
+
+    await restartServiceContainer("jellyfin");
+
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "3", "jellyfin");
+    expect(C.portainerEndpoints).not.toHaveBeenCalled(); // no resolution needed when pinned
+  });
+
+  it("auto-resolves the endpoint when the instance has exactly one", async () => {
+    asAdmin();
+    await seed({ containerName: "jellyfin", portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 7, Name: "local" }] as never);
+    vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
+
+    await restartServiceContainer("jellyfin");
+
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "7", "jellyfin");
+  });
+
+  it("throws when multiple endpoints exist and none is pinned", async () => {
+    asAdmin();
+    await seed({ containerName: "jellyfin", portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 1, Name: "a" }, { Id: 2, Name: "b" }] as never);
+
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/Multiple Portainer endpoints/);
+    expect(C.portainerRestartContainer).not.toHaveBeenCalled();
+  });
+
+  it("throws when the service has no container name", async () => {
+    asAdmin();
+    await seed({ containerName: null });
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/No container name/);
+  });
+
+  it("throws when a Portainer instance exists but has no stored token", async () => {
+    asAdmin();
+    await seed({ containerName: "jellyfin", portainerEndpointId: "1" });
+    await setServiceSecret("portainer", ""); // clear the token
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/token is not set/);
+    expect(C.portainerRestartContainer).not.toHaveBeenCalled();
+  });
+
+  it("throws when no Portainer instance is configured at all", async () => {
+    asAdmin();
+    await deleteService("portainer");
+    await upsertService({ id: "jellyfin", name: "Jellyfin", cat: "stream", icon: "dns", logoSlug: "jellyfin", host: "jf.test", containerName: "jellyfin" });
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/Portainer is not configured/);
   });
 });

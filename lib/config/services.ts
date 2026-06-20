@@ -52,6 +52,10 @@ export const serviceSchema = z.object({
   monitoringKey: z.string().nullish(),
   /** optional LogQL stream selector for the admin Loki logs viewer (e.g. {container="sonarr"}). */
   lokiQuery: z.string().nullish(),
+  /** Docker/Portainer container name for the admin-only restart control (e.g. "jellyfin"). */
+  containerName: z.string().nullish(),
+  /** Portainer endpoint (environment) id the container lives on; omit to auto-resolve a single one. */
+  portainerEndpointId: z.string().nullish(),
 });
 
 export const fileSchema = z.object({

@@ -36,7 +36,7 @@ const isIconName = (s: string) => /^[a-z_]+$/.test(s);
 
 export function Admin() {
   const router = useRouter();
-  const { groups, visibility, adminGroup, lokiConfigured = false, allServices } = useData();
+  const { groups, visibility, adminGroup, lokiConfigured = false, portainerConfigured = false, allServices } = useData();
   const refresh = useRefresh();
   const patchData = usePatchData();
   const isMobile = useIsMobile();
@@ -111,6 +111,8 @@ export function Admin() {
       note: form.note || null,
       monitoringKey: form.monitoringKey || null,
       lokiQuery: form.lokiQuery || null,
+      containerName: form.containerName || null,
+      portainerEndpointId: form.portainerEndpointId || null,
       insecureTls: form.insecureTls,
     });
     // Only write the secret when the admin actually entered one (blank = keep).
@@ -137,8 +139,8 @@ export function Admin() {
 
     // Optimistically update the local snapshot so the service appears immediately.
     const optimisticService: Service = editing
-      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined, forwardAuthConfig: optimisticForwardAuth(form, svcModal!.service!.forwardAuthConfig) }
-      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined, status: "unknown", uptime: 0, ms: 0, beats: [] };
+      ? { ...svcModal!.service!, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || svcModal!.service!.version, note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined, containerName: form.containerName || undefined, portainerEndpointId: form.portainerEndpointId || undefined, canRestart: Boolean(form.containerName) && portainerConfigured, forwardAuthConfig: optimisticForwardAuth(form, svcModal!.service!.forwardAuthConfig) }
+      : { id, name: form.name.trim(), cat: form.cat as Service["cat"], icon: isIconName(form.icon) ? form.icon : "dns", logoSlug: form.logoSlug || undefined, host: form.host.trim(), scheme: form.scheme, internalUrl: internalUrl ?? undefined, insecureTls: form.insecureTls, embeddable: form.embeddable, keepAlive: form.keepAlive, active: form.active, central: form.central, centralLabel: form.central ? form.centralLabel || undefined : undefined, version: form.version || "", note: form.note || "", monitoringKey: form.monitoringKey || undefined, lokiQuery: form.lokiQuery || undefined, containerName: form.containerName || undefined, portainerEndpointId: form.portainerEndpointId || undefined, canRestart: Boolean(form.containerName) && portainerConfigured, status: "unknown", uptime: 0, ms: 0, beats: [] };
     // Dedupe by id: in add mode the service may already be in the snapshot from a prior
     // auto-save-on-Test, so replace rather than append (avoids a duplicate React key).
     patchData((s) => ({
@@ -242,6 +244,7 @@ export function Admin() {
           service={svcModal.service}
           prefill={svcModal.prefill}
           lokiConfigured={lokiConfigured}
+          portainerConfigured={portainerConfigured}
           groups={groups}
           adminGroup={adminGroup}
           initialVisibility={svcModal.mode === "edit" && svcModal.service ? visForService(svcModal.service.id) : addDefaults()}

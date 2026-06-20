@@ -76,7 +76,9 @@ export const SERVICE_PRESETS: Record<string, ServicePreset> = {
   // Loki: log aggregation. The HTTP API can run open or behind auth, so the secret is optional.
   // A stored value is sent as a Bearer token, or as HTTP Basic when it contains a ":" (user:pass).
   loki:          { cat: "monitor",    icon: "receipt_long",  logoSlug: "loki", secret: { kind: "apiKey", optional: true, label: "Auth token", hint: "optional — Bearer token, or user:password for Basic", placeholder: "token or user:password (optional)" } },
-  portainer:     { cat: "infra",      icon: "dns",           logoSlug: "portainer" },
+  // Portainer: container management. The stored apiKey is a Portainer access token (X-API-Key),
+  // used by the admin-only container-restart control (no Docker socket mounted into AERIE).
+  portainer:     { cat: "infra",      icon: "dns",           logoSlug: "portainer", secret: { kind: "apiKey", label: "API token", hint: "Portainer access token — Settings → My account → Access tokens", placeholder: "ptr_…" } },
   traefik:       { cat: "infra",      icon: "router",        logoSlug: "traefik", secret: { ...USERPASS_USER, optional: true } },
   // The traefik-dashboard-aggregator: one upstream that merges every Traefik node's /api into a
   // single /api/snapshot. A distinct logoSlug keeps it OUT of the per-instance "traefik" scrape;

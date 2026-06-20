@@ -2,9 +2,12 @@
 // ============================================================
 // AERIE — Status / uptime dashboard (Gatus + Prometheus)
 // ============================================================
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useTransition } from "react";
+import type { Service } from "@/lib/types";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useData } from "@/components/portal/DataProvider";
+import { useData, useRefresh } from "@/components/portal/DataProvider";
+import { restartServiceContainer } from "@/app/(portal)/admin/actions";
+import { Toast } from "@/components/modals/Toast";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
 import { Icon, Pill, Eyebrow, StatusDot, Heartbeat, Sparkline, ProgressBar, TRUNCATE, listDivider } from "@/components/primitives";
 import { PanelShell, timeAgo } from "@/components/panels";
@@ -28,9 +31,62 @@ function MetricCard({ title, value, unit, color, data }: { title: string; value:
   );
 }
 
+// Admin-only restart control for a Status row. Idle → one ghost restart icon; armed (two-click
+// confirm, since the repo has no confirm-modal pattern) → confirm + cancel; disabled while the
+// restart server action is in flight. Renders nothing when the service isn't restartable.
+function RestartCell({ service, armed, pending, onArm, onConfirm, onCancel }: {
+  service: Service;
+  armed: boolean;
+  pending: boolean;
+  onArm: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!service.canRestart) return null;
+  const iconBtn: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24,
+    borderRadius: 7, border: "1px solid var(--outline-variant)", background: "transparent", cursor: "pointer",
+  };
+  if (armed) {
+    return (
+      <div style={{ display: "flex", gap: 4 }}>
+        <button onClick={onConfirm} disabled={pending} style={{ ...iconBtn, borderColor: "color-mix(in srgb, var(--error) 45%, transparent)" }} title={`Restart ${service.name} container`}>
+          <Icon name="check" size={14} color="var(--error)" />
+        </button>
+        <button onClick={onCancel} disabled={pending} style={iconBtn} title="Cancel">
+          <Icon name="close" size={14} color="var(--on-surface-variant)" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button onClick={onArm} disabled={pending} style={iconBtn} title="Restart container">
+      <Icon name={pending ? "hourglass_empty" : "restart_alt"} size={15} color="var(--on-surface-variant)" />
+    </button>
+  );
+}
+
 export function Status() {
   const { role, keptAliveIds } = usePortal();
   const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured, beszelSystemId } = useData();
+  const refresh = useRefresh();
+  // Admin-only container restart: two-click confirm (armed row id) + transient toast feedback.
+  const [restartArmed, setRestartArmed] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [isRestarting, startRestart] = useTransition();
+  const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2600); };
+  const doRestart = (s: Service) => {
+    setRestartArmed(null);
+    startRestart(async () => {
+      try {
+        await restartServiceContainer(s.id);
+        refresh();
+        flash(`Restarting ${s.name}…`);
+      } catch (e) {
+        flash(e instanceof Error ? e.message : `Failed to restart ${s.name}`);
+      }
+    });
+  };
   const metricsAge = useSecondsAgo(metrics);
   const bothConfigured = prometheusConfigured && beszelConfigured;
   const sourceMeta = metricsSource === "beszel"
@@ -166,6 +222,20 @@ export function Status() {
                   <div style={{ flex: "0 0 46px", display: "flex", justifyContent: "flex-end" }}>
                     <KeepAliveCell service={s} live={keptAliveIds.includes(s.id)} reserve iconOnly />
                   </div>
+                  {/* Admin-only container restart (Portainer). Reserved 58px so admin rows stay
+                      aligned whether or not a given service is restartable. */}
+                  {role === "admin" && (
+                    <div style={{ flex: "0 0 58px", display: "flex", justifyContent: "flex-end" }}>
+                      <RestartCell
+                        service={s}
+                        armed={restartArmed === s.id}
+                        pending={isRestarting}
+                        onArm={() => setRestartArmed(s.id)}
+                        onConfirm={() => doRestart(s)}
+                        onCancel={() => setRestartArmed(null)}
+                      />
+                    </div>
+                  )}
                   {/* Always reserve this column (even when empty) so heartbeats stay aligned
                       across monitored and unmonitored rows. */}
                   <div style={{ flex: "0 0 70px", display: "flex", justifyContent: "flex-end" }} title="response time, last 30 checks">
@@ -319,6 +389,7 @@ export function Status() {
           )}
         </div>
       </div>
+      <Toast message={toast} />
     </section>
   );
 }
