@@ -168,6 +168,9 @@ export interface Snapshot {
   /** An active Loki source exists (by logo "loki") — drives whether Admin shows the per-service
    *  "Logs" button. The logs themselves are fetched on-demand (admin-only), never on the snapshot. */
   lokiConfigured: boolean;
+  /** An active Portainer instance has a stored token — drives whether the Admin edit form shows the
+   *  container-name / endpoint fields. Per-service restartability rides on each `Service.canRestart`. */
+  portainerConfigured: boolean;
 }
 
 export async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
@@ -299,6 +302,10 @@ export async function getSnapshot(): Promise<Snapshot> {
   // Loki: an active source (by logo "loki") gates the admin per-service "Logs" button. The log
   // tail is fetched on-demand via /api/loki/logs, so this is only a cheap config check (no network).
   const lokiOn = configs.some((c) => c.active && configMatchesLogo(c, "loki"));
+  // Portainer: an active service carrying the portainer logo WITH a stored token gates the
+  // admin-only container-restart control. Config-only presence check — no Portainer probe on
+  // the snapshot path (the endpoint-resolution call happens only at restart time).
+  const portainerOn = configs.some((c) => c.active && configMatchesLogo(c, "portainer") && apiKeySecrets.has(c.id));
   // Beszel can't run no-auth (PocketBase needs a token), so gate it on a stored
   // secret rather than config existence — an unconfigured row never goes live.
   const [ttOn, jfOn, absOn, osOn, sonarrOn, radarrOn, beszelOn, wizarrOn, prowlarrOn, agregarrOn, bazarrOn, nzbhydraOn, llOn, nzbgetOn, listenarrOn, qbitOn] = [
@@ -533,6 +540,10 @@ export async function getSnapshot(): Promise<Snapshot> {
     note: c.note ?? "",
     monitoringKey: c.monitoringKey ?? undefined,
     lokiQuery: c.lokiQuery ?? undefined,
+    containerName: c.containerName ?? undefined,
+    portainerEndpointId: c.portainerEndpointId ?? undefined,
+    // Restartable only when this service names a container AND a Portainer instance is configured.
+    canRestart: Boolean(c.containerName) && portainerOn,
     hasSecret: configuredIds.has(c.id),
     forwardAuthConfig: faConfigs.get(c.id),
     route: routeFor(c),
@@ -685,6 +696,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     traefikInstances: traefikInstancesScoped,
     authentikConfigured: authentikOn,
     lokiConfigured: lokiOn,
+    portainerConfigured: portainerOn,
   };
   lastSnapshot = snapshot;
   return snapshot;

@@ -52,6 +52,13 @@ export interface Service {
   monitoringKey?: string;
   /** optional LogQL stream selector for the admin Loki logs viewer; absent → inferred {container="<id>"} */
   lokiQuery?: string;
+  /** Docker/Portainer container name (admin-only config) for the restart control; absent → not set */
+  containerName?: string;
+  /** Portainer endpoint (environment) id the container lives on; absent → auto-resolve (admin-only config) */
+  portainerEndpointId?: string;
+  /** true → an admin can restart this service's container (container name set AND a Portainer
+   *  instance is configured). Drives the admin-only restart button's visibility in the Status view. */
+  canRestart?: boolean;
   /** true → an API key/credential is stored (encrypted) for this service. The secret value
    *  itself never leaves the server; only this boolean is surfaced (drives the Admin "configured"
    *  indicator). */

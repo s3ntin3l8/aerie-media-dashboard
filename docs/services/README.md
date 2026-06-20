@@ -21,6 +21,7 @@ Per-service setup for every upstream AERIE integrates with. Common rules apply t
 | [traefik.md](traefik.md) | Traefik (read-only route / SSO / TLS-cert insight) |
 | [traefik-aggregator.md](traefik-aggregator.md) | Traefik Dashboard Aggregator (one `/api/snapshot` source for the same insight) |
 | [authentik.md](authentik.md) | Authentik (read-only per-app group access) |
+| [portainer.md](portainer.md) | Portainer (admin-only container restart from System Status) |
 
 Related: [`../AUTH.md`](../AUTH.md) (signing in via OIDC / local admin) ·
 [`../EMBEDDING.md`](../EMBEDDING.md) (iframe embedding + forward-auth) ·

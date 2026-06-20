@@ -33,6 +33,8 @@ export interface ServiceForm {
   apiKey: string;
   monitoringKey: string;
   lokiQuery: string;
+  containerName: string;
+  portainerEndpointId: string;
   // Forward-auth (authentik) — auth THROUGH a reverse-proxy outpost. "" = keep current /
   // none, "remove" = clear stored config. The credential fields are blank-means-keep in
   // edit mode (like apiKey), serialized to a `forwardAuth`-kind secret by the Admin view.
@@ -107,6 +109,7 @@ export function ServiceModal({
   onTestSaved,
   prefill,
   lokiConfigured = false,
+  portainerConfigured = false,
 }: {
   open: boolean;
   mode: "add" | "edit";
@@ -115,6 +118,9 @@ export function ServiceModal({
   prefill?: Partial<ServiceForm>;
   /** True when an active Loki source exists → show the optional per-service log selector field. */
   lokiConfigured?: boolean;
+  /** True when a Portainer instance is configured → show the optional container-name / endpoint
+   *  fields that enable the admin-only restart control for this service. */
+  portainerConfigured?: boolean;
   groups: { name: string }[];
   adminGroup: string;
   initialVisibility: Record<string, boolean>;
@@ -151,6 +157,8 @@ export function ServiceModal({
     apiKey: "",
     monitoringKey: "",
     lokiQuery: "",
+    containerName: "",
+    portainerEndpointId: "",
     forwardAuthMethod: "",
     forwardAuthTokenUrl: "",
     forwardAuthClientId: "",
@@ -192,6 +200,8 @@ export function ServiceModal({
         apiKey: "", // blank = keep existing secret (never pre-fill it)
         monitoringKey: service.monitoringKey ?? "",
         lokiQuery: service.lokiQuery ?? "",
+        containerName: service.containerName ?? "",
+        portainerEndpointId: service.portainerEndpointId ?? "",
         forwardAuthMethod: fa?.method ?? "",
         forwardAuthTokenUrl: fa?.tokenUrl ?? "",
         forwardAuthClientId: fa?.clientId ?? "",
@@ -422,6 +432,28 @@ export function ServiceModal({
                   placeholder={`{container="${(editing ? service?.id : f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")) || "service"}"}`}
                 />
               </Field>
+            )}
+            {portainerConfigured && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: 12 }}>
+                <Field label="Container name" hint="optional — enables the admin restart control">
+                  <input
+                    className="input"
+                    style={{ ...fieldInput, fontFamily: "var(--font-mono)" }}
+                    value={f.containerName}
+                    onChange={(e) => set("containerName", e.target.value)}
+                    placeholder="e.g. jellyfin"
+                  />
+                </Field>
+                <Field label="Endpoint id" hint="Portainer env">
+                  <input
+                    className="input"
+                    style={{ ...fieldInput, fontFamily: "var(--font-mono)" }}
+                    value={f.portainerEndpointId}
+                    onChange={(e) => set("portainerEndpointId", e.target.value)}
+                    placeholder="auto"
+                  />
+                </Field>
+              </div>
             )}
           </div>
         </section>

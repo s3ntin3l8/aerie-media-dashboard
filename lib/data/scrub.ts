@@ -51,6 +51,7 @@ export function scrubForMember(s: Snapshot): Snapshot {
     prometheusConfigured: false,
     beszelConfigured: false,
     lokiConfigured: false,
+    portainerConfigured: false,
     arrQueueConfigured: false,
     nzbgetConfigured: false,
     nzbgetStatus: null,
@@ -94,6 +95,7 @@ function stripServiceForMember(s: Service): Service {
     note: s.note,
     route: s.route,
     // Omitted (admin-only): internalUrl, insecureTls, monitoringKey,
-    // lokiQuery, hasSecret, forwardAuthConfig, authentik
+    // lokiQuery, containerName, portainerEndpointId, canRestart, hasSecret,
+    // forwardAuthConfig, authentik
   };
 }
