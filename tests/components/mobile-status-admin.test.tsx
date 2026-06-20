@@ -18,6 +18,7 @@ const portal: { role: string; keptAliveIds: string[]; favorites: string[]; toggl
 };
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
 
+import { fireEvent } from "@testing-library/react";
 import { useData } from "@/components/portal/DataProvider";
 import { MobileServices } from "@/components/mobile/screens/MobileServices";
 
@@ -95,5 +96,35 @@ describe("MobileServices — admin metrics + averages", () => {
     expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
     expect(screen.queryByText("Service Warnings")).not.toBeInTheDocument();
     expect(screen.queryByText("Filesystems")).not.toBeInTheDocument();
+  });
+});
+
+describe("MobileServices — browse interactions", () => {
+  it("filters the service list when the search input changes", () => {
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    const input = screen.getByPlaceholderText("Filter services…");
+    fireEvent.change(input, { target: { value: "Bravo" } });
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.getByText("Bravo")).toBeInTheDocument();
+  });
+
+  it("calls onOpen with the service when a card is clicked", () => {
+    const onOpen = vi.fn();
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={onOpen} />);
+    fireEvent.click(screen.getByText("Alpha").closest("[class*='card']") ?? screen.getByText("Alpha"));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("pin button calls toggleFavorite without triggering card open", () => {
+    const onOpen = vi.fn();
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={onOpen} />);
+    const pinBtn = screen.getAllByTitle("Pin to favorites")[0];
+    fireEvent.click(pinBtn);
+    expect(portal.toggleFavorite).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
   });
 });
