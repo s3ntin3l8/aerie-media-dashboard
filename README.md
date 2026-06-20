@@ -45,7 +45,10 @@ Built with **Next.js (App Router, TypeScript)**.
    data; services without a key show an empty state until configured. Per-service setup
    (credential format, what each surfaces) is documented in [`docs/services/`](docs/services/README.md).
 4. Deploy with `docker compose up -d` behind Traefik; apply the embed + forward-auth
-   middlewares to embeddable services (see `docs/EMBEDDING.md`).
+   middlewares to embeddable services (see `docs/EMBEDDING.md`). For an internet-facing
+   deployment, follow [`docker-compose.traefik.example.yml`](docker-compose.traefik.example.yml)
+   — the security-reviewed reference topology (proxy-network-only, HTTPS + HSTS, OIDC,
+   X-Forwarded-For hygiene).
 
 ### Host metrics: Prometheus or Beszel
 

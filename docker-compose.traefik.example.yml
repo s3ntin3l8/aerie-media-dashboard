@@ -1,0 +1,93 @@
+# ============================================================
+# AERIE — reference internet-exposure deployment (Traefik + OIDC)
+#
+# This is the *canonical, security-reviewed* topology for exposing AERIE to the
+# internet behind an existing Traefik + an OIDC provider (e.g. Authentik). It is
+# a documentation artifact: copy the relevant bits into your own compose, or run
+#   docker compose -f docker-compose.traefik.example.yml up -d
+# after filling in .env. Every choice below is load-bearing — read the comments
+# before changing one.
+#
+# Secure-by-default invariants this file encodes:
+#   1. NO host `ports:` mapping. The container is reachable ONLY via the `proxy`
+#      network through Traefik. Publishing 3000 to the host would let clients
+#      bypass Traefik (and therefore TLS, OIDC, HSTS, and X-Forwarded-For
+#      sanitisation) entirely — never add a `ports:` block here.
+#   2. `websecure` entrypoint + a TLS cert resolver → HTTPS only.
+#   3. `aerie-hsts` middleware → browsers pin HTTPS (HSTS).
+#   4. `aerie-embed` middleware → controls who may iframe the portal/services.
+#   5. AUTH_URL / AUTH_TRUST_HOST pin the public origin so OIDC callbacks work
+#      behind the proxy (otherwise Auth.js mis-detects the container's host).
+# ============================================================
+services:
+  aerie:
+    image: ghcr.io/s3ntin3l8/aerie:latest
+    restart: unless-stopped
+    env_file: .env # AUTH_SECRET, ENCRYPTION_KEY, OIDC_* — see .env.example
+    # Run as the host owner of ./data so the bind-mounted SQLite DB is writable.
+    user: "${AERIE_UID:-1000}:${AERIE_GID:-1000}"
+    environment:
+      AERIE_PORTAL_URL: ${AERIE_PORTAL_URL:-https://aerie.example.com}
+      DATABASE_URL: file:/app/data/aerie.db
+      # Pin the public origin. Behind a reverse proxy Auth.js otherwise builds OIDC
+      # callback URLs from the container's internal 0.0.0.0:3000 and the login loop
+      # breaks. AUTH_TRUST_HOST lets it honour the X-Forwarded-* set by Traefik.
+      AUTH_URL: ${AUTH_URL:-${AERIE_PORTAL_URL:-https://aerie.example.com}}
+      AUTH_TRUST_HOST: "true"
+    volumes:
+      - ${AERIE_DATA_DIR:-./data}:/app/data
+    # Proxy network ONLY — no `ports:` (see invariant #1 above).
+    networks: [proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.aerie.rule=Host(`${AERIE_DOMAIN:-aerie.example.com}`)
+      - traefik.http.routers.aerie.entrypoints=websecure
+      - traefik.http.routers.aerie.tls.certresolver=${AERIE_CERT_RESOLVER:-le}
+      # Attach HSTS to the portal router. AERIE authenticates via OIDC itself, so
+      # forward-auth in front of the portal is optional (and would double-prompt).
+      - traefik.http.routers.aerie.middlewares=aerie-hsts@docker
+      - traefik.http.services.aerie.loadbalancer.server.port=3000
+
+      # ── HSTS: only ever reach the portal over HTTPS ──
+      - traefik.http.middlewares.aerie-hsts.headers.stsSeconds=31536000
+      - traefik.http.middlewares.aerie-hsts.headers.stsIncludeSubdomains=true
+      # `stsPreload=true` is opt-in: only enable once you intend to submit the
+      # domain to the HSTS preload list (hard to undo). Safe to drop otherwise.
+      - traefik.http.middlewares.aerie-hsts.headers.stsPreload=true
+
+      # ── Embedding: allow framing only from the portal origin (replaces the
+      #    app's X-Frame-Options/CSP frame-ancestors for embeddable services).
+      #    Attach `aerie-embed@docker` to the routers of services you iframe. ──
+      - traefik.http.middlewares.aerie-embed.headers.contentSecurityPolicy=frame-ancestors ${AERIE_PORTAL_URL:-https://aerie.example.com}
+      - traefik.http.middlewares.aerie-embed.headers.customResponseHeaders.X-Frame-Options=
+
+networks:
+  proxy:
+    external: true
+
+# ============================================================
+# X-Forwarded-For / trustedIPs — a Traefik *entrypoint* setting (static config,
+# not a compose label). AERIE's brute-force limiter keys on X-Forwarded-For, so
+# a forged header could otherwise dodge the per-IP lockout.
+#
+# Traefik already defends this: it only TRUSTS an inbound X-Forwarded-For when
+# the request's real TCP peer is in `forwardedHeaders.trustedIPs`; for any other
+# (i.e. internet) source it OVERWRITES the header with the real client IP. So the
+# invariant is simply: keep trustedIPs scoped to your real upstream and never set
+#   forwardedHeaders.insecure: true   or   trustedIPs: ["0.0.0.0/0"]
+# Example static config (traefik.yml):
+#   entryPoints:
+#     websecure:
+#       address: ":443"
+#       forwardedHeaders:
+#         trustedIPs: ["127.0.0.1/32", "10.0.0.0/8"]   # your LB/proxy CIDR only
+#
+# Note: this rate limiter only runs under LOCAL-CREDENTIALS auth mode. With OIDC
+# (Authentik) configured, the Credentials provider is inactive, so the concern is
+# moot for an OIDC deployment — but the trustedIPs hygiene is still good practice.
+#
+# Also keep AUTH_SECRET and ENCRYPTION_KEY STABLE across restarts: rotating
+# AUTH_SECRET invalidates all sessions; rotating ENCRYPTION_KEY makes every
+# stored service API key undecryptable (you'd have to re-enter them).
+# ============================================================

@@ -196,9 +196,10 @@ throws). See `config/aerie.example.yaml`.
 ### Secrets (`lib/crypto.ts`)
 
 Service API keys are encrypted at rest with **AES-256-GCM** keyed by `ENCRYPTION_KEY`
-(32-byte hex/base64, or any string stretched via sha256). There's an insecure dev fallback key
-so the app runs unconfigured. `encrypt()`/`decrypt()` produce/consume `{iv, authTag, ciphertext}`
-stored in `service_secrets`.
+(32-byte hex/base64, or any string stretched via sha256). The key is **required**: `key()` in
+`lib/crypto.ts` throws if `ENCRYPTION_KEY` is unset — there is no insecure fallback, so a
+misconfigured deployment fails closed rather than encrypting with a weak default.
+`encrypt()`/`decrypt()` produce/consume `{iv, authTag, ciphertext}` stored in `service_secrets`.
 
 ### Frontend (`app/`, `components/`, `styles/`)
 

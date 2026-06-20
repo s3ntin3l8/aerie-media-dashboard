@@ -81,11 +81,15 @@ describe("proxy middleware — security response headers", () => {
   it.each([
     ["authenticated pass-through", () => run("/", { user: { role: "user" } })],
     ["public /login (unauthenticated)", () => run("/login", null)],
-  ] as const)("sets all four headers on %s", (_label, getRes) => {
+  ] as const)("sets the full header set on %s", (_label, getRes) => {
     const res = getRes();
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
     expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
     expect(res.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
+    // Baseline CSP: hardens object/base/frame-ancestors without constraining iframe embedding.
+    expect(res.headers.get("content-security-policy")).toBe(
+      "object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
+    );
   });
 });

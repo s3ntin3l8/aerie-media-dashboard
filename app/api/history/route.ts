@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { getSessionUser } from "@/lib/session";
 import { tautulliStreamHistory } from "@/lib/integrations/clients";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // Real auth gate: getSessionUser() never returns null (it falls back to a guest), so it can't
+  // be used as the auth signal. Check the live session first, then resolve the normalized user.
+  const session = await auth();
+  if (!session?.user) return new NextResponse("Unauthorized", { status: 401 });
   const user = await getSessionUser();
-  if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   let history = await tautulliStreamHistory();
 
