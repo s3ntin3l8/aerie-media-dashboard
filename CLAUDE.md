@@ -20,7 +20,7 @@ Two principles drive the data path:
 
 ```bash
 npm install         # also installs Husky git hooks via the "prepare" script
-npm run dev         # dev server at http://localhost:3001 (mock mode, no config needed)
+npm run dev         # dev server at http://localhost:3001 (runs unconfigured — panels show empty states until secrets are set)
 npm run build       # production build (this is what CI gates on)
 npm run start       # serve the production build
 npm run lint        # eslint
@@ -47,8 +47,9 @@ check which changed lines are uncovered with `npm run test:coverage` and inspect
 `import "server-only"`, so component tests that transitively pull in a server action/`lib/db`
 must `vi.mock` that module (grep existing `tests/components/*.test.tsx` for the pattern).
 
-Migrations normally don't need to be run by hand: `lib/db/bootstrap.ts` lazily applies them
-and seeds from mock data on first DB use (`ensureDb()`), so a fresh deployment self-bootstraps.
+Migrations normally don't need to be run by hand: `lib/db/bootstrap.ts` lazily applies them,
+applies the optional config file, then seeds the minimal structural defaults (visibility groups)
+on first DB use (`ensureDb()`), so a fresh deployment self-bootstraps.
 Only run `db:generate` when you change `lib/db/schema.ts`.
 
 ## Quality gates (enforced, not optional)
@@ -105,7 +106,7 @@ OIDC config lives here too (`oidcProviderId/Name/Icon`, `oidcScopes`, `oidcGroup
   `actions.ts` has `signInWithPassword` and `createInitialAdmin` (the latter guarded: only when
   `!authConfigured` and no admin exists). Registry helpers: `getUserByEmail`, `localAdminExists`,
   `createLocalAdmin`.
-- `proxy.ts` — middleware route protection. Auth is **always** required: redirects
+- `middleware.ts` — route protection (Next.js middleware). Auth is **always** required: redirects
   unauthenticated requests to `/login` (except `/login` + `/api/auth`) and blocks non-admins from
   `/admin` (defence in depth; also re-checked in the page).
 - `lib/session.ts` — `getSessionUser()` is the server-side entry point. Always reads the real
@@ -128,16 +129,18 @@ OIDC config lives here too (`oidcProviderId/Name/Icon`, `oidcScopes`, `oidcGroup
 4. `app/api/snapshot/route.ts` — re-runs `getSnapshot()` for the polling feed.
 
 When adding a new data source: add a client in `lib/integrations/clients.ts`, wire it into
-`getSnapshot()` behind a `has(serviceId)` secret check with a mock fallback, and surface it
-on the `Snapshot` type.
+`getSnapshot()` behind a `has(serviceId)` secret check (returning an empty result — never a mock —
+when unconfigured), and surface it on the `Snapshot` type.
 
 ### Integrations layer (`lib/integrations/`)
 
 - `http.ts` — `fetchJson()`: every upstream call goes through this bounded-timeout (5s),
   `cache: "no-store"` fetch that throws a typed `IntegrationError`. Use it for all upstream
   HTTP so the facade can degrade per-panel.
-- `clients.ts` — one normalizing function per upstream (Gatus, Tautulli, Jellyfin, Audiobookshelf,
-  Overseerr, Sonarr/Radarr (and the Lidarr/Readarr/Whisparr *arr family), Prowlarr, Bazarr,
+- `clients.ts` — one normalizing function per upstream (Gatus, Tautulli, Plex (library/butler
+  maintenance actions), Jellyfin, Audiobookshelf,
+  Overseerr, Sonarr/Radarr (the *arr data client — `arrGet` is typed to these two; Lidarr/Readarr/
+  Whisparr ship as launcher presets in `servicePresets.ts` but have no live-data client), Prowlarr, Bazarr,
   NZBHydra2, Listenarr, LazyLibrarian, NZBGet, qBittorrent, Wizarr, Agregarr, Prometheus, Beszel,
   Loki, plus the read-only **Traefik** and **Authentik** insight clients).
   They **throw** on missing config/errors; the facade catches.
@@ -184,12 +187,12 @@ on the `Snapshot` type.
 
 ### Declarative config file (`lib/config/`, optional)
 
-A third config source beside the mock seed and the Admin UI: a YAML file (default
+A third config source beside the seeded defaults and the Admin UI: a YAML file (default
 `./config/aerie.yaml`, overridable via `AERIE_CONFIG_FILE`) can declare services, visibility
 and secrets so a deployment is provisioned without clicking through the UI. `services.ts`
 loads + validates it (zod) and resolves `${ENV_VAR}` secret references from `process.env`;
 `apply.ts` reconciles it into the DB at bootstrap. It's **gap-fill only** — every insert uses
-`onConflictDoNothing`, so existing rows (mock seed or UI edits) always win and the apply is
+`onConflictDoNothing`, so existing rows (seeded defaults or UI edits) always win and the apply is
 idempotent across reboots. A missing/malformed file degrades gracefully (logs a warning, never
 throws). See `config/aerie.example.yaml`.
 
@@ -225,7 +228,7 @@ misconfigured deployment fails closed rather than encrypting with a weak default
 ### Domain types
 
 `lib/types.ts` is the shared domain vocabulary (`Service`, `NowPlaying`, `MediaRequest`,
-`User`, `Category`, `ServiceStatus`, etc.). Reuse these; the facade and mock data both conform.
+`User`, `Category`, `ServiceStatus`, etc.). Reuse these; the data facade conforms to them.
 
 ## Conventions
 

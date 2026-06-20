@@ -55,7 +55,8 @@ never overwrites a row you've already configured through the Admin UI.
 
 ## How it works
 
-The integration lives in `lib/integrations/clients.ts`:
+The integration lives in `lib/integrations/clients/monitoring.ts` (re-exported via the
+`lib/integrations/clients.ts` barrel):
 
 ```
 prometheusQuery(query: string) → Promise<number | null>

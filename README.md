@@ -34,7 +34,7 @@ Built with **Next.js (App Router, TypeScript)**.
 | Embedding | Real `<iframe>` + Traefik `frame-ancestors` middleware + OIDC forward-auth (`docs/EMBEDDING.md`) |
 | Admin | Add/edit/remove **service modal** (wired to `upsertService`/`setServiceSecret`/`deleteService`), persisted visibility matrix |
 | Requests | **Request modal** (member discover→confirm→submit) + **review modal** (admin approve/decline); real Overseerr search/create/review when configured |
-| Deploy | Standalone Dockerfile + `docker-compose.yml` behind Traefik; `.env.example` |
+| Deploy | Standalone Dockerfile + `docker-compose.yml` behind Traefik (`docker-compose.traefik.example.yml` is the security-reviewed internet-facing reference); `.env.example` |
 
 ## Configure for production
 
