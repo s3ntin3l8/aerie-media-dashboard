@@ -30,6 +30,7 @@ type ServiceKind =
   | "lazylibrarian" // /api?cmd=getVersion&apikey= → current_version (short SHA); always HTTP 200
   | "listenarr" // own /api/v1 (NOT the shared *arr API) — X-Api-Key; /system/info → version
   | "authentik" // /api/v3/admin/version/ (Bearer) → version_current; admin-namespaced ⇒ superuser check
+  | "portainer" // /api/system/version (X-API-Key) → ServerVersion; auth-gated ⇒ doubles as the connection test
   | "plex"; // /identity (no auth needed) → MediaContainer.version
 
 function serviceKind(id: string): ServiceKind | null {
@@ -50,6 +51,7 @@ function serviceKind(id: string): ServiceKind | null {
   if (l.includes("sonarr") || l.includes("radarr") || l.includes("whisparr")) return "arr";
   if (l.includes("tautulli")) return "tautulli";
   if (l.includes("authentik")) return "authentik";
+  if (l.includes("portainer")) return "portainer";
   if (l.includes("prometheus")) return "prometheus";
   if (l.includes("gatus")) return "gatus";
   if (l.includes("beszel")) return "beszel";
@@ -272,6 +274,15 @@ async function fetchServiceVersion(serviceId: string, base: string, apiKey: stri
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     });
     return normalizeVersion(d.version_current);
+  }
+  if (kind === "portainer") {
+    // /api/system/version is auth-gated (X-API-Key), so a 200 confirms the access token is valid
+    // AND returns ServerVersion — it doubles as the connection test for the restart feature.
+    const d = await afetchJson<{ ServerVersion?: string }>(`${b}/api/system/version`, {
+      service: "version-detect",
+      headers: apiKey ? { "X-API-Key": apiKey } : {},
+    });
+    return normalizeVersion(d.ServerVersion) ?? "";
   }
   if (kind === "plex") {
     // /identity is unauthenticated and returns the server version as JSON (Accept: application/json
