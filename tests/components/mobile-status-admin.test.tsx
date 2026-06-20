@@ -52,6 +52,7 @@ const baseSnap = {
 
 beforeEach(() => {
   portal.role = "admin";
+  portal.favorites = [];
   vi.stubGlobal("fetch", vi.fn(async () => ({ json: async () => [] })) as never);
 });
 
@@ -97,6 +98,32 @@ describe("MobileServices — admin metrics + averages", () => {
     expect(screen.queryByText("Service Warnings")).not.toBeInTheDocument();
     expect(screen.queryByText("Filesystems")).not.toBeInTheDocument();
   });
+
+  it("shows 'Beszel Metrics' heading when metricsSource is beszel", () => {
+    vi.mocked(useData).mockReturnValue({ ...baseSnap, metricsSource: "beszel" } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("Beszel Metrics")).toBeInTheDocument();
+  });
+
+  it("shows error icon and 'docs →' link for arrHealth entries with type error and wikiUrl", () => {
+    vi.mocked(useData).mockReturnValue({
+      ...baseSnap,
+      arrHealth: [
+        { svc: "radarr", type: "error", message: "Database error", wikiUrl: "https://wiki.example.com/radarr" },
+        { svc: "sonarr", type: "warning", message: "Indexer unavailable" },
+      ],
+    } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("docs →")).toBeInTheDocument();
+    expect(screen.getByText("Database error")).toBeInTheDocument();
+    expect(screen.getByText("Indexer unavailable")).toBeInTheDocument();
+  });
+
+  it("shows 'No services configured.' when there are no services", () => {
+    vi.mocked(useData).mockReturnValue({ ...baseSnap, services: [] } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("No services configured.")).toBeInTheDocument();
+  });
 });
 
 describe("MobileServices — browse interactions", () => {
@@ -126,5 +153,38 @@ describe("MobileServices — browse interactions", () => {
     fireEvent.click(pinBtn);
     expect(portal.toggleFavorite).toHaveBeenCalledTimes(1);
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("shows 'Unpin' title on the pin button for a service already in favorites", () => {
+    portal.favorites = ["a"];
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByTitle("Unpin")).toBeInTheDocument();
+  });
+
+  it("renders the service note when a service has one", () => {
+    vi.mocked(useData).mockReturnValue({
+      ...baseSnap,
+      services: [svc({ id: "a", name: "Alpha", note: "important note" })],
+    } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("important note")).toBeInTheDocument();
+  });
+
+  it("shows 'No services match.' when the search filter produces no results", () => {
+    vi.mocked(useData).mockReturnValue(baseSnap as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    const input = screen.getByPlaceholderText("Filter services…");
+    fireEvent.change(input, { target: { value: "zzz" } });
+    expect(screen.getByText("No services match.")).toBeInTheDocument();
+  });
+
+  it("shows the service status text for a down service (neither up nor unknown)", () => {
+    vi.mocked(useData).mockReturnValue({
+      ...baseSnap,
+      services: [svc({ id: "a", name: "Alpha", status: "down", uptime: 0, ms: 0 })],
+    } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText("down")).toBeInTheDocument();
   });
 });

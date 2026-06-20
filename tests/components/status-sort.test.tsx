@@ -100,3 +100,24 @@ describe("Status (merged Services) — layout and search", () => {
     expect(screen.getByText("Streaming")).toBeInTheDocument();
   });
 });
+
+describe("Status — operational status pill", () => {
+  it("shows 'No data' pill and 'No services available' empty state when there are no services", () => {
+    vi.mocked(useData).mockReturnValue(snap([]) as never);
+    render(<Status />);
+    expect(screen.getByText("No data")).toBeInTheDocument();
+    expect(screen.getByText("No services available")).toBeInTheDocument();
+  });
+
+  it("shows 'Incident' pill when at least one service is down", () => {
+    vi.mocked(useData).mockReturnValue(snap([mkSvc({ status: "down" })]) as never);
+    render(<Status />);
+    expect(screen.getByText("Incident")).toBeInTheDocument();
+  });
+
+  it("shows 'Degraded' pill when a service is degraded but none are down", () => {
+    vi.mocked(useData).mockReturnValue(snap([mkSvc({ status: "degraded" })]) as never);
+    render(<Status />);
+    expect(screen.getByText("Degraded")).toBeInTheDocument();
+  });
+});

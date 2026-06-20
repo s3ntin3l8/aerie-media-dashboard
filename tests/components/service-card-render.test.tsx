@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePat
 // ServiceCard transitively pulls in server actions via panels; stub the module for jsdom.
 vi.mock("@/app/(portal)/admin/actions", () => ({ setQueueSource: vi.fn() }));
 
-const portal = {
+const portal: { role: string; favorites: string[]; toggleFavorite: ReturnType<typeof vi.fn>; keptAliveIds: string[]; user: object; oidc: boolean } = {
   role: "admin", user: { name: "Ada", email: "a@x" }, oidc: true,
   favorites: [], toggleFavorite: vi.fn(), keptAliveIds: ["sonarr"],
 };
@@ -114,5 +114,19 @@ describe("ServiceCard", () => {
     // The outer card div is the clickable area; click it directly.
     fireEvent.click(container.firstChild as HTMLElement);
     expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("pin button shows 'Unpin from rail' and star icon when service is pinned", () => {
+    portal.favorites = ["sonarr"];
+    render(<ServiceCard s={sonarr} onOpen={vi.fn()} />);
+    expect(screen.getByTitle("Unpin from rail")).toBeInTheDocument();
+  });
+
+  it("mouseLeave on the pin button keeps opacity at 1 when the service is pinned", () => {
+    portal.favorites = ["sonarr"];
+    render(<ServiceCard s={sonarr} onOpen={vi.fn()} />);
+    const pinBtn = screen.getByTitle("Unpin from rail");
+    fireEvent.mouseLeave(pinBtn);
+    expect(pinBtn.style.opacity).toBe("1");
   });
 });
