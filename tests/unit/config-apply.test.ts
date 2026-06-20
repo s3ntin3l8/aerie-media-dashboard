@@ -33,6 +33,22 @@ describe("applyServiceConfig", () => {
     expect(svc).toMatchObject({ id: "sonarr", baseUrl: "https://sonarr.lan", embeddable: false, active: true, sortOrder: 0 });
   });
 
+  it("maps the Portainer restart fields (containerName, portainerEndpointId)", async () => {
+    const { db, valuesFor } = fakeDb();
+    await applyServiceConfig(db as never, { services: [
+      { ...baseService, containerName: "sonarr", portainerEndpointId: "2" },
+    ] } as never);
+    const svc = (valuesFor(schema.services) as Record<string, unknown>[])[0];
+    expect(svc).toMatchObject({ containerName: "sonarr", portainerEndpointId: "2" });
+  });
+
+  it("defaults the Portainer restart fields to null when omitted", async () => {
+    const { db, valuesFor } = fakeDb();
+    await applyServiceConfig(db as never, { services: [baseService] } as never);
+    const svc = (valuesFor(schema.services) as Record<string, unknown>[])[0];
+    expect(svc).toMatchObject({ containerName: null, portainerEndpointId: null });
+  });
+
   it("continues sortOrder after services already present in the DB", async () => {
     const { db, valuesFor } = fakeDb([{ id: "radarr" }, { id: "plex" }]);
     await applyServiceConfig(db as never, { services: [baseService] } as never);
