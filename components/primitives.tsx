@@ -264,9 +264,10 @@ export function StatusDot({ status = "up", size = 8 }: { status?: ServiceStatus;
 }
 
 // Heartbeat bars (Gatus-style) — array of 1=up / 0.5=degraded / 0=down / -1=no data
-export function Heartbeat({ beats, h = 22, barW = 4, gap = 2 }: { beats: number[]; h?: number; barW?: number; gap?: number }) {
+// fluid=true: bars stretch to fill the parent container (use inside a flex: 1 div)
+export function Heartbeat({ beats, h = 22, barW = 4, gap = 2, fluid = false }: { beats: number[]; h?: number; barW?: number; gap?: number; fluid?: boolean }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "flex-end", gap }}>
+    <span style={{ display: fluid ? "flex" : "inline-flex", alignItems: "flex-end", gap, ...(fluid ? { width: "100%" } : {}) }}>
       {beats.map((b, i) => {
         const col = b === 0 ? "var(--error)" : b === 0.5 ? "var(--amber)" : b < 0 ? "var(--on-surface-variant)" : "var(--originator-own)";
         return (
@@ -274,7 +275,7 @@ export function Heartbeat({ beats, h = 22, barW = 4, gap = 2 }: { beats: number[
             key={i}
             title={b < 0 ? "no data" : b === 0 ? "down" : b === 0.5 ? "degraded" : "up"}
             style={{
-              width: barW,
+              ...(fluid ? { flex: 1, minWidth: 0 } : { width: barW }),
               height: b === 0 ? h : b === 0.5 ? h * 0.62 : b < 0 ? Math.max(3, h * 0.28) : h,
               background: col,
               opacity: b < 0 ? 0.4 : b === 0 ? 0.9 : 0.85,
