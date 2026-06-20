@@ -58,9 +58,10 @@ beforeEach(() => {
 });
 
 describe("view smoke renders", () => {
-  it("Status renders the health header, a service row and metric cards", () => {
+  it("Status (merged Services) renders the header, a service card and admin metric cards", () => {
     render(<Status />);
-    expect(screen.getByText("System Status")).toBeInTheDocument();
+    // The merged view is now titled "Services" (not "System Status").
+    expect(screen.getByText("Services")).toBeInTheDocument();
     expect(screen.getByText("Sonarr")).toBeInTheDocument();
     expect(screen.getByText("CPU load")).toBeInTheDocument();
     expect(screen.getByText("Indexer slow")).toBeInTheDocument(); // arr warnings panel

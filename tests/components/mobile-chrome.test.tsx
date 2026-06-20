@@ -46,6 +46,8 @@ vi.mock("@/components/portal/DataProvider", () => ({ useData: () => snap }));
 vi.mock("@/components/mobile/screens/MobileDashboard", () => ({ MobileDashboard: () => <div data-testid="screen-dashboard" /> }));
 vi.mock("@/components/mobile/screens/MobileStreams", () => ({ MobileStreams: () => <div data-testid="screen-streams" /> }));
 vi.mock("@/components/mobile/screens/MobileRequests", () => ({ MobileRequests: () => <div data-testid="screen-requests" /> }));
+// MobileStatus is no longer routed from MobilePortal (merged into MobileServices); mock kept so
+// mobile-screens-render.test.tsx still compiles without dep changes.
 vi.mock("@/components/mobile/screens/MobileStatus", () => ({ MobileStatus: () => <div data-testid="screen-status" /> }));
 vi.mock("@/components/mobile/screens/MobileServices", () => ({ MobileServices: () => <div data-testid="screen-services" /> }));
 vi.mock("@/components/mobile/screens/MobileAdmin", () => ({ MobileAdmin: () => <div data-testid="screen-mobile-admin" /> }));
@@ -101,13 +103,14 @@ describe("MobileAppBar", () => {
 // ── MobileNav ─────────────────────────────────────────────────────────────────
 
 describe("MobileNav", () => {
-  it("renders Dashboard, Streams, Services, My Requests, Status nav items", () => {
+  it("renders Dashboard, Streams, Services, My Requests nav items (Status merged into Services)", () => {
     render(<MobileNav />);
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Streams")).toBeInTheDocument();
     expect(screen.getByText("Services")).toBeInTheDocument();
     expect(screen.getByText("My Requests")).toBeInTheDocument();
-    expect(screen.getByText("Status")).toBeInTheDocument();
+    // "Status" no longer exists as a separate nav item — merged into "Services".
+    expect(screen.queryByText("Status")).not.toBeInTheDocument();
   });
 
   it("does not render the Admin item (adminOnly, filtered out of MOBILE_NAV_ITEMS)", () => {
@@ -154,13 +157,15 @@ describe("MobilePortal", () => {
     expect(screen.getByTestId("screen-requests")).toBeInTheDocument();
   });
 
-  it("renders the Status screen at '/status'", () => {
+  it("renders the merged Services screen (MobileServices) at '/status'", () => {
+    // /status now routes to the merged Services screen (browse + health).
     mockPathname.mockReturnValue("/status");
     render(<MobilePortal />);
-    expect(screen.getByTestId("screen-status")).toBeInTheDocument();
+    expect(screen.getByTestId("screen-services")).toBeInTheDocument();
   });
 
-  it("renders the Services screen at '/services'", () => {
+  it("renders the Services screen at legacy '/services' path too", () => {
+    // /services server-redirects to /status; the client-side fallback renders MobileServices.
     mockPathname.mockReturnValue("/services");
     render(<MobilePortal />);
     expect(screen.getByTestId("screen-services")).toBeInTheDocument();

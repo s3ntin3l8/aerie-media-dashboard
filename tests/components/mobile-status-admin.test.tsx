@@ -3,19 +3,23 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 import type { NodeMetrics } from "@/lib/integrations/clients";
 
-// MobileStatus parity: the admin metrics / warnings / filesystems sections and the
-// monitored-only average fix. The empty-data smoke test elsewhere doesn't exercise these.
+// MobileServices (merged browse + health): the admin metrics / warnings / filesystems sections
+// and the monitored-only average fix. These were formerly in MobileStatus; the content is now
+// in MobileServices (the merged screen routed from /status on mobile).
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/status" }));
 vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefresh: () => vi.fn() }));
 vi.mock("@/app/(portal)/admin/actions", () => ({
   setMetricsSource: vi.fn(async () => {}), setPrometheusInstance: vi.fn(async () => {}), setBeszelSystem: vi.fn(async () => {}),
 }));
 
-const portal: { role: string; keptAliveIds: string[] } = { role: "admin", keptAliveIds: [] };
+const portal: { role: string; keptAliveIds: string[]; favorites: string[]; toggleFavorite: () => void; user: object; oidc: boolean } = {
+  role: "admin", keptAliveIds: [], favorites: [], toggleFavorite: vi.fn(), user: { name: "Ada", email: "a@x" }, oidc: true,
+};
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => portal }));
 
 import { useData } from "@/components/portal/DataProvider";
-import { MobileStatus } from "@/components/mobile/screens/MobileStatus";
+import { MobileServices } from "@/components/mobile/screens/MobileServices";
 
 const beats = new Array(30).fill(1);
 const svc = (over: Record<string, unknown>) => ({
@@ -50,10 +54,10 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async () => ({ json: async () => [] })) as never);
 });
 
-describe("MobileStatus — admin metrics + averages", () => {
+describe("MobileServices — admin metrics + averages", () => {
   it("excludes unmonitored (unknown) services from the 30d-uptime average", () => {
     vi.mocked(useData).mockReturnValue(baseSnap as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     // (99.5 + 99.9) / 2 = 99.70 — NOT (99.5 + 99.9 + 50) / 3 = 83.13. (Both the 24h and 30d
     // tiles read 99.70% here, since the unknown service is dropped from each average.)
     expect(screen.getAllByText("99.70%").length).toBeGreaterThan(0);
@@ -62,7 +66,7 @@ describe("MobileStatus — admin metrics + averages", () => {
 
   it("renders the metric tiles, filesystems and warnings for admins", () => {
     vi.mocked(useData).mockReturnValue(baseSnap as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     expect(screen.getByText("CPU load")).toBeInTheDocument();
     expect(screen.getByText("Memory")).toBeInTheDocument();
     expect(screen.getByText("Network out")).toBeInTheDocument();
@@ -79,7 +83,7 @@ describe("MobileStatus — admin metrics + averages", () => {
 
   it("shows the unconfigured message when there is no metrics source", () => {
     vi.mocked(useData).mockReturnValue({ ...baseSnap, metrics: null, prometheusConfigured: false, beszelConfigured: false } as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     expect(screen.getByText(/Prometheus not configured/)).toBeInTheDocument();
     expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
   });
@@ -87,19 +91,9 @@ describe("MobileStatus — admin metrics + averages", () => {
   it("hides admin-only metrics, warnings and filesystems from members", () => {
     portal.role = "user";
     vi.mocked(useData).mockReturnValue(baseSnap as never);
-    render(<MobileStatus />);
+    render(<MobileServices onOpen={vi.fn()} />);
     expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
     expect(screen.queryByText("Service Warnings")).not.toBeInTheDocument();
     expect(screen.queryByText("Filesystems")).not.toBeInTheDocument();
-  });
-
-  it("renders the route-health badge for a service with an unhealthy route", () => {
-    const withBadRoute = [
-      svc({ id: "d", name: "Delta", status: "down", uptime: 90, ms: 0,
-        route: { serviceId: "d", router: "d@docker", rule: "", hosts: ["d.test"], status: "enabled", tls: true, forwardAuth: false, middlewares: [], serverStatus: "down" } }),
-    ];
-    vi.mocked(useData).mockReturnValue({ ...baseSnap, services: withBadRoute } as never);
-    render(<MobileStatus />);
-    expect(screen.getByText("route")).toBeInTheDocument();
   });
 });

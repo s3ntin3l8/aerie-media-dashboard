@@ -118,7 +118,7 @@ export const WIDGET_CATALOG: Record<string, CatalogEntry> = {
     settings: [
       { key: "serviceIds", label: "Show only", type: "serviceIds", hint: "All on by default — toggle off to hide." },
     ],
-    render: (c, s) => <ServiceTiles fill onOpen={c.onOpenService} onAll={() => c.onNavigate("/services")} serviceIds={s.serviceIds as string | undefined} />,
+    render: (c, s) => <ServiceTiles fill onOpen={c.onOpenService} onAll={() => c.onNavigate("/status")} serviceIds={s.serviceIds as string | undefined} />,
   },
   status: {
     type: "status", name: "System Status", icon: "favorite", accent: "var(--originator-own)", group: "Monitoring",

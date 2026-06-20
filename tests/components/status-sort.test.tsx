@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
-// Status view sort controls, focused on the cert-expiry + SSO options (gated on route data).
+// Merged Services view (/status) — search filter, category grouping, and layout.
+// The old sort-chip table is replaced by a category-grouped card grid with a live
+// search field that narrows the grid by service name or host.
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => "/" }));
 vi.mock("@/app/(portal)/admin/actions", () => Object.fromEntries(
@@ -21,61 +23,80 @@ const mkSvc = (over: Record<string, unknown> = {}) => ({
   active: true, embeddable: false, keepAlive: false, ...over,
 });
 
-const route = (over: Record<string, unknown>) => ({
-  serviceId: "x", router: "x@docker", hosts: ["x.test"], status: "enabled", tls: true, forwardAuth: false, middlewares: [], ...over,
-});
-
-// Aaa: 60d cert + SSO · Bbb: 5d cert, no SSO · Ccc: no route at all.
-const aaa = mkSvc({ id: "aaa", name: "Aaa", route: route({ forwardAuth: true, cert: { daysRemaining: 60, notAfter: 0, domains: ["a"] } }) });
-const bbb = mkSvc({ id: "bbb", name: "Bbb", route: route({ forwardAuth: false, cert: { daysRemaining: 5, notAfter: 0, domains: ["b"] } }) });
-const ccc = mkSvc({ id: "ccc", name: "Ccc" });
-
 const snap = (services: unknown[]) => ({
   services, allServices: services, users: [], groups: [], visibility: [], adminGroup: "admins",
   metrics: null, metricsSource: "prometheus", prometheusConfigured: false, beszelConfigured: false, beszelSystemId: null,
   arrHealth: [], metricsBySource: { prometheus: null, beszel: null },
 });
 
-const order = () => screen.getAllByText(/^(Aaa|Bbb|Ccc)$/).map((e) => e.textContent);
-const clickSort = (label: string) => {
-  const bar = screen.getByText("Sort").parentElement!;
-  fireEvent.click(within(bar).getByText(label));
-};
-
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async () => ({ json: async () => [] })) as never);
 });
 
-describe("Status — sort controls", () => {
+describe("Status (merged Services) — layout and search", () => {
   it("wraps the body in the wide content tier (#101)", () => {
-    vi.mocked(useData).mockReturnValue(snap([aaa]) as never);
+    vi.mocked(useData).mockReturnValue(snap([mkSvc()]) as never);
     const { container } = render(<Status />);
     expect(container.querySelector(".aerie-page-pad.aerie-page-pad--wide")).not.toBeNull();
   });
 
-  it("offers Cert + SSO sorts when route data exists and sorts by them", () => {
-    vi.mocked(useData).mockReturnValue(snap([aaa, bbb, ccc]) as never);
+  it("renders the page title 'Services' and the service name in the grid", () => {
+    vi.mocked(useData).mockReturnValue(snap([mkSvc({ id: "sonarr", name: "Sonarr", host: "sonarr.test" })]) as never);
     render(<Status />);
-
-    // Default: name A→Z.
-    expect(order()).toEqual(["Aaa", "Bbb", "Ccc"]);
-
-    // Cert: soonest expiry first, no-cert service last.
-    clickSort("Cert");
-    expect(order()).toEqual(["Bbb", "Aaa", "Ccc"]);
-
-    // SSO: protected service first, rest by name.
-    clickSort("SSO");
-    expect(order()).toEqual(["Aaa", "Bbb", "Ccc"]);
+    expect(screen.getByText("Services")).toBeInTheDocument();
+    expect(screen.getByText("Sonarr")).toBeInTheDocument();
   });
 
-  it("hides the Cert + SSO sorts when no service carries route data", () => {
-    vi.mocked(useData).mockReturnValue(snap([ccc, mkSvc({ id: "ddd", name: "Ddd" })]) as never);
+  it("filters the card grid by service name when the user types in the search field", () => {
+    vi.mocked(useData).mockReturnValue(snap([
+      mkSvc({ id: "sonarr", name: "Sonarr", host: "sonarr.test" }),
+      mkSvc({ id: "radarr", name: "Radarr", host: "radarr.test" }),
+    ]) as never);
     render(<Status />);
 
-    const bar = screen.getByText("Sort").parentElement!;
-    expect(within(bar).getByText("Name")).toBeInTheDocument();
-    expect(within(bar).queryByText("Cert")).not.toBeInTheDocument();
-    expect(within(bar).queryByText("SSO")).not.toBeInTheDocument();
+    // Both services are visible before filtering.
+    expect(screen.getByText("Sonarr")).toBeInTheDocument();
+    expect(screen.getByText("Radarr")).toBeInTheDocument();
+
+    // Type "sonarr" → only Sonarr should remain.
+    const input = screen.getByPlaceholderText("Filter services…");
+    fireEvent.change(input, { target: { value: "sonarr" } });
+    expect(screen.getByText("Sonarr")).toBeInTheDocument();
+    expect(screen.queryByText("Radarr")).not.toBeInTheDocument();
+  });
+
+  it("filters by host as well as by name", () => {
+    vi.mocked(useData).mockReturnValue(snap([
+      mkSvc({ id: "sonarr", name: "Sonarr", host: "sonarr.media.lan" }),
+      mkSvc({ id: "radarr", name: "Radarr", host: "radarr.media.lan" }),
+    ]) as never);
+    render(<Status />);
+
+    const input = screen.getByPlaceholderText("Filter services…");
+    // Filter by host substring.
+    fireEvent.change(input, { target: { value: "radarr.media" } });
+    expect(screen.queryByText("Sonarr")).not.toBeInTheDocument();
+    expect(screen.getByText("Radarr")).toBeInTheDocument();
+  });
+
+  it("shows the 'no services match' empty state when the filter matches nothing", () => {
+    vi.mocked(useData).mockReturnValue(snap([mkSvc({ id: "sonarr", name: "Sonarr", host: "sonarr.test" })]) as never);
+    render(<Status />);
+
+    const input = screen.getByPlaceholderText("Filter services…");
+    fireEvent.change(input, { target: { value: "zzz" } });
+    expect(screen.getByText("No services match")).toBeInTheDocument();
+    expect(screen.queryByText("Sonarr")).not.toBeInTheDocument();
+  });
+
+  it("renders category headings when services span multiple categories", () => {
+    vi.mocked(useData).mockReturnValue(snap([
+      mkSvc({ id: "sonarr", name: "Sonarr", cat: "automation" }),
+      mkSvc({ id: "plex", name: "Plex", cat: "stream" }),
+    ]) as never);
+    render(<Status />);
+    // Category labels from lib/categories.
+    expect(screen.getByText("Automation")).toBeInTheDocument();
+    expect(screen.getByText("Streaming")).toBeInTheDocument();
   });
 });

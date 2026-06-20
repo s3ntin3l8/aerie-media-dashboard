@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { NAV_ITEMS, RAIL_NAV_ITEMS, MOBILE_NAV_ITEMS, PALETTE_NAV_ITEMS } from "@/lib/nav";
 
 describe("NAV_ITEMS", () => {
-  it("has 6 items", () => {
-    expect(NAV_ITEMS).toHaveLength(6);
+  it("has 5 items (services merged into status)", () => {
+    expect(NAV_ITEMS).toHaveLength(5);
   });
 
   it("every item has required fields", () => {
@@ -30,11 +30,15 @@ describe("NAV_ITEMS", () => {
     expect(streams.isActive("/")).toBe(false);
   });
 
-  it("services is active on /services and /s/plex", () => {
-    const services = NAV_ITEMS.find((i) => i.id === "services")!;
-    expect(services.isActive("/services")).toBe(true);
-    expect(services.isActive("/s/plex")).toBe(true);
-    expect(services.isActive("/streams")).toBe(false);
+  it("status (merged Services) is active on /status, /s/plex, and legacy /services", () => {
+    // The old `services` item is gone; the `status` item now covers the merged browse+health page.
+    const status = NAV_ITEMS.find((i) => i.id === "status")!;
+    expect(status.isActive("/status")).toBe(true);
+    expect(status.isActive("/status/details")).toBe(true);
+    expect(status.isActive("/s/plex")).toBe(true);
+    expect(status.isActive("/services")).toBe(true); // legacy redirect path
+    expect(status.isActive("/streams")).toBe(false);
+    expect(status.isActive("/")).toBe(false);
   });
 
   it("requests is active on /requests and /requests/something", () => {
@@ -42,13 +46,6 @@ describe("NAV_ITEMS", () => {
     expect(requests.isActive("/requests")).toBe(true);
     expect(requests.isActive("/requests/something")).toBe(true);
     expect(requests.isActive("/")).toBe(false);
-  });
-
-  it("status is active on /status and /status/something", () => {
-    const status = NAV_ITEMS.find((i) => i.id === "status")!;
-    expect(status.isActive("/status")).toBe(true);
-    expect(status.isActive("/status/details")).toBe(true);
-    expect(status.isActive("/")).toBe(false);
   });
 
   it("admin is active on /admin and /admin/settings", () => {
@@ -64,11 +61,13 @@ describe("NAV_ITEMS", () => {
     expect(adminItems[0].id).toBe("admin");
   });
 
-  it("has gKey shortcuts for home, services, requests, status, admin", () => {
+  it("has gKey shortcuts for home, services (g s on /status), requests, admin — g u is retired", () => {
     const withGKey = NAV_ITEMS.filter((i) => i.gKey);
     expect(withGKey.map((i) => i.gKey)).toEqual(
-      expect.arrayContaining(["h", "s", "r", "u", "a"]),
+      expect.arrayContaining(["h", "s", "r", "a"]),
     );
+    // g u (old Status shortcut) is retired.
+    expect(withGKey.map((i) => i.gKey)).not.toContain("u");
   });
 
   it("streams has no gKey", () => {
