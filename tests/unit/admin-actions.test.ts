@@ -14,6 +14,7 @@ vi.mock("@/lib/integrations/clients", () => ({
   overseerrUpdateUserQuota: vi.fn(),
   matchOverseerrUserId: vi.fn(),
   portainerEndpoints: vi.fn(),
+  portainerContainers: vi.fn(),
   portainerRestartContainer: vi.fn(),
 }));
 
@@ -266,7 +267,7 @@ describe("restartServiceContainer", () => {
     await expect(restartServiceContainer("jellyfin")).rejects.toThrow("forbidden");
   });
 
-  it("restarts via the pinned endpoint id", async () => {
+  it("takes the direct fast path when both an explicit name and the endpoint are pinned", async () => {
     asAdmin();
     await seed({ containerName: "jellyfin", portainerEndpointId: "3" });
     vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
@@ -274,33 +275,100 @@ describe("restartServiceContainer", () => {
     await restartServiceContainer("jellyfin");
 
     expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "3", "jellyfin");
-    expect(C.portainerEndpoints).not.toHaveBeenCalled(); // no resolution needed when pinned
+    expect(C.portainerEndpoints).not.toHaveBeenCalled(); // no resolution needed when both are pinned
+    expect(C.portainerContainers).not.toHaveBeenCalled();
   });
 
-  it("auto-resolves the endpoint when the instance has exactly one", async () => {
+  it("searches the pinned endpoint by name when the container name is not explicit", async () => {
     asAdmin();
-    await seed({ containerName: "jellyfin", portainerEndpointId: null });
-    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 7, Name: "local" }] as never);
+    await seed({ containerName: null, portainerEndpointId: "6" });
+    vi.mocked(C.portainerContainers).mockResolvedValue([{ Id: "x", Names: ["/jellyfin"], State: "running" }] as never);
     vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
 
     await restartServiceContainer("jellyfin");
 
-    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "7", "jellyfin");
+    expect(C.portainerContainers).toHaveBeenCalledWith("portainer", "6");
+    expect(C.portainerEndpoints).not.toHaveBeenCalled(); // pinned → only that endpoint is searched
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "6", "jellyfin");
   });
 
-  it("throws when multiple endpoints exist and none is pinned", async () => {
+  it("defaults the container name to the service id and finds it across endpoints", async () => {
     asAdmin();
-    await seed({ containerName: "jellyfin", portainerEndpointId: null });
-    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 1, Name: "a" }, { Id: 2, Name: "b" }] as never);
+    await seed({ containerName: null, portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 5, Name: "dev" }, { Id: 6, Name: "nas" }] as never);
+    vi.mocked(C.portainerContainers).mockImplementation(async (_s: string, ep: string) =>
+      (ep === "6" ? [{ Id: "x", Names: ["/jellyfin"], State: "running" }] : []) as never);
+    vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
 
-    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/Multiple Portainer endpoints/);
+    await restartServiceContainer("jellyfin");
+
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "6", "jellyfin");
+  });
+
+  it("matches case-insensitively and restarts by the container's exact name", async () => {
+    asAdmin();
+    await seed({ containerName: null, portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 6, Name: "nas" }] as never);
+    vi.mocked(C.portainerContainers).mockResolvedValue([{ Id: "x", Names: ["/Jellyfin"], State: "running" }] as never);
+    vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
+
+    await restartServiceContainer("jellyfin");
+
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "6", "Jellyfin");
+  });
+
+  it("honours an explicit container name that differs from the id when searching", async () => {
+    asAdmin();
+    await seed({ containerName: "seerr", portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 7, Name: "dockerhost" }] as never);
+    vi.mocked(C.portainerContainers).mockResolvedValue([{ Id: "x", Names: ["/seerr"], State: "running" }] as never);
+    vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
+
+    await restartServiceContainer("jellyfin");
+
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "7", "seerr");
+  });
+
+  it("throws when the container is not found on the pinned endpoint", async () => {
+    asAdmin();
+    await seed({ containerName: null, portainerEndpointId: "6" });
+    vi.mocked(C.portainerContainers).mockResolvedValue([{ Id: "y", Names: ["/other"], State: "running" }] as never);
+
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/not found on the pinned Portainer endpoint/);
+    expect(C.portainerEndpoints).not.toHaveBeenCalled();
     expect(C.portainerRestartContainer).not.toHaveBeenCalled();
   });
 
-  it("throws when the service has no container name", async () => {
+  it("skips an endpoint whose container listing fails and finds it on the next", async () => {
     asAdmin();
-    await seed({ containerName: null });
-    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/No container name/);
+    await seed({ containerName: null, portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 5, Name: "dev" }, { Id: 6, Name: "nas" }] as never);
+    vi.mocked(C.portainerContainers).mockImplementation(async (_s: string, ep: string) => {
+      if (ep === "5") throw new Error("agent unreachable");
+      return [{ Id: "x", Names: ["/jellyfin"], State: "running" }] as never;
+    });
+    vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
+
+    await restartServiceContainer("jellyfin");
+
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "6", "jellyfin");
+  });
+
+  it("throws when the container is not found on any endpoint", async () => {
+    asAdmin();
+    await seed({ containerName: null, portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 5, Name: "dev" }, { Id: 6, Name: "nas" }] as never);
+    vi.mocked(C.portainerContainers).mockResolvedValue([{ Id: "y", Names: ["/something-else"], State: "running" }] as never);
+
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/not found on any Portainer endpoint/);
+    expect(C.portainerRestartContainer).not.toHaveBeenCalled();
+  });
+
+  it("throws when no endpoints exist", async () => {
+    asAdmin();
+    await seed({ containerName: null, portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([] as never);
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/No Portainer endpoints found/);
   });
 
   it("throws when a Portainer instance exists but has no stored token", async () => {

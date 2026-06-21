@@ -16,14 +16,34 @@ export interface PortainerEndpoint {
   Name: string;
 }
 
+export interface PortainerContainer {
+  /** Docker container id. */
+  Id: string;
+  /** Docker names, each leading-slash prefixed (e.g. ["/sonarr"]). */
+  Names: string[];
+  /** "running" | "exited" | "paused" | … */
+  State: string;
+}
+
 const portainerHeaders = (apiKey: string) => ({ "X-API-Key": apiKey });
 
-/** List the Portainer environments (endpoints). Used to auto-resolve the endpoint when a service
- *  doesn't pin one and the instance manages exactly one. */
+/** List the Portainer environments (endpoints). Used to enumerate candidate endpoints when a
+ *  service doesn't pin one (multi-agent topologies), and to auto-resolve the single-endpoint case. */
 export async function portainerEndpoints(serviceId: string): Promise<PortainerEndpoint[]> {
   const { apiKey, json } = await serviceClient(serviceId);
   const rows = await json<PortainerEndpoint[]>("/api/endpoints", { service: serviceId, headers: portainerHeaders(apiKey) });
   return (rows ?? []).map((e) => ({ Id: e.Id, Name: e.Name }));
+}
+
+/** List containers on a Portainer endpoint via the proxied Docker Engine API
+ *  (`GET /api/endpoints/{endpointId}/docker/containers/json?all=1`, includes stopped containers).
+ *  Used to auto-resolve which endpoint hosts a named container, and to recover the container's
+ *  exact (case-sensitive) Docker name for the restart call. */
+export async function portainerContainers(serviceId: string, endpointId: string): Promise<PortainerContainer[]> {
+  const { apiKey, json } = await serviceClient(serviceId);
+  const path = `/api/endpoints/${encodeURIComponent(endpointId)}/docker/containers/json?all=1`;
+  const rows = await json<PortainerContainer[]>(path, { service: serviceId, headers: portainerHeaders(apiKey) });
+  return (rows ?? []).map((c) => ({ Id: c.Id, Names: c.Names ?? [], State: c.State }));
 }
 
 /**

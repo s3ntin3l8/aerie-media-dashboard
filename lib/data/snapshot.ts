@@ -542,8 +542,11 @@ export async function getSnapshot(): Promise<Snapshot> {
     lokiQuery: c.lokiQuery ?? undefined,
     containerName: c.containerName ?? undefined,
     portainerEndpointId: c.portainerEndpointId ?? undefined,
-    // Restartable only when this service names a container AND a Portainer instance is configured.
-    canRestart: Boolean(c.containerName) && portainerOn,
+    // Restartable for any active service once a Portainer instance is configured. The container name
+    // defaults to the service id (the restart action resolves it across endpoints, case-insensitively),
+    // so no per-service config is needed when the container is named after the slug; a wrong guess
+    // just fails-soft with a toast. An explicit containerName overrides the id.
+    canRestart: c.active && portainerOn,
     hasSecret: configuredIds.has(c.id),
     forwardAuthConfig: faConfigs.get(c.id),
     route: routeFor(c),
