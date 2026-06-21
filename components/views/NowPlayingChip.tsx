@@ -33,10 +33,12 @@ export function NowPlayingChip({ sessions, accent, compact = false }: { sessions
       style={{ display: "inline-flex", alignItems: "center", gap: 9, maxWidth: compact ? 230 : 340, minWidth: 0, padding: "4px 9px" }}
     >
       <PosterTile title={s.title} kind={s.kind} cat="stream" w={posterW} ratio={s.kind === "track" ? 1 : 1.4} rounded={4} art={s.art} />
-      <Icon name={s.paused ? "pause" : "play_arrow"} size={15} color={accent} />
       <span style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-surface)", ...TRUNCATE, maxWidth: titleMax }}>
-          {s.title}{extra > 0 ? ` +${extra}` : ""}
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <Icon name={s.paused ? "pause" : "play_arrow"} size={13} color={accent} />
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--on-surface)", ...TRUNCATE, maxWidth: titleMax - 17 }}>
+            {s.title}{extra > 0 ? ` +${extra}` : ""}
+          </span>
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <span style={{ width: barW }}><ProgressBar pct={pct} h={4} color={accent} /></span>
