@@ -60,8 +60,8 @@ export type { PlexSection, PlexButlerTask } from "./clients/plex";
 export { plexSections, plexButlerTasks, plexScanSection, plexAnalyzeSection, plexEmptyTrash, plexCleanBundles, plexOptimizeDb, plexRunButlerTask } from "./clients/plex";
 
 // — Portainer container control (admin-only restart) —
-export type { PortainerEndpoint } from "./clients/portainer";
-export { portainerEndpoints, portainerRestartContainer } from "./clients/portainer";
+export type { PortainerEndpoint, PortainerContainer } from "./clients/portainer";
+export { portainerEndpoints, portainerContainers, portainerRestartContainer } from "./clients/portainer";
 
 // — Compose clearCache to clear both TTL and enrich caches (tests use this between cases) —
 import { clearTtlCache } from "./clients/cache";

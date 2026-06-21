@@ -10,7 +10,7 @@ import { encrypt } from "@/lib/crypto";
 import { parseForwardAuthConfig, getForwardAuthConfig, type ForwardAuthConfig } from "@/lib/integrations/forwardAuth";
 import { getSessionUser } from "@/lib/session";
 import { setDeploymentSetting, getDeploymentSetting, invalidateRegistryCache, getServiceConfigs, getServiceSecret, configMatchesLogo } from "@/lib/integrations/registry";
-import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId, portainerEndpoints, portainerRestartContainer } from "@/lib/integrations/clients";
+import { prometheusInstances, beszelSystems, detectVersion, probeVersion, overseerrUsers, overseerrUpdateUserQuota, matchOverseerrUserId, portainerEndpoints, portainerContainers, portainerRestartContainer } from "@/lib/integrations/clients";
 import type { OverseerrQuotaSettings } from "@/lib/integrations/clients";
 
 async function requireAdmin() {
@@ -214,21 +214,31 @@ export async function deleteService(id: string) {
 
 /**
  * Restart a service's container via Portainer (admin-only). Resolves the single configured
- * Portainer instance (an active service carrying the `portainer` logo + a stored token), the
- * target service's container name and endpoint, then calls Portainer's proxied Docker restart
- * endpoint. The control plane is never in the client bundle — this is a server action, not a
- * route — and admin is re-checked here (defence in depth), not just hidden in the UI. AERIE
- * never mounts the Docker socket; everything goes through the stored Portainer token.
+ * Portainer instance (an active service carrying the `portainer` logo + a stored token), then
+ * the container + endpoint, and calls Portainer's proxied Docker restart endpoint. The control
+ * plane is never in the client bundle — this is a server action, not a route — and admin is
+ * re-checked here (defence in depth), not just hidden in the UI. AERIE never mounts the Docker
+ * socket; everything goes through the stored Portainer token.
  *
- * Throws a human-readable Error on any gap (no container name, no Portainer, ambiguous endpoint)
- * so the Status view can surface it in a toast.
+ * Zero-config by default: the container name falls back to the service **id** (the common compose
+ * convention where the container is named after the slug), and when the endpoint isn't pinned we
+ * search every endpoint for a container whose Docker name matches (case-insensitively) and restart
+ * it by its **exact** name on the endpoint that actually hosts it. This makes the multi-endpoint
+ * (Portainer agent) topology work without pinning an endpoint per service, and corrects case
+ * (e.g. "jellyfin" → "Jellyfin"). An explicit container name overrides the id (e.g. overseerr's
+ * container is "seerr"); pinning both the name and the endpoint takes a direct fast path.
+ *
+ * Throws a human-readable Error on any gap (no Portainer, container not found) so the caller can
+ * surface it in a toast.
  */
 export async function restartServiceContainer(serviceId: string): Promise<void> {
   await requireAdmin();
   const configs = await getServiceConfigs();
   const target = configs.find((c) => c.id === serviceId);
   if (!target) throw new Error("Service not found");
-  if (!target.containerName) throw new Error("No container name configured for this service");
+  // Default the container name to the service id — the common compose convention — so a service
+  // whose container matches its slug is restartable with zero per-service config.
+  const wantName = target.containerName?.trim() || target.id;
 
   // The Portainer instance: an active service carrying the portainer logo WITH a stored token
   // (same gate as the snapshot's `portainerOn`, so the button and the action agree — a tokenless
@@ -244,15 +254,38 @@ export async function restartServiceContainer(serviceId: string): Promise<void> 
     throw new Error(portainerCandidates.length ? "Portainer API token is not set" : "Portainer is not configured");
   }
 
-  // Resolve the endpoint: the service's pinned id, or auto-detect when the instance has exactly one.
-  let endpointId = target.portainerEndpointId?.trim() || "";
-  if (!endpointId) {
-    const endpoints = await portainerEndpoints(portainerCfg.id);
-    if (endpoints.length === 1) endpointId = String(endpoints[0].Id);
-    else throw new Error(endpoints.length === 0 ? "No Portainer endpoints found" : "Multiple Portainer endpoints — set the endpoint id on the service");
+  const pinnedEndpoint = target.portainerEndpointId?.trim() || "";
+
+  // Fast path: admin pinned BOTH an explicit container name and the endpoint → trust it and
+  // restart directly (exact intent, one call, no container listing).
+  if (target.containerName?.trim() && pinnedEndpoint) {
+    await portainerRestartContainer(portainerCfg.id, pinnedEndpoint, wantName);
+    return;
   }
 
-  await portainerRestartContainer(portainerCfg.id, endpointId, target.containerName);
+  // Otherwise resolve by listing containers: across the pinned endpoint, or every endpoint when
+  // none is pinned. Match the wanted name case-insensitively, then restart by the container's
+  // EXACT Docker name on the endpoint that hosts it.
+  const endpointIds = pinnedEndpoint
+    ? [pinnedEndpoint]
+    : (await portainerEndpoints(portainerCfg.id)).map((e) => String(e.Id));
+  if (endpointIds.length === 0) throw new Error("No Portainer endpoints found");
+
+  const wantLc = wantName.toLowerCase();
+  for (const endpointId of endpointIds) {
+    const containers = await portainerContainers(portainerCfg.id, endpointId).catch(() => []);
+    const match = containers.find((c) => c.Names.some((n) => n.replace(/^\//, "").toLowerCase() === wantLc));
+    if (match) {
+      const exactName = (match.Names[0] ?? wantName).replace(/^\//, "");
+      await portainerRestartContainer(portainerCfg.id, endpointId, exactName);
+      return;
+    }
+  }
+  throw new Error(
+    pinnedEndpoint
+      ? `Container "${wantName}" not found on the pinned Portainer endpoint`
+      : `Container "${wantName}" not found on any Portainer endpoint`,
+  );
 }
 
 /**

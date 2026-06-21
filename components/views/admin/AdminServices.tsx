@@ -152,15 +152,19 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
       )}
     >
       <div style={{ padding: "18px 20px", fontSize: 13, color: "var(--on-surface-variant)", lineHeight: 1.5 }}>
-        The container <code style={{ fontFamily: "var(--font-mono)", color: "var(--on-surface)" }}>{restartFor.containerName}</code> will be restarted
-        {restartFor.portainerEndpointId ? <> on Portainer endpoint <code style={{ fontFamily: "var(--font-mono)", color: "var(--on-surface)" }}>{restartFor.portainerEndpointId}</code></> : null}.
+        The container <code style={{ fontFamily: "var(--font-mono)", color: "var(--on-surface)" }}>{restartFor.containerName || restartFor.id}</code> will be restarted
+        {restartFor.portainerEndpointId
+          ? <> on Portainer endpoint <code style={{ fontFamily: "var(--font-mono)", color: "var(--on-surface)" }}>{restartFor.portainerEndpointId}</code></>
+          : <> on its Portainer endpoint (auto-detected)</>}.
         Any in-flight activity on this service may be interrupted.
       </div>
     </ModalShell>
   ) : null;
   const restartToastEl = <Toast message={restartToast} />;
-  // Service · Category · Host · Proxy & access · Embed · Active · Keep · API key · actions
-  const cols = "1.4fr 96px 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 1fr";
+  // Service · Category · Host · Proxy & access · Embed · Active · Keep · API key · actions.
+  // Actions is a fixed width sized for the full button set (star · open · logs · restart · edit)
+  // so the icons never overflow into the API-key column and stay aligned under the header.
+  const cols = "1.4fr 96px 1.3fr 1.8fr 0.5fr 0.55fr 0.55fr 0.6fr 172px";
   const [sort, setSort] = useState<{ col: AdminSortCol; dir: AdminSortDir }>({ col: "name", dir: "asc" });
   // Discovery card starts collapsed — the host list is on-demand, the services table is primary.
 
@@ -479,7 +483,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
     {discoveredEl}
     {nodesEl}
     <div className="aerie-x-scroll">
-      <div style={{ minWidth: 960, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
+      <div style={{ minWidth: 1000, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
         <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
           {sortHead("name", "Service")}
           {sortHead("cat", "Category")}
