@@ -4,7 +4,7 @@ import React from "react";
 import type { Service } from "@/lib/types";
 
 // Tests for ServiceCard — the enhanced browse+launch+health card in the merged Services page.
-// Asserts the Heartbeat strip (24h label) for monitored services, the "not monitored" fallback
+// Asserts the Heartbeat strip (30d label) for monitored services, the "not monitored" fallback
 // for unknown-status services, EMBED/LAUNCH tag, security signals, and the note line invariant.
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => "/status" }));
@@ -40,17 +40,17 @@ const plex = {
 const unmonitored = { ...plex, id: "radarr", name: "Radarr", status: "unknown", uptime: 0, ms: 0, beats: [] } as unknown as Service;
 
 describe("ServiceCard", () => {
-  it("renders the 24h label for a monitored service (Heartbeat strip present)", () => {
+  it("renders the 30d label for a monitored service (Heartbeat strip present)", () => {
     const { container } = render(<ServiceCard s={sonarr} onOpen={vi.fn()} />);
-    // The "24h" caption is rendered next to the Heartbeat graph.
-    expect(container.textContent).toContain("24h");
+    // The "30d" caption is rendered next to the Heartbeat graph.
+    expect(container.textContent).toContain("30d");
   });
 
   it('renders "not monitored" caption instead of Heartbeat for unknown-status services', () => {
     render(<ServiceCard s={unmonitored} onOpen={vi.fn()} />);
     expect(screen.getByText("not monitored")).toBeInTheDocument();
-    // Heartbeat (and its "24h" label) must NOT appear for unmonitored services.
-    expect(screen.queryByText("24h")).not.toBeInTheDocument();
+    // Heartbeat (and its "30d" label) must NOT appear for unmonitored services.
+    expect(screen.queryByText("30d")).not.toBeInTheDocument();
   });
 
   it("renders the EMBED tag for embeddable services", () => {

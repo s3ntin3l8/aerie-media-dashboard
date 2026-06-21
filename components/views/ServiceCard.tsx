@@ -125,9 +125,9 @@ export function ServiceCard({ s, onOpen }: { s: Service; onOpen: () => void }) {
       {monitored ? (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Heartbeat beats={s.beats} h={20} barW={3} gap={1.5} />
+            <Heartbeat beats={s.beats} h={20} barW={3} gap={1.5} fluid />
           </div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--on-surface-variant)", flexShrink: 0 }}>24h</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--on-surface-variant)", flexShrink: 0 }}>30d</span>
         </div>
       ) : (
         <div style={{ height: 20, display: "flex", alignItems: "center" }}>
