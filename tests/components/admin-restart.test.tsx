@@ -53,6 +53,14 @@ describe("AdminServices — container restart", () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
 
+  it("falls back to the service id in the confirm modal when no container name is set", () => {
+    vi.mocked(useData).mockReturnValue(data([mkSvc({ id: "sonarr", name: "Sonarr", canRestart: true })]) as never);
+    render(<AdminServices {...props} />);
+    fireEvent.click(screen.getByTitle("Restart container"));
+    // The modal shows the resolved container name — the id when none is explicitly stored.
+    expect(screen.getByText("sonarr")).toBeTruthy();
+  });
+
   it("cancel closes the modal without calling the action", () => {
     vi.mocked(useData).mockReturnValue(data([mkSvc({ canRestart: true, containerName: "tautulli" })]) as never);
     render(<AdminServices {...props} />);

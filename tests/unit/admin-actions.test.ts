@@ -329,6 +329,31 @@ describe("restartServiceContainer", () => {
     expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "7", "seerr");
   });
 
+  it("throws when the container is not found on the pinned endpoint", async () => {
+    asAdmin();
+    await seed({ containerName: null, portainerEndpointId: "6" });
+    vi.mocked(C.portainerContainers).mockResolvedValue([{ Id: "y", Names: ["/other"], State: "running" }] as never);
+
+    await expect(restartServiceContainer("jellyfin")).rejects.toThrow(/not found on the pinned Portainer endpoint/);
+    expect(C.portainerEndpoints).not.toHaveBeenCalled();
+    expect(C.portainerRestartContainer).not.toHaveBeenCalled();
+  });
+
+  it("skips an endpoint whose container listing fails and finds it on the next", async () => {
+    asAdmin();
+    await seed({ containerName: null, portainerEndpointId: null });
+    vi.mocked(C.portainerEndpoints).mockResolvedValue([{ Id: 5, Name: "dev" }, { Id: 6, Name: "nas" }] as never);
+    vi.mocked(C.portainerContainers).mockImplementation(async (_s: string, ep: string) => {
+      if (ep === "5") throw new Error("agent unreachable");
+      return [{ Id: "x", Names: ["/jellyfin"], State: "running" }] as never;
+    });
+    vi.mocked(C.portainerRestartContainer).mockResolvedValue(undefined as never);
+
+    await restartServiceContainer("jellyfin");
+
+    expect(C.portainerRestartContainer).toHaveBeenCalledWith("portainer", "6", "jellyfin");
+  });
+
   it("throws when the container is not found on any endpoint", async () => {
     asAdmin();
     await seed({ containerName: null, portainerEndpointId: null });
