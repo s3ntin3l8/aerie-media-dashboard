@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.1.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.0.0...aerie-v1.1.0) (2026-06-22)
+
+
+### Features
+
+* **admin:** move metrics settings to Admin tab, per-mount FS cards on /services ([#139](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/139)) ([040c2a2](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/040c2a2bc0e19a94c6ab75a7e6cb4abf2dae3cba))
+* **admin:** restart a service's container from Status (Portainer route) ([#126](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/126)) ([6244457](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/6244457a55572c4076e318e69f87c5c8af2031f0))
+* **admin:** restart button in the Admin services actions column ([#128](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/128)) ([9ab88ba](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/9ab88bafe1cc7be64e77a932f8654d1ba0da6a5e))
+* **admin:** zero-config container restart across Portainer endpoints ([#132](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/132)) ([dc2155c](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/dc2155c2320e82f41649fe8b13cf3f6291a37aa5))
+* **service-card:** show 30d heartbeat strip filling full width ([#131](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/131)) ([d4cf991](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/d4cf991e79a178dc71dd857ac1ed8aded36a6c7e))
+* **services:** merge Launcher into Status as a unified Services page ([#130](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/130)) ([5c23f04](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/5c23f0439424c5637c663c99d80d6aa7f20ca284))
+
+
+### Bug Fixes
+
+* **admin:** use fr units for the container/endpoint field split ([#129](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/129)) ([da4c3c6](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/da4c3c673ee0f898d137ec560536bfaca01eb5f5))
+* **admin:** wire Portainer into the connection test (version probe) ([#127](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/127)) ([4896796](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/489679615e51632aac74700167dfe9db9642ee60))
+* **dashboard:** eliminate load-time width flash with CSS Grid view mode ([#121](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/121)) ([98cabec](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/98cabec91167bf3aeb3d1dae715f6d7ed9f6ca15))
+* **now-playing-chip:** inline play/pause icon with title to reduce indentation ([#133](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/133)) ([7381591](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/7381591709fe943fd8a56b9fcf5f64050c5776a3))
+* **security:** harden internet-exposure surface (SSRF, auth gates, CSP) ([#123](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/123)) ([315327a](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/315327ad452d15ace1d4d0ffa0f42d4de58d92b6))
+
+
+### Documentation
+
+* sync documentation with current code ([#124](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/124)) ([ba620fb](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/ba620fb0b03ada8aca49e48fadc96aa6b4541f99))
+
 ## 1.0.0 (2026-06-17)
 
 
