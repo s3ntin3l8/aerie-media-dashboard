@@ -58,13 +58,18 @@ beforeEach(() => {
 });
 
 describe("view smoke renders", () => {
-  it("Status (merged Services) renders the header, a service card and admin metric cards", () => {
+  it("Status (merged Services) renders the header, a service card and metric cards (visible to all users)", () => {
     render(<Status />);
     // The merged view is now titled "Services" (not "System Status").
     expect(screen.getByText("Services")).toBeInTheDocument();
     expect(screen.getByText("Sonarr")).toBeInTheDocument();
+    // Metric cards are no longer admin-only; "System Metrics" heading replaces source-named heading.
+    expect(screen.getByText("System Metrics")).toBeInTheDocument();
     expect(screen.getByText("CPU load")).toBeInTheDocument();
-    expect(screen.getByText("Indexer slow")).toBeInTheDocument(); // arr warnings panel
+    // "/" filesystem card (from filesystems: [{ mount: "/" }] in SNAP.metrics).
+    expect(screen.getByText("/")).toBeInTheDocument();
+    // Service Warnings still admin-only.
+    expect(screen.getByText("Indexer slow")).toBeInTheDocument();
   });
 
   it("Admin renders without crashing and shows the managed service", () => {
@@ -80,6 +85,19 @@ describe("view smoke renders", () => {
     fireEvent.click(screen.getByText("Visibility"));
     // visibility matrix lists the service + a group column
     expect(screen.getAllByText(/Sonarr/i).length).toBeGreaterThan(0);
+  });
+
+  it("Admin renders the Metrics tab when a metrics source is configured", () => {
+    // SNAP has prometheusConfigured: true, so the Metrics tab should be visible.
+    render(<Admin />);
+    const metricsTab = screen.getByRole("button", { name: /Metrics/i });
+    expect(metricsTab).toBeInTheDocument();
+    fireEvent.click(metricsTab);
+    // The Metrics source PanelShell title is shown.
+    expect(screen.getByText("Metrics Source")).toBeInTheDocument();
+    // InstanceSelect is rendered (prometheus is the source, beszelConfigured: false so no toggle).
+    // The panel also describes the active source.
+    expect(screen.getByText(/Active source/i)).toBeInTheDocument();
   });
 
   it("Streams renders its scaffold", () => {

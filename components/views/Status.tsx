@@ -16,15 +16,15 @@ import { useRouter } from "next/navigation";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
-import { Icon, Pill, Eyebrow, StatusDot, Sparkline, ProgressBar, SearchField, TRUNCATE, listDivider } from "@/components/primitives";
+import { Icon, Eyebrow, StatusDot, Sparkline, ProgressBar, SearchField, listDivider } from "@/components/primitives";
 import { PanelShell, Empty } from "@/components/panels";
-import { fmtBytes, fmtPercent } from "@/lib/format";
+import { fmtBytes } from "@/lib/format";
 import { ServiceCard } from "@/components/views/ServiceCard";
 import { CAT, CAT_ORDER, catColor } from "@/lib/categories";
 import { PageHeader, StatTile } from "@/components/views/shared";
-import { SourceToggle, InstanceSelect, BeszelSystemSelect, useSecondsAgo, fmtUptime } from "@/components/status/metricsControls";
+import { useSecondsAgo, fmtUptime } from "@/components/status/metricsControls";
 
-// Admin-only system-metrics card (CPU / memory / network / etc.).
+// System-metrics card (CPU / memory / network / etc.).
 function MetricCard({ title, value, unit, color, data }: { title: string; value: string; unit: string; color: string; data: number[] }) {
   return (
     <div style={{ padding: 16, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
@@ -38,15 +38,33 @@ function MetricCard({ title, value, unit, color, data }: { title: string; value:
   );
 }
 
+// Per-mount filesystem card — same chrome as MetricCard but with a usage bar instead of a
+// sparkline (filesystems have no history array).
+function FilesystemCard({ mount, usedBytes, totalBytes }: { mount: string; usedBytes: number; totalBytes: number }) {
+  const pct = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+  const color = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
+  return (
+    <div style={{ padding: 16, borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <Eyebrow style={{ maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mount}</Eyebrow>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>
+          {fmtBytes(usedBytes)} / {fmtBytes(totalBytes)}
+        </span>
+      </div>
+      <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 24, letterSpacing: "-0.02em", color, marginBottom: 10 }}>
+        {Math.round(pct)}%
+      </div>
+      <ProgressBar pct={pct} color={color} h={5} />
+    </div>
+  );
+}
+
 export function Status() {
   const router = useRouter();
   const { role } = usePortal();
-  const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured, beszelSystemId } = useData();
+  const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured } = useData();
   const metricsAge = useSecondsAgo(metrics);
-  const bothConfigured = prometheusConfigured && beszelConfigured;
-  const sourceMeta = metricsSource === "beszel"
-    ? { icon: "dns", title: "Beszel Metrics" }
-    : { icon: "query_stats", title: "Prometheus Metrics" };
+  const anyMetricsConfigured = prometheusConfigured || beszelConfigured;
   const emptyMetricsMsg = metricsSource === "beszel"
     ? (beszelConfigured
         ? "Beszel unreachable or no system data — check the credentials and that a system is reporting."
@@ -168,21 +186,16 @@ export function Status() {
             </PanelShell>
           )}
 
-          {role === "admin" && (
+          {anyMetricsConfigured && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                <Icon name={sourceMeta.icon} size={16} color="var(--primary)" />
-                <h2 style={{ fontFamily: "var(--font-headline)", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--on-surface)" }}>{sourceMeta.title}</h2>
-                <Pill tone="primary" style={{ marginLeft: 4 }}>Admin</Pill>
-                {bothConfigured && <SourceToggle current={metricsSource} />}
+                <Icon name="monitoring" size={16} color="var(--primary)" />
+                <h2 style={{ fontFamily: "var(--font-headline)", fontSize: 12.5, fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: "var(--on-surface)" }}>System Metrics</h2>
                 {metrics != null && (
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: metricsAge === "live" ? "var(--originator-own)" : "var(--on-surface-variant)", marginLeft: 2 }}>
                     {metricsAge}
                   </span>
                 )}
-                {metrics != null && (metricsSource === "beszel"
-                  ? <BeszelSystemSelect current={beszelSystemId} />
-                  : <InstanceSelect current={metrics.instance} />)}
               </div>
               {metrics == null ? (
                 <div style={{ padding: "18px 20px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)", color: "var(--on-surface-variant)", fontSize: 13 }}>
@@ -194,7 +207,6 @@ export function Status() {
                   <MetricCard title="Memory" value={fmtBytes(metrics.memUsedBytes)} unit={`of ${fmtBytes(metrics.memTotalBytes)}`} color="var(--originator-court)" data={metrics.memHistory} />
                   <MetricCard title="Network out" value={metrics.netOutBps != null ? `${(metrics.netOutBps / 1e6).toFixed(1)} Mbps` : "—"} unit="transmit" color="var(--originator-third-party)" data={metrics.netHistory} />
                   <MetricCard title="Network in" value={metrics.netInBps != null ? `${(metrics.netInBps / 1e6).toFixed(1)} Mbps` : "—"} unit="receive" color="var(--originator-court)" data={metrics.netInHistory} />
-                  <MetricCard title="Disk" value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${fmtPercent(metrics.diskUsedBytes, metrics.diskTotalBytes)}%` : "—"} unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`} color="var(--amber)" data={metrics.diskHistory} />
                   <MetricCard title="System load" value={metrics.sysLoad != null ? metrics.sysLoad.toFixed(2) : "—"} unit={metrics.load5 != null && metrics.load15 != null ? `${metrics.load5.toFixed(2)} · ${metrics.load15.toFixed(2)} (5m·15m)` : "1-min avg"} color="var(--originator-own)" data={metrics.sysLoadHistory} />
                   {metrics.swapTotalBytes != null && metrics.swapTotalBytes > 0 && (
                     <MetricCard title="Swap" value={fmtBytes(metrics.swapUsedBytes)} unit={`of ${fmtBytes(metrics.swapTotalBytes)}`} color="var(--originator-third-party)" data={[]} />
@@ -202,31 +214,17 @@ export function Status() {
                   {metrics.uptimeSec != null && (
                     <MetricCard title="Uptime" value={fmtUptime(metrics.uptimeSec)} unit="since boot" color="var(--primary)" data={[]} />
                   )}
+                  {/* Per-mount filesystem cards — one per mount (replaces the separate Filesystems panel
+                      and the old "Disk" card which duplicated the root mount). Fallback to a single
+                      "Disk" card when the integration doesn't populate per-mount data. */}
+                  {metrics.filesystems.length > 0
+                    ? metrics.filesystems.map((f) => (
+                        <FilesystemCard key={f.mount} mount={f.mount} usedBytes={f.usedBytes} totalBytes={f.totalBytes} />
+                      ))
+                    : metrics.diskTotalBytes != null && metrics.diskTotalBytes > 0 && (
+                        <FilesystemCard mount="Disk" usedBytes={metrics.diskUsedBytes ?? 0} totalBytes={metrics.diskTotalBytes} />
+                      )}
                 </div>
-              )}
-              {metrics != null && metrics.filesystems.length > 0 && (
-                <PanelShell title="Filesystems" icon="storage" accent="var(--amber)" count={`${metrics.filesystems.length}`} style={{ marginTop: 4 }}>
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    {metrics.filesystems.map((f, i) => {
-                      const pct = f.totalBytes > 0 ? (f.usedBytes / f.totalBytes) * 100 : 0;
-                      const c = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
-                      return (
-                        <div key={f.mount} style={{ padding: "10px 16px", borderTop: listDivider(i) }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--on-surface)", flex: 1, ...TRUNCATE }}>{f.mount}</span>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--on-surface-variant)" }}>{fmtBytes(f.usedBytes)} / {fmtBytes(f.totalBytes)}</span>
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ flex: 1 }}>
-                              <ProgressBar pct={pct} color={c} h={5} />
-                            </div>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, fontWeight: 600, color: c, minWidth: 36, textAlign: "right" }}>{Math.round(pct)}%</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </PanelShell>
               )}
             </>
           )}

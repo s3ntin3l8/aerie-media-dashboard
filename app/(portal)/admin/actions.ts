@@ -341,6 +341,7 @@ export async function setPrometheusInstance(instance: string | null): Promise<vo
   }
   await setDeploymentSetting("prometheusInstance", instance ?? "");
   revalidatePath("/status");
+  revalidatePath("/admin");
 }
 
 /** Parse the persisted Traefik dismissed-hosts list (lowercased). Tolerant of malformed JSON. */
@@ -380,6 +381,7 @@ export async function setMetricsSource(source: "prometheus" | "beszel"): Promise
   if (source !== "prometheus" && source !== "beszel") throw new Error(`Unknown metrics source: ${source}`);
   await setDeploymentSetting("metricsSource", source);
   revalidatePath("/status");
+  revalidatePath("/admin");
 }
 
 /** Select which source fills the Download Queue panel. */
@@ -402,4 +404,5 @@ export async function setBeszelSystem(systemId: string | null): Promise<void> {
   }
   await setDeploymentSetting("beszelSystem", systemId ?? "");
   revalidatePath("/status");
+  revalidatePath("/admin");
 }

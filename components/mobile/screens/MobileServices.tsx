@@ -17,8 +17,8 @@ import { embedAuthSummary } from "@/components/views/embedAuth";
 import { KeepAliveCell } from "@/components/views/shared";
 import { CAT, CAT_ORDER } from "@/lib/categories";
 import { MiniStat } from "@/components/mobile/mcommon";
-import { SourceToggle, InstanceSelect, BeszelSystemSelect, useSecondsAgo, fmtUptime } from "@/components/status/metricsControls";
-import { fmtBytes, fmtPercent } from "@/lib/format";
+import { useSecondsAgo, fmtUptime } from "@/components/status/metricsControls";
+import { fmtBytes } from "@/lib/format";
 import type { Service } from "@/lib/types";
 
 // Compact metric tile — matches the desktop MetricCard layout in a phone-native card.
@@ -42,18 +42,37 @@ function MetricTile({ label, value, unit, icon, color, data }: {
   );
 }
 
+// Per-mount filesystem tile — same chrome as MetricTile but with a usage bar instead of a
+// sparkline (filesystems have no history array).
+function FilesystemTile({ mount, usedBytes, totalBytes }: { mount: string; usedBytes: number; totalBytes: number }) {
+  const pct = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+  const color = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
+  return (
+    <div className="card" style={{ padding: "11px 12px", borderRadius: 14, background: "var(--surface-container)", minWidth: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--on-surface-variant)", ...TRUNCATE }}>{mount}</span>
+        <Icon name="storage" size={13} color={color} />
+      </div>
+      <div style={{ fontFamily: "var(--font-headline)", fontSize: 20, fontWeight: 800, color, lineHeight: 1.05 }}>{Math.round(pct)}%</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--on-surface-variant)", marginTop: 2, ...TRUNCATE }}>
+        {fmtBytes(usedBytes)} / {fmtBytes(totalBytes)}
+      </div>
+      <div style={{ marginTop: 6 }}>
+        <ProgressBar pct={pct} color={color} h={4} />
+      </div>
+    </div>
+  );
+}
+
 export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
   const [q, setQ] = useState("");
   const services = useVisibleServices("launcher");
   const { user, oidc, keptAliveIds, favorites, toggleFavorite, role } = usePortal();
-  const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured, beszelSystemId } = useData();
+  const { metrics, arrHealth, metricsSource, prometheusConfigured, beszelConfigured } = useData();
   const who = user.name || user.email || "session";
   const isAdmin = role === "admin";
   const metricsAge = useSecondsAgo(metrics);
-  const bothConfigured = prometheusConfigured && beszelConfigured;
-  const sourceMeta = metricsSource === "beszel"
-    ? { icon: "dns", title: "Beszel Metrics" }
-    : { icon: "query_stats", title: "Prometheus Metrics" };
+  const anyMetricsConfigured = prometheusConfigured || beszelConfigured;
   const emptyMetricsMsg = metricsSource === "beszel"
     ? (beszelConfigured
         ? "Beszel unreachable or no system data — check the credentials and that a system is reporting."
@@ -248,20 +267,15 @@ export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
         </div>
       )}
 
-      {/* Admin: system metrics (Prometheus / Beszel) */}
-      {isAdmin && (
+      {/* System metrics — visible to all users; settings (source/host) are in Admin → Metrics */}
+      {anyMetricsConfigured && (
         <div>
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-            <Icon name={sourceMeta.icon} size={15} color="var(--primary)" />
-            <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--on-surface)" }}>{sourceMeta.title}</span>
-            <Pill tone="primary" style={{ fontSize: 9 }}>Admin</Pill>
-            {bothConfigured && <SourceToggle current={metricsSource} />}
+            <Icon name="monitoring" size={15} color="var(--primary)" />
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--on-surface)" }}>System Metrics</span>
             {metrics != null && (
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: metricsAge === "live" ? "var(--originator-own)" : "var(--on-surface-variant)" }}>{metricsAge}</span>
             )}
-            {metrics != null && (metricsSource === "beszel"
-              ? <BeszelSystemSelect current={beszelSystemId} />
-              : <InstanceSelect current={metrics.instance} />)}
           </div>
 
           {metrics == null ? (
@@ -269,51 +283,27 @@ export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
               {emptyMetricsMsg}
             </div>
           ) : (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
-                <MetricTile label="CPU load" value={metrics.cpuPct != null ? `${metrics.cpuPct.toFixed(1)}%` : "—"} unit={metrics.instance ? `node: ${metrics.instance}` : "all nodes"} icon="memory" color="var(--primary)" data={metrics.cpuHistory} />
-                <MetricTile label="Memory" value={fmtBytes(metrics.memUsedBytes)} unit={`of ${fmtBytes(metrics.memTotalBytes)}`} icon="memory_alt" color="var(--originator-court)" data={metrics.memHistory} />
-                <MetricTile label="Network out" value={metrics.netOutBps != null ? `${(metrics.netOutBps / 1e6).toFixed(1)} Mbps` : "—"} unit="transmit" icon="upload" color="var(--originator-third-party)" data={metrics.netHistory} />
-                <MetricTile label="Network in" value={metrics.netInBps != null ? `${(metrics.netInBps / 1e6).toFixed(1)} Mbps` : "—"} unit="receive" icon="download" color="var(--originator-court)" data={metrics.netInHistory} />
-                <MetricTile label="Disk" value={metrics.diskUsedBytes != null && metrics.diskTotalBytes ? `${fmtPercent(metrics.diskUsedBytes, metrics.diskTotalBytes)}%` : "—"} unit={`${fmtBytes(metrics.diskUsedBytes)} of ${fmtBytes(metrics.diskTotalBytes)}`} icon="storage" color="var(--amber)" data={metrics.diskHistory} />
-                <MetricTile label="System load" value={metrics.sysLoad != null ? metrics.sysLoad.toFixed(2) : "—"} unit={metrics.load5 != null && metrics.load15 != null ? `${metrics.load5.toFixed(2)} · ${metrics.load15.toFixed(2)} (5m·15m)` : "1-min avg"} icon="speed" color="var(--originator-own)" data={metrics.sysLoadHistory} />
-                {metrics.swapTotalBytes != null && metrics.swapTotalBytes > 0 && (
-                  <MetricTile label="Swap" value={fmtBytes(metrics.swapUsedBytes)} unit={`of ${fmtBytes(metrics.swapTotalBytes)}`} icon="swap_horiz" color="var(--originator-third-party)" data={[]} />
-                )}
-                {metrics.uptimeSec != null && (
-                  <MetricTile label="Uptime" value={fmtUptime(metrics.uptimeSec)} unit="since boot" icon="timer" color="var(--primary)" data={[]} />
-                )}
-              </div>
-
-              {metrics.filesystems.length > 0 && (
-                <div style={{ marginTop: 13 }}>
-                  <div style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--on-surface)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                    <Icon name="storage" size={14} color="var(--amber)" /> Filesystems
-                    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--on-surface-variant)" }}>{metrics.filesystems.length}</span>
-                  </div>
-                  <div className="card" style={{ padding: "4px 15px", borderRadius: 18, background: "var(--surface-container)" }}>
-                    {metrics.filesystems.map((f, i) => {
-                      const pct = f.totalBytes > 0 ? (f.usedBytes / f.totalBytes) * 100 : 0;
-                      const c = pct >= 90 ? "var(--error)" : pct >= 75 ? "var(--amber)" : "var(--originator-own)";
-                      return (
-                        <div key={f.mount} style={{ padding: "11px 0", borderTop: i ? "1px solid var(--outline-variant)" : "none" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface)", flex: 1, ...TRUNCATE }}>{f.mount}</span>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", flexShrink: 0 }}>{fmtBytes(f.usedBytes)} / {fmtBytes(f.totalBytes)}</span>
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ flex: 1 }}>
-                              <ProgressBar pct={pct} color={c} h={5} />
-                            </div>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, fontWeight: 600, color: c, minWidth: 34, textAlign: "right" }}>{Math.round(pct)}%</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 13 }}>
+              <MetricTile label="CPU load" value={metrics.cpuPct != null ? `${metrics.cpuPct.toFixed(1)}%` : "—"} unit={metrics.instance ? `node: ${metrics.instance}` : "all nodes"} icon="memory" color="var(--primary)" data={metrics.cpuHistory} />
+              <MetricTile label="Memory" value={fmtBytes(metrics.memUsedBytes)} unit={`of ${fmtBytes(metrics.memTotalBytes)}`} icon="memory_alt" color="var(--originator-court)" data={metrics.memHistory} />
+              <MetricTile label="Network out" value={metrics.netOutBps != null ? `${(metrics.netOutBps / 1e6).toFixed(1)} Mbps` : "—"} unit="transmit" icon="upload" color="var(--originator-third-party)" data={metrics.netHistory} />
+              <MetricTile label="Network in" value={metrics.netInBps != null ? `${(metrics.netInBps / 1e6).toFixed(1)} Mbps` : "—"} unit="receive" icon="download" color="var(--originator-court)" data={metrics.netInHistory} />
+              <MetricTile label="System load" value={metrics.sysLoad != null ? metrics.sysLoad.toFixed(2) : "—"} unit={metrics.load5 != null && metrics.load15 != null ? `${metrics.load5.toFixed(2)} · ${metrics.load15.toFixed(2)} (5m·15m)` : "1-min avg"} icon="speed" color="var(--originator-own)" data={metrics.sysLoadHistory} />
+              {metrics.swapTotalBytes != null && metrics.swapTotalBytes > 0 && (
+                <MetricTile label="Swap" value={fmtBytes(metrics.swapUsedBytes)} unit={`of ${fmtBytes(metrics.swapTotalBytes)}`} icon="swap_horiz" color="var(--originator-third-party)" data={[]} />
               )}
-            </>
+              {metrics.uptimeSec != null && (
+                <MetricTile label="Uptime" value={fmtUptime(metrics.uptimeSec)} unit="since boot" icon="timer" color="var(--primary)" data={[]} />
+              )}
+              {/* Per-mount filesystem tiles — replaces old "Disk" tile + separate Filesystems list */}
+              {metrics.filesystems.length > 0
+                ? metrics.filesystems.map((f) => (
+                    <FilesystemTile key={f.mount} mount={f.mount} usedBytes={f.usedBytes} totalBytes={f.totalBytes} />
+                  ))
+                : metrics.diskTotalBytes != null && metrics.diskTotalBytes > 0 && (
+                    <FilesystemTile mount="Disk" usedBytes={metrics.diskUsedBytes ?? 0} totalBytes={metrics.diskTotalBytes} />
+                  )}
+            </div>
           )}
         </div>
       )}
