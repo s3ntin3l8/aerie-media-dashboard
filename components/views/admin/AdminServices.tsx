@@ -17,6 +17,7 @@ import { type ServiceForm } from "@/components/modals/ServiceModal";
 import { LogsModal } from "@/components/modals/LogsModal";
 import { serviceRequiresKey, matchPreset, isTraefikSource } from "@/lib/servicePresets";
 import { CAT } from "@/lib/categories";
+import { AdminMetrics } from "./AdminMetrics";
 
 type AdminSortCol = "name" | "host" | "embed" | "cat" | "active" | "keep" | "key";
 type AdminSortDir = "asc" | "desc";
@@ -405,52 +406,52 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
                 <button
                   onClick={() => toggleFavorite(s.id)}
                   className="btn btn-ghost btn-sm"
-                  style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6, color: pinned ? "var(--amber)" : undefined }}
+                  style={{ width: 44, height: 44, justifyContent: "center", flexShrink: 0, background: "var(--surface-container-high)", borderRadius: 10, color: pinned ? "var(--amber)" : undefined }}
                   title={pinned ? "Unpin from rail" : "Pin to rail"}
                 >
                   <Icon name={pinned ? "star" : "star_border"} size={18} />
-                  {pinned ? "Pinned" : "Pin"}
                 </button>
                 <button
                   onClick={() => onOpenService(s)}
                   className="btn btn-ghost btn-sm"
-                  style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6 }}
+                  style={{ width: 44, height: 44, justifyContent: "center", flexShrink: 0, background: "var(--surface-container-high)", borderRadius: 10 }}
                   title="Open"
                 >
-                  <Icon name="open_in_full" size={18} />Open
+                  <Icon name="open_in_full" size={18} />
                 </button>
                 <button
                   onClick={() => onEdit(s)}
                   className="btn btn-ghost btn-sm"
-                  style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6 }}
+                  style={{ width: 44, height: 44, justifyContent: "center", flexShrink: 0, background: "var(--surface-container-high)", borderRadius: 10 }}
                   title="Edit"
                 >
-                  <Icon name="edit" size={18} />Edit
+                  <Icon name="edit" size={18} />
                 </button>
                 {lokiConfigured && (
                   <button
                     onClick={() => setLogsFor(s)}
                     className="btn btn-ghost btn-sm"
-                    style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6 }}
+                    style={{ width: 44, height: 44, justifyContent: "center", flexShrink: 0, background: "var(--surface-container-high)", borderRadius: 10 }}
                     title="View logs"
                   >
-                    <Icon name="receipt_long" size={18} />Logs
+                    <Icon name="receipt_long" size={18} />
                   </button>
                 )}
                 {s.canRestart && (
                   <button
                     onClick={() => setRestartFor(s)}
                     className="btn btn-ghost btn-sm"
-                    style={{ flex: 1, justifyContent: "center", minHeight: 44, gap: 6, color: "var(--error)" }}
+                    style={{ width: 44, height: 44, justifyContent: "center", flexShrink: 0, background: "var(--surface-container-high)", borderRadius: 10, color: "var(--error)" }}
                     title="Restart container"
                   >
-                    <Icon name="restart_alt" size={18} />Restart
+                    <Icon name="restart_alt" size={18} />
                   </button>
                 )}
               </div>
             </div>
           );
         })}
+        <AdminMetrics isMobile={isMobile} />
       </div>
     );
   }
@@ -551,6 +552,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
         })}
       </div>
     </div>
+    <AdminMetrics isMobile={isMobile} />
     </>
   );
 }
