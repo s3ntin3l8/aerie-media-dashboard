@@ -552,7 +552,9 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
         })}
       </div>
     </div>
-    <AdminMetrics isMobile={isMobile} />
+    <div style={{ marginTop: 24 }}>
+      <AdminMetrics isMobile={isMobile} />
+    </div>
     </>
   );
 }
