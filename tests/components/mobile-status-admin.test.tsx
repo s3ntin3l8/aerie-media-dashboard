@@ -66,43 +66,54 @@ describe("MobileServices — admin metrics + averages", () => {
     expect(screen.queryByText(/83\.\d+%/)).not.toBeInTheDocument();
   });
 
-  it("renders the metric tiles, filesystems and warnings for admins", () => {
+  it("renders the metric tiles, filesystem cards and warnings", () => {
     vi.mocked(useData).mockReturnValue(baseSnap as never);
     render(<MobileServices onOpen={vi.fn()} />);
     expect(screen.getByText("CPU load")).toBeInTheDocument();
     expect(screen.getByText("Memory")).toBeInTheDocument();
     expect(screen.getByText("Network out")).toBeInTheDocument();
-    expect(screen.getByText("Disk")).toBeInTheDocument();
-    // Filesystems list with the mount path.
-    expect(screen.getByText("Filesystems")).toBeInTheDocument();
+    // Each mount is now its own tile (no separate "Filesystems" heading or "Disk" tile).
     expect(screen.getByText("/data")).toBeInTheDocument();
-    // arrHealth warnings.
+    expect(screen.queryByText("Filesystems")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disk")).not.toBeInTheDocument();
+    // Source controls have moved to Admin → Metrics; no toggle on this page.
+    expect(screen.queryByRole("button", { name: "Beszel" })).not.toBeInTheDocument();
+    // arrHealth warnings remain admin-only.
     expect(screen.getByText("Service Warnings")).toBeInTheDocument();
     expect(screen.getByText("Indexer unavailable")).toBeInTheDocument();
-    // Both sources configured → the Prometheus⇄Beszel toggle is shown.
-    expect(screen.getByRole("button", { name: "Beszel" })).toBeInTheDocument();
   });
 
-  it("shows the unconfigured message when there is no metrics source", () => {
+  it("hides the metrics section entirely when no source is configured", () => {
     vi.mocked(useData).mockReturnValue({ ...baseSnap, metrics: null, prometheusConfigured: false, beszelConfigured: false } as never);
     render(<MobileServices onOpen={vi.fn()} />);
-    expect(screen.getByText(/Prometheus not configured/)).toBeInTheDocument();
+    expect(screen.queryByText("System Metrics")).not.toBeInTheDocument();
     expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
   });
 
-  it("hides admin-only metrics, warnings and filesystems from members", () => {
+  it("shows unconfigured message when a source is configured but metrics are null", () => {
+    vi.mocked(useData).mockReturnValue({ ...baseSnap, metrics: null, prometheusConfigured: true, beszelConfigured: false } as never);
+    render(<MobileServices onOpen={vi.fn()} />);
+    expect(screen.getByText(/Prometheus unreachable/)).toBeInTheDocument();
+    expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
+  });
+
+  it("shows metric cards and filesystem tiles to members (no longer admin-only), hides Service Warnings", () => {
     portal.role = "user";
     vi.mocked(useData).mockReturnValue(baseSnap as never);
     render(<MobileServices onOpen={vi.fn()} />);
-    expect(screen.queryByText("CPU load")).not.toBeInTheDocument();
+    // Metric cards are visible to all users.
+    expect(screen.getByText("CPU load")).toBeInTheDocument();
+    expect(screen.getByText("/data")).toBeInTheDocument();
+    // Service Warnings remain admin-only.
     expect(screen.queryByText("Service Warnings")).not.toBeInTheDocument();
-    expect(screen.queryByText("Filesystems")).not.toBeInTheDocument();
   });
 
-  it("shows 'Beszel Metrics' heading when metricsSource is beszel", () => {
+  it("shows 'System Metrics' heading regardless of metricsSource", () => {
     vi.mocked(useData).mockReturnValue({ ...baseSnap, metricsSource: "beszel" } as never);
     render(<MobileServices onOpen={vi.fn()} />);
-    expect(screen.getByText("Beszel Metrics")).toBeInTheDocument();
+    expect(screen.getByText("System Metrics")).toBeInTheDocument();
+    expect(screen.queryByText("Beszel Metrics")).not.toBeInTheDocument();
+    expect(screen.queryByText("Prometheus Metrics")).not.toBeInTheDocument();
   });
 
   it("shows error icon and 'docs →' link for arrHealth entries with type error and wikiUrl", () => {
