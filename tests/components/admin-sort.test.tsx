@@ -138,3 +138,68 @@ describe("Admin — mobile sort select", () => {
     expect(order()).toEqual(["Bravo", "Charlie", "Alpha"]);
   });
 });
+
+describe("Admin — AdminMetrics rendered inside Services tab", () => {
+  const seedWithMetrics = (services: unknown[]) =>
+    vi.mocked(useData).mockReturnValue({
+      services,
+      allServices: services,
+      groups: [],
+      visibility: [],
+      adminGroup: "admins",
+      users: [],
+      prometheusConfigured: true,
+      beszelConfigured: false,
+      metricsSource: "prometheus",
+      metrics: null,
+      beszelSystemId: null,
+    } as never);
+
+  it("shows Metrics Source panel in the desktop Services tab without navigating to a separate tab", () => {
+    mobile.value = false;
+    seedWithMetrics([alpha]);
+    render(<Admin />);
+    expect(screen.getByText("Metrics Source")).toBeInTheDocument();
+    expect(screen.getByText(/Active source/i)).toBeInTheDocument();
+  });
+
+  it("shows Metrics Source panel in the mobile Services view", () => {
+    mobile.value = true;
+    seedWithMetrics([alpha]);
+    render(<Admin />);
+    expect(screen.getByText("Metrics Source")).toBeInTheDocument();
+    expect(screen.getByText(/Active source/i)).toBeInTheDocument();
+  });
+});
+
+describe("Admin — mobile service card icon-only action buttons", () => {
+  it("renders action buttons without label text on mobile", () => {
+    mobile.value = true;
+    vi.mocked(useData).mockReturnValue({
+      services: [alpha],
+      allServices: [alpha],
+      groups: [],
+      visibility: [],
+      adminGroup: "admins",
+      users: [],
+      lokiConfigured: false,
+      prometheusConfigured: false,
+      beszelConfigured: false,
+      metricsSource: "prometheus",
+      metrics: null,
+      beszelSystemId: null,
+    } as never);
+    render(<Admin />);
+    // Labels that existed before the icon-only refactor should no longer be in the DOM.
+    expect(screen.queryByText("Pin")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+    expect(screen.queryByText("Open")).not.toBeInTheDocument();
+    expect(screen.queryByText("Edit")).not.toBeInTheDocument();
+    expect(screen.queryByText("Logs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Restart")).not.toBeInTheDocument();
+    // Title attributes confirm the buttons are still present.
+    expect(screen.getByTitle("Pin to rail")).toBeInTheDocument();
+    expect(screen.getByTitle("Open")).toBeInTheDocument();
+    expect(screen.getByTitle("Edit")).toBeInTheDocument();
+  });
+});
