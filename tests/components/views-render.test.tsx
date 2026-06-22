@@ -87,16 +87,13 @@ describe("view smoke renders", () => {
     expect(screen.getAllByText(/Sonarr/i).length).toBeGreaterThan(0);
   });
 
-  it("Admin renders the Metrics tab when a metrics source is configured", () => {
-    // SNAP has prometheusConfigured: true, so the Metrics tab should be visible.
+  it("Admin shows Metrics Source section in the Services tab when a metrics source is configured", () => {
+    // Metrics config is folded into the Services & Secrets tab — no separate Metrics tab.
     render(<Admin />);
-    const metricsTab = screen.getByRole("button", { name: /Metrics/i });
-    expect(metricsTab).toBeInTheDocument();
-    fireEvent.click(metricsTab);
-    // The Metrics source PanelShell title is shown.
+    // No standalone Metrics tab button.
+    expect(screen.queryByRole("button", { name: /^Metrics$/i })).not.toBeInTheDocument();
+    // The Metrics Source panel is visible directly in the Services tab.
     expect(screen.getByText("Metrics Source")).toBeInTheDocument();
-    // InstanceSelect is rendered (prometheus is the source, beszelConfigured: false so no toggle).
-    // The panel also describes the active source.
     expect(screen.getByText(/Active source/i)).toBeInTheDocument();
   });
 
