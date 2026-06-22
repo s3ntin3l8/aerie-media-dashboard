@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
-    "@libsql/client": "^0.17.3",
+    "@libsql/client": "^0.17.4",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.9",
     "next-auth": "^5.0.0-beta.31",
