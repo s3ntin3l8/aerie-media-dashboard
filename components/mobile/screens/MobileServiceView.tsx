@@ -157,6 +157,10 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
               key={reloadKey}
               src={url}
               title={`${s.name} (embedded)`}
+              // See Launcher.tsx — delegate fullscreen/PiP/media perms so the embedded
+              // player's fullscreen button works inside the cross-origin iframe.
+              allow="fullscreen; picture-in-picture; autoplay; encrypted-media; clipboard-write"
+              allowFullScreen
               onLoad={onLoad}
               onError={onError}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none", opacity: loaded ? 1 : 0, transition: "opacity .2s" }}
