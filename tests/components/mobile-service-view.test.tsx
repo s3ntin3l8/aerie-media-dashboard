@@ -56,4 +56,13 @@ describe("MobileServiceView — self-healing re-auth", () => {
     fireEvent(window, new Event("focus"));
     expect(probe.reload).not.toHaveBeenCalled();
   });
+
+  it("delegates fullscreen + media permissions to the embedded frame", () => {
+    probe.embedState = "ok";
+    const { container } = render(<MobileServiceView s={svc} onClose={vi.fn()} />);
+    const iframe = container.querySelector("iframe");
+    expect(iframe?.getAttribute("allow")).toContain("fullscreen");
+    expect(iframe?.getAttribute("allow")).toContain("picture-in-picture");
+    expect(iframe?.hasAttribute("allowfullscreen")).toBe(true);
+  });
 });

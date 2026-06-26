@@ -78,4 +78,12 @@ describe("ServiceView — deep-link iframe src", () => {
     rerender(<ServiceView s={svc} deepPath="/movie/arrival-2016" />);
     expect(iframeSrc(container)).toBe("https://radarr.test/movie/arrival-2016");
   });
+
+  it("delegates fullscreen + media permissions to the embedded frame", () => {
+    const { container } = render(<ServiceView s={svc} />);
+    const iframe = container.querySelector("iframe");
+    expect(iframe?.getAttribute("allow")).toContain("fullscreen");
+    expect(iframe?.getAttribute("allow")).toContain("picture-in-picture");
+    expect(iframe?.hasAttribute("allowfullscreen")).toBe(true);
+  });
 });

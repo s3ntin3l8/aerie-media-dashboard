@@ -170,6 +170,12 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
               key={reloadKey}
               src={frameSrc}
               title={`${s.name} (embedded)`}
+              // Delegate the Permissions-Policy features the embedded player needs —
+              // without these a cross-origin iframe can't enter fullscreen, PiP, etc.
+              // (e.g. Plex's fullscreen button silently no-ops). allowFullScreen covers
+              // older Safari that predates the `allow` attribute.
+              allow="fullscreen; picture-in-picture; autoplay; encrypted-media; clipboard-write"
+              allowFullScreen
               onLoad={onLoad}
               // onError rarely fires for cross-origin frame blocks, but when it
               // does, resolve immediately instead of waiting out the timeout.
