@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.1](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.1.0...aerie-v1.1.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **admin:** icon-only mobile service buttons, fold Metrics into Services tab ([#141](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/141)) ([d8dbd9d](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/d8dbd9df73a04d1c695e29e667d123960d53f9c4))
+* **admin:** spacing above Metrics panel on desktop, cover new lines in tests ([#143](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/143)) ([3585236](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/35852368e447a851971e5b9c7dda01418d73fd93))
+* **embed:** delegate fullscreen + media perms to service iframe ([#144](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/144)) ([683031a](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/683031a6b640c41746c60dcbb110a3d6a9cc35cc))
+* **requests:** guard undefined member so first login doesn't crash ([#148](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/148)) ([955efb1](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/955efb127df416b6685c19f4005e112e6b8d236b))
+
 ## [1.1.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.0.0...aerie-v1.1.0) (2026-06-22)
 
 
