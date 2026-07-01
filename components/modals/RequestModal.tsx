@@ -36,14 +36,14 @@ function StateBadge({ state }: { state: RequestStatus | null }) {
   return <Pill tone={RQ_TONE[state]}>{RQ_LABEL[state]}</Pill>;
 }
 
-function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: string) => void; onPick: (d: DiscoverItem) => void }) {
+function DiscoverStep({ me, q, setQ, onPick }: { me: User | undefined; q: string; setQ: (v: string) => void; onPick: (d: DiscoverItem) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 40);
   }, []);
   // Show the combined quota state: restricted if either type is restricted (pre-pick), or just movie/TV when known.
-  const movieAtQuota = me.movieQuota?.restricted ?? false;
-  const tvAtQuota = me.tvQuota?.restricted ?? false;
+  const movieAtQuota = me?.movieQuota?.restricted ?? false;
+  const tvAtQuota = me?.tvQuota?.restricted ?? false;
   const atQuota = movieAtQuota && tvAtQuota;
 
   // Type-ahead against /api/discover (real Overseerr search, or mock catalog),
@@ -76,7 +76,7 @@ function DiscoverStep({ me, q, setQ, onPick }: { me: User; q: string; setQ: (v: 
           <Icon name="search" size={18} color="var(--on-surface-variant)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
           <input ref={inputRef} className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search movies & shows…" style={{ paddingLeft: 40, paddingTop: 11, paddingBottom: 11, fontSize: 14 }} />
         </div>
-        {me.movieQuota != null && (
+        {me?.movieQuota != null && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 11, flexWrap: "wrap", rowGap: 4 }}>
             {([["movie", "Movies", me.movieQuota, movieAtQuota], ["live_tv", "TV", me.tvQuota, tvAtQuota]] as const).map(([icon, label, quota, at]) => quota && (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 120 }}>
