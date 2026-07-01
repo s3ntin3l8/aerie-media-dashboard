@@ -616,12 +616,12 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 16px", borderBottom: "1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent)" }}>
           <Eyebrow>Quota</Eyebrow>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-            {me.movieQuota && <ProgressBar pct={me.movieQuota.limit ? Math.min(100, (me.movieQuota.used / me.movieQuota.limit) * 100) : 0} color={me.movieQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
-            {me.tvQuota && <ProgressBar pct={me.tvQuota.limit ? Math.min(100, (me.tvQuota.used / me.tvQuota.limit) * 100) : 0} color={me.tvQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
+            {me?.movieQuota && <ProgressBar pct={me.movieQuota.limit ? Math.min(100, (me.movieQuota.used / me.movieQuota.limit) * 100) : 0} color={me.movieQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
+            {me?.tvQuota && <ProgressBar pct={me.tvQuota.limit ? Math.min(100, (me.tvQuota.used / me.tvQuota.limit) * 100) : 0} color={me.tvQuota.restricted ? "var(--amber)" : "var(--originator-court)"} h={4} />}
           </div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
-            {me.movieQuota && <span>{me.movieQuota.used}/{me.movieQuota.limit ?? "∞"}</span>}
-            {me.tvQuota && <span>{me.tvQuota.used}/{me.tvQuota.limit ?? "∞"}</span>}
+            {me?.movieQuota && <span>{me.movieQuota.used}/{me.movieQuota.limit ?? "∞"}</span>}
+            {me?.tvQuota && <span>{me.tvQuota.used}/{me.tvQuota.limit ?? "∞"}</span>}
           </div>
         </div>
       )}

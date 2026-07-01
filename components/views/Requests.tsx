@@ -169,7 +169,7 @@ export function Requests() {
         </button>
       </PageHeader>
 
-      {!adminMode && !me.linked && (
+      {!adminMode && me && !me.linked && (
         <div style={{ margin: "16px 32px 0", padding: "12px 16px", borderRadius: 12, display: "flex", alignItems: "center", gap: 12, background: "color-mix(in srgb, var(--amber) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)" }}>
           <Icon name="link_off" size={18} color="var(--amber)" />
           <div style={{ flex: 1, fontSize: 12.5, color: "var(--on-surface)" }}>
@@ -195,8 +195,8 @@ export function Requests() {
               </>
             ) : (
               <>
-                {me.movieQuota != null && <StatTile label="Movies" value={`${me.movieQuota.used}/${me.movieQuota.limit ?? "∞"}`} color={me.movieQuota.restricted ? "var(--amber)" : "var(--originator-court)"} icon="movie" />}
-                {me.tvQuota != null && <StatTile label="TV quota" value={`${me.tvQuota.used}/${me.tvQuota.limit ?? "∞"}`} color={me.tvQuota.restricted ? "var(--amber)" : "var(--originator-court)"} icon="live_tv" />}
+                {me?.movieQuota != null && <StatTile label="Movies" value={`${me.movieQuota.used}/${me.movieQuota.limit ?? "∞"}`} color={me.movieQuota.restricted ? "var(--amber)" : "var(--originator-court)"} icon="movie" />}
+                {me?.tvQuota != null && <StatTile label="TV quota" value={`${me.tvQuota.used}/${me.tvQuota.limit ?? "∞"}`} color={me.tvQuota.restricted ? "var(--amber)" : "var(--originator-court)"} icon="live_tv" />}
                 <StatTile label="Pending" value={counts.pending} color="var(--amber)" icon="pending" />
                 <StatTile label="Available" value={counts.available} color="var(--originator-own)" icon="download_done" />
               </>
