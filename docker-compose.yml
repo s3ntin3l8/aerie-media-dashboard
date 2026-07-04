@@ -34,8 +34,19 @@ services:
       - traefik.http.routers.aerie.rule=Host(`${AERIE_DOMAIN:-aerie.example.com}`)
       - traefik.http.routers.aerie.entrypoints=websecure
       - traefik.http.routers.aerie.tls.certresolver=le
+      # Attach HSTS so browsers only ever reach the portal over HTTPS. The app
+      # deliberately delegates HSTS to the proxy (see middleware.ts). Without this
+      # a default deploy ships with no HSTS — a silent downgrade.
+      - traefik.http.routers.aerie.middlewares=aerie-hsts@docker
       - traefik.http.services.aerie.loadbalancer.server.port=3000
       # The portal authenticates via OIDC itself; forward-auth optional here.
+
+      # ── HSTS: only ever reach the portal over HTTPS ──
+      # `stsPreload` is intentionally omitted here (it is hard to undo — enable it
+      # only when you intend to submit the domain to the HSTS preload list; see
+      # docker-compose.traefik.example.yml).
+      - traefik.http.middlewares.aerie-hsts.headers.stsSeconds=31536000
+      - traefik.http.middlewares.aerie-hsts.headers.stsIncludeSubdomains=true
 
       # ── Reusable middlewares (attach to embeddable services) ──
       # Allow framing only from the portal origin (replaces X-Frame-Options).
