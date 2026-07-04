@@ -464,7 +464,7 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
       <HeartbeatStrip beats={s.beats} h={24} />
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
-        <span style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
+        <span suppressHydrationWarning style={{ fontSize: 10.5, color: "var(--on-surface-variant)" }}>
           {s.lastIncidentAt ? `Last incident ${timeAgo(s.lastIncidentAt)}` : "Last 30 days"} · v{String(s.version).replace(/^v/i, "")}
         </span>
         {s.embeddable ? (
@@ -1154,7 +1154,7 @@ export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; 
             <Icon name={d.svc === "radarr" ? "movie" : d.svc === "listenarr" ? "headphones" : d.svc === "qbittorrent" ? "downloading" : "live_tv"} size={14} color="var(--originator-third-party)" />
             <span style={{ fontSize: 12, color: "var(--on-surface)", flex: 1, ...TRUNCATE }}>{d.title}</span>
             <Pill tone={d.event === "imported" ? "originator-own" : "on-surface-variant"}>{d.event}</Pill>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", minWidth: 52, textAlign: "right" }}>{timeAgo(d.when)}</span>
+            <span suppressHydrationWarning style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)", minWidth: 52, textAlign: "right" }}>{timeAgo(d.when)}</span>
           </div>
         ))}
       </div>
