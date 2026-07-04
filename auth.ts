@@ -78,6 +78,9 @@ const providers: NextAuthConfig["providers"] = authConfigured
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  // Pin Secure-prefixed cookies (__Secure-/__Host-, Secure flag) in production rather than relying on
+  // Auth.js's forwarded-header auto-detection — fails safe if the proxy ever drops X-Forwarded-Proto.
+  useSecureCookies: env.secureCookies,
   secret: env.authSecret || undefined,
   providers,
   pages: { signIn: "/login" },

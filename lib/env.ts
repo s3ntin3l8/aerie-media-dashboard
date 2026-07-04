@@ -8,6 +8,17 @@ import "server-only";
 
 const trim = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
 
+/**
+ * Whether Auth.js should force `Secure`-prefixed session cookies (`__Secure-`/`__Host-`, Secure flag).
+ * Pinned to production rather than left to Auth.js's forwarded-header auto-detection: prod always sits
+ * behind Traefik TLS, so this is byte-identical to today's behaviour but fails safe if the proxy ever
+ * stops forwarding `X-Forwarded-Proto`. Non-production (dev / `npm run start` over HTTP) keeps plain
+ * cookies so local sign-in still works.
+ */
+export function computeSecureCookies(nodeEnv: string | undefined): boolean {
+  return nodeEnv === "production";
+}
+
 export const env = {
   // ── Generic OIDC (any provider: Authentik, Keycloak, Google, Pocket-ID, Zitadel, …) ──
   authIssuer: trim(process.env.OIDC_ISSUER),
@@ -55,6 +66,10 @@ export const env = {
   // ── Branding / deployment ──
   brand: trim(process.env.AERIE_BRAND) || "AERIE",
   portalUrl: trim(process.env.AERIE_PORTAL_URL) || "https://media.example.com",
+
+  // ── Security ──
+  /** Force Auth.js `Secure`-prefixed session cookies in production (see computeSecureCookies). */
+  secureCookies: computeSecureCookies(process.env.NODE_ENV),
 } as const;
 
 /** True when real Authentik OIDC is configured; otherwise the app runs in dev/mock mode. */

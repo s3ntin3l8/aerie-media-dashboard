@@ -122,7 +122,11 @@ export async function GET(req: NextRequest) {
   if (target.hostname !== expectedHost) return new NextResponse("blocked", { status: 400 });
 
   try {
-    const res = await fetch(target, { cache: "no-store", signal: AbortSignal.timeout(6000) });
+    // redirect: "manual" — the SSRF host-pin above only validates the *initial* target, so following
+    // a 30x would let a compromised/malicious upstream bounce this credential-bearing fetch to an
+    // arbitrary host. Manual redirects surface as res.ok === false, which the guard below turns into
+    // a 502 (fails closed). Legitimate image endpoints all serve bytes at 200, so nothing real breaks.
+    const res = await fetch(target, { cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(6000) });
     if (!res.ok || !res.body) return new NextResponse("upstream error", { status: 502 });
     return new NextResponse(res.body, {
       status: 200,
