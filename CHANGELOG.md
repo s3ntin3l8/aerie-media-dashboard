@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.1.1...aerie-v1.2.0) (2026-07-04)
+
+
+### Features
+
+* **security:** lock script-src to a per-request CSP nonce ([#151](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/151)) ([ccd5841](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/ccd58417d780f6082592a3b4d4b39839c306cfa9))
+* **security:** pin secure session cookies and stop artwork proxy following redirects ([#154](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/154)) ([5b27588](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/5b27588f44ae440e2e74f77f1102c357e6cdeac5))
+
+
+### Bug Fixes
+
+* **portal:** make live-time renders hydration-safe (React [#418](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/418)) ([#153](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/153)) ([c6fd6bb](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/c6fd6bb389dcbb3cd86c98889532360552753e96))
+* **portal:** stop hydration mismatch from localStorage-seeded prefs ([#152](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/152)) ([3fac658](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/3fac658dc91611ef8b28194b8ce62394d08ba334))
+* **security:** ship HSTS by default and add server-side /admin guard ([#149](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/149)) ([ec3a696](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/ec3a6968c74941db7f495672e690590366cf2f83))
+
 ## [1.1.1](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.1.0...aerie-v1.1.1) (2026-07-01)
 
 
