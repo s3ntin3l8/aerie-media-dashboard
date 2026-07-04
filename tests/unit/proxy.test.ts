@@ -87,9 +87,24 @@ describe("proxy middleware — security response headers", () => {
     expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
     expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
     expect(res.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
-    // Baseline CSP: hardens object/base/frame-ancestors without constraining iframe embedding.
-    expect(res.headers.get("content-security-policy")).toBe(
-      "object-src 'none'; base-uri 'self'; frame-ancestors 'self'",
-    );
+    // CSP: script-src locked to a per-request nonce + strict-dynamic; the baseline
+    // object/base/frame-ancestors/worker directives are still present. iframe embedding and remote
+    // API loads stay unconstrained (no frame-src/connect-src).
+    const csp = res.headers.get("content-security-policy") ?? "";
+    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+    expect(csp).toContain("worker-src 'self'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'self'");
+    expect(csp).toContain("frame-ancestors 'self'");
+  });
+
+  it("mints a fresh script-src nonce per request", () => {
+    const nonceOf = (res: Response) =>
+      (res.headers.get("content-security-policy") ?? "").match(/'nonce-([^']+)'/)?.[1];
+    const a = nonceOf(run("/login", null));
+    const b = nonceOf(run("/login", null));
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    expect(a).not.toBe(b);
   });
 });
