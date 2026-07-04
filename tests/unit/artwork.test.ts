@@ -111,6 +111,20 @@ describe("GET /api/artwork", () => {
     expect(res.headers.get("content-type")).toBe("image/png");
     const calledUrl = fetchMock.mock.calls[0][0] as URL;
     expect(calledUrl.origin).toBe("https://jf.local:8096");
+    // The outbound fetch must not follow redirects: the SSRF host-pin only checks the initial
+    // target, so a 30x off the pinned host must fail closed rather than be chased.
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: "manual" });
+  });
+
+  it("does not follow an upstream redirect — a 30x fails closed with 502", async () => {
+    mockCreds({ baseUrl: "https://jf.local:8096", apiKey: "k" });
+    // With redirect: "manual", a 302 surfaces as ok=false; the route must 502 and never re-fetch.
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 302, body: null });
+    globalThis.fetch = fetchMock as never;
+
+    const res = await GET(req("svc=jellyfin&ref=abc123"));
+    expect(res.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("proxies a valid overseerr request to the fixed TMDB CDN origin", async () => {
