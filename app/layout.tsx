@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { JetBrains_Mono } from "next/font/google";
 import { env } from "@/lib/env";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
@@ -46,16 +47,20 @@ export const metadata: Metadata = {
 // but the script may switch it to light before React takes over.
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("aerie.theme");if(t==="light"){document.documentElement.classList.remove("dark")}else{document.documentElement.classList.add("dark")}}catch(e){}})()`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Per-request CSP nonce set by middleware (see middleware.ts). Reading it opts the root layout
+  // into dynamic rendering — safe, since every real page is already dynamic and the static metadata
+  // routes (icon/manifest/opengraph) bypass this layout.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" className={`dark ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
-        {/* Blocking theme script — must run before any paint */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Blocking theme script — must run before any paint. Nonce'd so it satisfies script-src. */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>
         <ServiceWorkerRegister />
