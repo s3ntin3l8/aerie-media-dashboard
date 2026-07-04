@@ -164,7 +164,9 @@ export function ClockWidget({ fill }: { fill?: boolean } = {}) {
           }}
         >
           {hh}:{mm}
-          <span style={{ fontSize: "0.42em", color: "var(--primary)", marginLeft: 4 }}>{ss}</span>
+          {/* suppressHydrationWarning doesn't propagate to children, so the (always-drifting)
+              seconds in this nested span need their own to avoid a hydration mismatch. */}
+          <span suppressHydrationWarning style={{ fontSize: "0.42em", color: "var(--primary)", marginLeft: 4 }}>{ss}</span>
         </div>
         <div suppressHydrationWarning style={{ fontSize: 12.5, fontWeight: 600, color: "var(--on-surface-variant)" }}>
           {date}

@@ -96,7 +96,7 @@ function HistoryRow({ item, i, isAdmin }: { item: StreamHistoryItem; i: number; 
             <Icon name="schedule" size={11} />
             {fmtDuration(item.duration)}
             <span style={{ opacity: 0.5 }}>·</span>
-            {timeAgo(startedIso)}
+            <span suppressHydrationWarning>{timeAgo(startedIso)}</span>
           </span>
         </div>
       </div>
