@@ -63,21 +63,15 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
   const router = useRouter();
   const pathname = usePathname();
   const realRole = user.role;
-  const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      const saved = localStorage.getItem("aerie.theme") as Theme | null;
-      if (saved === "dark" || saved === "light") return saved;
-    } catch { /* ignore */ }
-    return "dark";
-  });
+  // SSR-safe default; the persisted theme is adopted on mount (see effect below), so the first
+  // client render matches the server and the Rail's theme toggle doesn't hydrate-mismatch (React
+  // #418). The inline pre-paint script (app/layout.tsx) owns the real <html> class, so no flash.
+  const [theme, setTheme] = useState<Theme>("dark");
   const [role, setRole] = useState<Role>(realRole);
   const [favorites, setFavorites] = useState<string[]>(initialFavorites);
-  const [lastOpened, setLastOpened] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem("aerie.lastService");
-    } catch { /* ignore */ }
-    return null;
-  });
+  // Null on the server + first client render (localStorage is client-only) so the Rail's jump-back
+  // slot doesn't hydrate-mismatch; the stored value is adopted on mount (see effect below).
+  const [lastOpened, setLastOpened] = useState<string | null>(null);
   const [keptAliveIds, setKeptAliveIds] = useState<string[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -87,8 +81,29 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
     modalOpenRef.current = modalOpen;
   }, [modalOpen]);
 
-  // Keep <html class="dark"> + storage in sync with theme.
+  // Adopt client-only persisted prefs (theme, last-opened service) AFTER mount. Reading them during
+  // render would diverge from the server (which has no localStorage) and hydrate-mismatch the Rail
+  // (React #418). The inline pre-paint script already applied the correct <html> class.
   useEffect(() => {
+    try {
+      const t = localStorage.getItem("aerie.theme");
+      if (t === "dark" || t === "light") setTheme(t as Theme);
+      const svc = localStorage.getItem("aerie.lastService");
+      if (svc) setLastOpened(svc);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Keep <html class="dark"> + storage in sync with theme. Skip the first run: the inline script
+  // owns the initial class and the persisted theme is adopted above, so syncing on mount would
+  // flash the default "dark" before adoption. Sync only on subsequent user toggles.
+  const themeApplied = useRef(false);
+  useEffect(() => {
+    if (!themeApplied.current) {
+      themeApplied.current = true;
+      return;
+    }
     document.documentElement.classList.toggle("dark", theme === "dark");
     try {
       localStorage.setItem("aerie.theme", theme);

@@ -15,6 +15,7 @@ function Probe() {
   return (
     <div>
       <span data-testid="theme">{p.theme}</span>
+      <span data-testid="last">{p.lastOpened ?? ""}</span>
       <span data-testid="role">{p.role}</span>
       <span data-testid="palette">{String(p.paletteOpen)}</span>
       <span data-testid="favs">{p.favorites.join(",")}</span>
@@ -32,6 +33,17 @@ const renderAs = (role: "admin" | "user") =>
 beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
 
 describe("PortalProvider", () => {
+  it("initializes to SSR-safe defaults, then adopts persisted prefs from localStorage on mount", () => {
+    // Persisted before mount, but read via a post-mount effect (not a useState initializer) so the
+    // server render and the first client render agree — this is what prevents the Rail hydration
+    // mismatch (React #418). By the time RTL flushes effects, the stored values are adopted.
+    localStorage.setItem("aerie.theme", "light");
+    localStorage.setItem("aerie.lastService", "plex");
+    renderAs("admin");
+    expect(screen.getByTestId("theme").textContent).toBe("light");
+    expect(screen.getByTestId("last").textContent).toBe("plex");
+  });
+
   it("toggles theme (and persists it)", () => {
     renderAs("admin");
     const before = screen.getByTestId("theme").textContent;
