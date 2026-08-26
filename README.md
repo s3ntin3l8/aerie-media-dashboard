@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml"><img src="https://github.com/s3ntin3l8/media-dashboard/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-informational.svg" alt="License: MIT"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-informational.svg" alt="License: AGPL-3.0"></a>
 </p>
 
 A private media portal for self-hosted services (Plex, Jellyfin, Overseerr, the *arr suite,
@@ -120,4 +120,4 @@ Backup/restore, `ENCRYPTION_KEY` rotation, deployment update, health check, and 
 
 ## License
 
-[MIT](./LICENSE) © 2026 Björn ([s3ntin3l8](https://github.com/s3ntin3l8))
+[AGPL-3.0](./LICENSE) © 2026 Björn Hansen
