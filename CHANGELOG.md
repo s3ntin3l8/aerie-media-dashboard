@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.2.0...aerie-v1.2.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **hooks:** reset pagination page during render instead of in an effect ([#201](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/201)) ([962b8f2](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/962b8f2e70ec870562c500e77bfdfdad5ccddd8a))
+
 ## [1.2.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.1.1...aerie-v1.2.0) (2026-07-04)
 
 
