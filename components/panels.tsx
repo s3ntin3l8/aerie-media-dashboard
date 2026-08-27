@@ -13,6 +13,7 @@ import { useStacked } from "@/components/portal/StackedContext";
 import { isVisible } from "@/lib/visibility";
 import { resolveBySource } from "@/lib/widgets/capabilities";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
+import { usePagination } from "@/components/hooks/usePagination";
 import { fmtTime } from "@/lib/time";
 import { fmtBytes } from "@/lib/format";
 import {
@@ -78,16 +79,6 @@ export function timeAgo(iso: string | undefined): string | null {
 }
 
 export { fmtTime };
-
-function usePagination<T>(items: T[], pageSize: number) {
-  const [page, setPage] = useState(0);
-  const len = items.length;
-  useEffect(() => { setPage(0); }, [len]);
-  const totalPages = Math.max(1, Math.ceil(len / pageSize));
-  const safePage = Math.min(page, totalPages - 1);
-  const slice = items.slice(safePage * pageSize, (safePage + 1) * pageSize);
-  return { page: safePage, totalPages, slice, setPage };
-}
 
 function PageControls({
   page,
