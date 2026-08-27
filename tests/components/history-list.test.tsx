@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
 // HistoryList pulls in @/components/panels, which imports a server action
@@ -110,6 +110,12 @@ describe("HistoryList — admin vs user", () => {
 });
 
 describe("HistoryList — pagination (25 per page)", () => {
+  // The pager buttons are icon-only (no accessible name), so they can only be
+  // reached positionally. Re-query on every use: reusing a snapshot of the
+  // button list across clicks can click a node a re-render has replaced.
+  const nextBtn = () => screen.getAllByRole("button").at(-1)!;
+  const prevBtn = () => screen.getAllByRole("button").at(-2)!;
+
   it("renders only the first 25 of 30 rows, then pages to the rest", async () => {
     const items = Array.from({ length: 30 }, (_, i) => movie(i + 1));
     mockHistory(items);
@@ -119,21 +125,22 @@ describe("HistoryList — pagination (25 per page)", () => {
     await screen.findByText("Movie 1");
     expect(screen.getByText("Movie 25")).toBeInTheDocument();
     expect(screen.queryByText("Movie 26")).toBeNull();
-
-    // Page indicator shows 1 / 2; there are two page controls (prev/next).
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
-    const controls = screen.getAllByRole("button");
-    // The last control is "next page".
-    fireEvent.click(controls[controls.length - 1]);
 
-    await waitFor(() => expect(screen.getByText("Movie 26")).toBeInTheDocument());
+    // → page 2. Assert the indicator first: if the page state were ever
+    // clobbered, this fails with "1 / 2" received instead of an opaque
+    // "Movie 26 not found".
+    fireEvent.click(nextBtn());
+    expect(await screen.findByText("2 / 2")).toBeInTheDocument();
+    expect(screen.getByText("Movie 26")).toBeInTheDocument();
     expect(screen.getByText("Movie 30")).toBeInTheDocument();
     expect(screen.queryByText("Movie 1")).toBeNull();
-    expect(screen.getByText("2 / 2")).toBeInTheDocument();
 
-    // Page back to the first page.
-    fireEvent.click(controls[controls.length - 2]);
-    await waitFor(() => expect(screen.getByText("Movie 1")).toBeInTheDocument());
+    // ← back to page 1, re-querying the controls against the current render.
+    fireEvent.click(prevBtn());
+    expect(await screen.findByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByText("Movie 1")).toBeInTheDocument();
+    expect(screen.queryByText("Movie 26")).toBeNull();
   });
 
   it("renders no page controls when the list fits on one page", async () => {

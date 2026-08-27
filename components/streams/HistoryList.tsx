@@ -3,20 +3,13 @@ import React, { useEffect, useState } from "react";
 import type { StreamHistoryItem } from "@/lib/types";
 import { Icon, Avatar, PosterTile, TRUNCATE, listDivider } from "@/components/primitives";
 import { Empty, PanelShell, timeAgo } from "@/components/panels";
+import { usePagination } from "@/components/hooks/usePagination";
 
 function fmtDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
-}
-
-function usePagination<T>(items: T[], pageSize: number) {
-  const [page, setPage] = useState(0);
-  useEffect(() => { setPage(0); }, [items.length]);
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-  const safePage = Math.min(page, totalPages - 1);
-  return { page: safePage, totalPages, slice: items.slice(safePage * pageSize, (safePage + 1) * pageSize), setPage };
 }
 
 function PageControls({ page, totalPages, setPage }: { page: number; totalPages: number; setPage: (p: number) => void }) {
