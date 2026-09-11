@@ -62,3 +62,7 @@ coverage/
 
 # vitest junit output (CI)
 test-results/
+
+# Developer worktrees (per AGENTS.md make wt convention)
+.wt/
+
