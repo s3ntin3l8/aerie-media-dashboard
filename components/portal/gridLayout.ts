@@ -20,7 +20,7 @@ export interface WidgetMeta {
   snapH?: (h: number) => number;
 }
 
-export const GRID = { cols: 12, rowH: 30, gap: 14, stackBelow: 720 } as const;
+export const GRID = { cols: 12, rowH: 30, gap: 14, stackBelow: 720, tabletBelow: 1100 } as const;
 
 // Deprecated widget `type`s that were merged into a functional widget, mapped to
 // their replacement + the source setting that reproduces the old single-provider

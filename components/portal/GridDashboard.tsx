@@ -8,9 +8,9 @@
 // ============================================================
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/primitives";
-import { GRID, packAround, mobileStack, type Tile, type MobileOverlay } from "@/components/portal/gridLayout";
+import { GRID, packAround, mobileStack, gridSort, type Tile, type MobileOverlay } from "@/components/portal/gridLayout";
 import { widgetMeta, hasSettings, WIDGET_CATALOG } from "@/components/portal/widgetCatalog";
-import { StackedContext } from "@/components/portal/StackedContext";
+import { StackedContext, NaturalHeightContext } from "@/components/portal/StackedContext";
 
 type CSS = React.CSSProperties;
 
@@ -109,7 +109,7 @@ function tileChrome(editing: boolean, isActive: boolean): CSS {
 }
 
 export function GridDashboard({ layout, onChange, editing, renderWidget, onRemove, onConfigure, forceStacked, mobileOverlay, onMobileReorder, onMobileHide, onMobileShow }: GridDashboardProps) {
-  const { cols, rowH, gap, stackBelow } = GRID;
+  const { cols, rowH, gap, stackBelow, tabletBelow } = GRID;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(1180);
   const [act, setAct] = useState<ActiveDrag | null>(null);
@@ -119,6 +119,9 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
     setAct(v);
   };
 
+  // Each layout branch renders its own wrapper element, so re-attach the observer when the
+  // branch changes (otherwise it stays bound to a detached node and resizes/fold events are missed).
+  const branch = forceStacked || W < stackBelow ? "stacked" : !editing && W < tabletBelow ? "tablet" : editing ? "edit" : "grid";
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -131,9 +134,12 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [branch]);
 
   const stacked = forceStacked || W < stackBelow;
+  // Tablet / foldable width: reflow the desktop arrangement into 2 natural-height columns.
+  // Editing keeps the measured 12-col grid (drag/resize needs fixed cell geometry).
+  const tablet = !stacked && !editing && W < tabletBelow;
   const colW = Math.max(1, (W - gap * (cols - 1)) / cols);
   const cellW = colW + gap;
   const cellH = rowH + gap;
@@ -217,6 +223,7 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
     const { visible, hidden } = mobileStack(layout, mobileOverlay);
     return (
       <StackedContext.Provider value={stacked}>
+      <NaturalHeightContext.Provider value>
       <div ref={wrapRef} style={{ display: "flex", flexDirection: "column", gap }}>
         {visible.map((item, i) => {
           return (
@@ -278,6 +285,28 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
           </div>
         )}
       </div>
+      </NaturalHeightContext.Provider>
+      </StackedContext.Provider>
+    );
+  }
+
+  // ===========================================================
+  // TABLET (foldable / small tablet) — 2 columns, natural height.
+  // Wide tiles (w >= 7 of 12) span both columns; narrower ones pair up. The desktop
+  // arrangement order is preserved; tile `h` is ignored so content never clips.
+  // ===========================================================
+  if (tablet) {
+    return (
+      <StackedContext.Provider value={false}>
+        <NaturalHeightContext.Provider value>
+          <div ref={wrapRef} style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridAutoFlow: "row dense", alignItems: "start", gap }}>
+            {gridSort(layout).map((item) => (
+              <div key={item.uid} data-tablet-tile style={{ gridColumn: item.w >= 7 ? "1 / -1" : "span 1", position: "relative", borderRadius: "var(--radius-xl)", minWidth: 0 }}>
+                {renderWidget(item, false)}
+              </div>
+            ))}
+          </div>
+        </NaturalHeightContext.Provider>
       </StackedContext.Provider>
     );
   }

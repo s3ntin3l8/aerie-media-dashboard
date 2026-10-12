@@ -96,7 +96,7 @@ function GreetingHeader({
   return (
     <div style={{ padding: "22px 32px 18px", borderBottom: "1px solid var(--outline-variant)", flexShrink: 0, background: "color-mix(in srgb, var(--surface-container-lowest) 40%, transparent)" }}>
       <div className="aerie-header-row">
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
             {editing ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -110,7 +110,7 @@ function GreetingHeader({
               {date}
             </span>
           </div>
-          <h1 suppressHydrationWarning style={{ fontFamily: "var(--font-headline)", fontSize: 28, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--on-surface)", whiteSpace: "nowrap" }}>
+          <h1 suppressHydrationWarning style={{ fontFamily: "var(--font-headline)", fontSize: "clamp(22px, 3.2vw, 28px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: "var(--on-surface)", overflowWrap: "anywhere" }}>
             {editing ? "Arrange your dashboard" : `${greet}, ${userName}.`}
           </h1>
         </div>

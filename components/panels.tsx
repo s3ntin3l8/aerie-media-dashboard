@@ -9,7 +9,7 @@ import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus, Upcomin
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setQueueSource } from "@/app/(portal)/admin/actions";
 import { usePortal } from "@/components/portal/PortalProvider";
-import { useStacked } from "@/components/portal/StackedContext";
+import { useStacked, useNaturalHeight } from "@/components/portal/StackedContext";
 import { isVisible } from "@/lib/visibility";
 import { resolveBySource } from "@/lib/widgets/capabilities";
 import { useVisibleServices } from "@/components/hooks/useVisibleServices";
@@ -167,7 +167,8 @@ export function PanelShell({
   // height + scroll the body internally) is a desktop concept — on the stack a tile has no fixed
   // height, so we render at natural content height instead (the page scrolls, not each widget).
   const stacked = useStacked();
-  const fillBox = fill && !stacked;
+  const natural = useNaturalHeight();
+  const fillBox = fill && !natural;
   return (
     <section
       style={{
@@ -476,6 +477,7 @@ export function CentralServices({ onOpen, onAll, fill }: { onOpen?: (s: Service)
   const { services, visibility } = useData();
   const { role } = usePortal();
   const stacked = useStacked();
+  const natural = useNaturalHeight();
   const list = services.filter((s) => s.central && isVisible(s, role, visibility));
   // In the modular grid (fill) a tile is absolutely positioned, so returning null
   // would leave an empty hole — render a graceful empty card instead.
@@ -500,7 +502,7 @@ export function CentralServices({ onOpen, onAll, fill }: { onOpen?: (s: Service)
 
   // On the mobile stack the tile has no fixed height, so don't fill/scroll internally — render
   // at natural height (single column below) and let the page scroll.
-  const fillBox = fill && !stacked;
+  const fillBox = fill && !natural;
   return (
     <div style={fillBox ? { height: "100%", display: "flex", flexDirection: "column" } : undefined}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 13 }}>
@@ -660,7 +662,7 @@ export function MyRequestsPanel({ role, onAll, onAct, fill, limit, view, dense, 
 // ── LIBRARY STAT STRIP ─────────────────────────────────────
 export function LibraryStats({ fill, visibleIds, source }: { fill?: boolean; visibleIds?: string; source?: string } = {}) {
   const { libraryAll } = useData();
-  const stacked = useStacked();
+  const natural = useNaturalHeight();
   const resolved = resolveBySource(libraryAll ?? [], source, ["tautulli", "jellyfin"]);
   const visible = visibleIds
     ? (() => { const s = new Set(visibleIds.split(",").filter(Boolean)); return resolved.filter(l => s.has(l.id)); })()
@@ -674,7 +676,7 @@ export function LibraryStats({ fill, visibleIds, source }: { fill?: boolean; vis
   return (
     // On the mobile stack don't pin to the tile's (now minimum) height — let the stat cards
     // size to content so the second row can't overflow and overlap the next widget.
-    <div className="aerie-lib-grid" style={fill && !stacked ? { height: "100%", gridAutoRows: "1fr" } : undefined}>
+    <div className="aerie-lib-grid" style={fill && !natural ? { height: "100%", gridAutoRows: "1fr" } : undefined}>
       {visible.map((l) => (
         <div key={`${l.source ?? ""}:${l.id}`} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "14px 16px", borderRadius: 14, background: "var(--surface-container-lowest)", border: "1px solid var(--outline-variant)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -737,7 +739,7 @@ function FlowGrid<T>({
   stretch?: boolean;
   render: (item: T, index: number) => React.ReactNode;
 }) {
-  const stacked = useStacked();
+  const natural = useNaturalHeight();
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -757,7 +759,7 @@ function FlowGrid<T>({
   // Mobile single column: the tile has no fixed height, so the measure-and-cap-rows /
   // horizontal-scroll logic below doesn't apply. Show every item in a natural-height
   // wrapping grid (auto-fill so posters/tiles pack from itemW upward) and let the page scroll.
-  if (stacked) {
+  if (natural) {
     return (
       <div style={{ padding: `${padY}px ${padX}px`, display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${itemW}px, 1fr))`, gap, alignItems: "start" }}>
         {items.map((item, i) => render(item, i))}
@@ -918,7 +920,7 @@ function QueueSourceToggle({
 
 export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { queue, queueSource, arrQueueConfigured, nzbgetConfigured, nzbgetStatus, qbittorrentConfigured, qbittorrent } = useData();
-  const stacked = useStacked();
+  const natural = useNaturalHeight();
   // In a grid tile, show as many rows as fit the height (no scrolling); the rest
   // is reachable via the ‹ › pager.
   const [fitRef, fitRows] = useFitRows(dense ? 53 : 61);
@@ -952,7 +954,7 @@ export function QueuePanel({ fill, limit, dense, title }: { fill?: boolean; limi
         </div>
       ) : undefined}
     >
-      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill && !stacked ? { height: "100%", overflow: "hidden" } : {}) }}>
+      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill && !natural ? { height: "100%", overflow: "hidden" } : {}) }}>
         {queue.length === 0 && <Empty art icon="downloading" line="No active downloads" sub="Grabbed and importing items appear here." />}
         {slice.map((q, i) => (
           <div key={q.id} style={{ padding: rowPadding, borderTop: listDivider(i) }}>
@@ -1118,7 +1120,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
 // ── RECENTLY DOWNLOADED (*arr history) ─────────────────────
 export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; limit?: number; dense?: boolean; title?: string } = {}) {
   const { downloads } = useData();
-  const stacked = useStacked();
+  const natural = useNaturalHeight();
   // In a grid tile, show as many rows as fit the height; the rest pages via ‹ ›.
   const [fitRef, fitRows] = useFitRows(dense ? 28 : 36);
   const pageSize = limit ?? (fill ? fitRows : 10);
@@ -1139,7 +1141,7 @@ export function DownloadsPanel({ fill, limit, dense, title }: { fill?: boolean; 
       count={`${downloads.length}`}
       action={totalPages > 1 ? <PageControls page={page} totalPages={totalPages} setPage={setPage} /> : undefined}
     >
-      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill && !stacked ? { height: "100%", overflow: "hidden" } : {}) }}>
+      <div ref={fitRef} style={{ display: "flex", flexDirection: "column", ...(fill && !natural ? { height: "100%", overflow: "hidden" } : {}) }}>
         {slice.map((d, i) => (
           <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: rowPadding, borderTop: listDivider(i) }}>
             <Icon name={d.svc === "radarr" ? "movie" : d.svc === "listenarr" ? "headphones" : d.svc === "qbittorrent" ? "downloading" : "live_tv"} size={14} color="var(--originator-third-party)" />

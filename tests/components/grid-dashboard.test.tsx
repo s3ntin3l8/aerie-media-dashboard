@@ -356,3 +356,50 @@ describe("GridDashboard — stacked flag (StackedContext)", () => {
     expect(screen.getByTitle("Hide on this device")).toBeInTheDocument();
   });
 });
+
+describe("GridDashboard — tablet tier (720–1099px)", () => {
+  it("reflows into 2 natural-height columns: wide tiles span both, narrow tiles span one", () => {
+    withGridWidth(850);
+    const layout = [tile({ uid: "wide", w: 12 }), tile({ uid: "n1", y: 4, w: 4 }), tile({ uid: "n2", x: 4, y: 4, w: 4 })];
+    const { container } = render(
+      <GridDashboard layout={layout} onChange={vi.fn()} editing={false} renderWidget={renderWidget} onRemove={vi.fn()} onConfigure={vi.fn()} />,
+    );
+    const tiles = [...container.querySelectorAll<HTMLElement>("[data-tablet-tile]")];
+    expect(tiles.map((t) => t.firstElementChild?.getAttribute("data-testid"))).toEqual(["widget-wide", "widget-n1", "widget-n2"]);
+    expect(tiles[0].style.gridColumn).toBe("1 / -1");
+    expect(tiles[1].style.gridColumn).toBe("span 1");
+    expect(tiles[2].style.gridColumn).toBe("span 1");
+    // Natural height: no absolutely-positioned tile wrapper.
+    expect(tiles.every((t) => t.style.position !== "absolute")).toBe(true);
+  });
+
+  it("keeps desktop density (useStacked false) but natural height", async () => {
+    withGridWidth(850);
+    const { useNaturalHeight } = await import("@/components/portal/StackedContext");
+    const Probe = () => <span data-testid="probe">{`${useStacked()}-${useNaturalHeight()}`}</span>;
+    render(
+      <GridDashboard layout={[tile()]} onChange={vi.fn()} editing={false} renderWidget={() => <Probe />} onRemove={vi.fn()} onConfigure={vi.fn()} />,
+    );
+    expect(screen.getByTestId("probe").textContent).toBe("false-true");
+  });
+
+  it("uses the fixed 12-col grid at >=1100px (not natural height)", async () => {
+    withGridWidth(1280);
+    const { useNaturalHeight } = await import("@/components/portal/StackedContext");
+    const Probe = () => <span data-testid="probe">{String(useNaturalHeight())}</span>;
+    const { container } = render(
+      <GridDashboard layout={[tile()]} onChange={vi.fn()} editing={false} renderWidget={() => <Probe />} onRemove={vi.fn()} onConfigure={vi.fn()} />,
+    );
+    expect(screen.getByTestId("probe").textContent).toBe("false");
+    expect(container.querySelector("[data-tablet-tile]")).toBeNull();
+  });
+
+  it("keeps the measured edit grid while editing at tablet width", () => {
+    withGridWidth(850);
+    const { container } = render(
+      <GridDashboard layout={[tile()]} onChange={vi.fn()} editing renderWidget={renderWidget} onRemove={vi.fn()} onConfigure={vi.fn()} />,
+    );
+    expect(container.querySelector("[data-tablet-tile]")).toBeNull();
+    expect(screen.getByTitle("Remove widget")).toBeInTheDocument();
+  });
+});

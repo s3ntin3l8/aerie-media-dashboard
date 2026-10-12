@@ -16,7 +16,7 @@ vi.mock("@/components/portal/DataProvider", () => ({ useData: vi.fn(), useRefres
 
 import { useData } from "@/components/portal/DataProvider";
 import { CentralServices, LibraryStats, ServiceTiles, QueuePanel, DownloadsPanel, Empty } from "@/components/panels";
-import { StackedContext } from "@/components/portal/StackedContext";
+import { StackedContext, NaturalHeightContext } from "@/components/portal/StackedContext";
 
 const data = (over: Record<string, unknown>) => vi.mocked(useData).mockReturnValue(over as never);
 beforeEach(() => vi.mocked(useData).mockReset());
@@ -126,5 +126,18 @@ describe("Empty — idle-empty (art) vs needs-setup (plain) variants", () => {
     expect(screen.getByText("No host metrics")).toBeInTheDocument();
     expect(byStyle(container, "height", "100%")).toBeFalsy();
     expect(byStyle(container, "boxShadow", "inset 0 0 0 1px var(--outline-variant)")).toBeFalsy();
+  });
+});
+
+describe("CentralServices — tablet (natural height, desktop density)", () => {
+  it("keeps the auto-fit multi-column grid but doesn't fill/scroll internally", () => {
+    data({ services: [svc(), svc({ id: "seerr", name: "Seerr" })], visibility: [] });
+    const { container } = render(
+      <NaturalHeightContext.Provider value={true}><CentralServices fill /></NaturalHeightContext.Provider>,
+    );
+    const grid = byStyle(container, "gridTemplateColumns", "repeat(auto-fit, minmax(248px, 1fr))");
+    expect(grid).toBeTruthy();
+    expect(grid!.style.overflowY).toBe("");
+    expect(byStyle(container, "gridTemplateColumns", "1fr")).toBeFalsy();
   });
 });
