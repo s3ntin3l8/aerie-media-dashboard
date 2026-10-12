@@ -11,6 +11,11 @@ name: Hermes (review)
 # Do NOT add `synchronize`: it re-triggers a fresh review on every push, which on
 # a PR under active iteration is an unbounded review loop.
 #
+# `auto-review` excludes `mullion/task-*` branches: that's Mullion Task Master's
+# own branch namespace, and its review agent is the terminal review for those
+# PRs. `on-demand-review` is NOT excluded, so a human can still ask Hermes for a
+# second opinion on a Task Master PR via `@s3ntin3l8-hermes Review`.
+#
 # SECURITY: this repo is public and the reusable workflow runs on a self-hosted
 # runner. For `pull_request`, GitHub runs the workflow file from the PR's head
 # ref, so the `head.repo.full_name` guard below keeps fork PRs off that runner.
@@ -36,7 +41,8 @@ jobs:
       github.event.pull_request.user.login != 's3ntin3l8-hermes[bot]' &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       github.event.pull_request.user.login != 'github-actions[bot]' &&
-      github.event.pull_request.draft == false
+      github.event.pull_request.draft == false &&
+      !startsWith(github.event.pull_request.head.ref, 'mullion/task-')
     permissions:
       contents: write
       pull-requests: write
