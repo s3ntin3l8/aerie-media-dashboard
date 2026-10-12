@@ -223,7 +223,6 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
     const { visible, hidden } = mobileStack(layout, mobileOverlay);
     return (
       <StackedContext.Provider value={stacked}>
-      <NaturalHeightContext.Provider value>
       <div ref={wrapRef} style={{ display: "flex", flexDirection: "column", gap }}>
         {visible.map((item, i) => {
           return (
@@ -285,7 +284,6 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
           </div>
         )}
       </div>
-      </NaturalHeightContext.Provider>
       </StackedContext.Provider>
     );
   }
@@ -298,10 +296,12 @@ export function GridDashboard({ layout, onChange, editing, renderWidget, onRemov
   if (tablet) {
     return (
       <StackedContext.Provider value={false}>
-        <NaturalHeightContext.Provider value>
+        <NaturalHeightContext.Provider value={true}>
           <div ref={wrapRef} style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridAutoFlow: "row dense", alignItems: "start", gap }}>
-            {gridSort(layout).map((item) => (
-              <div key={item.uid} data-tablet-tile style={{ gridColumn: item.w >= 7 ? "1 / -1" : "span 1", position: "relative", borderRadius: "var(--radius-xl)", minWidth: 0 }}>
+            {gridSort(layout)
+              .filter((t, i, a) => a.findIndex((u) => u.uid === t.uid) === i)
+              .map((item) => (
+              <div key={item.uid} data-testid="tablet-tile" style={{ gridColumn: item.w >= 7 ? "1 / -1" : "span 1", position: "relative", borderRadius: "var(--radius-xl)", minWidth: 0 }}>
                 {renderWidget(item, false)}
               </div>
             ))}

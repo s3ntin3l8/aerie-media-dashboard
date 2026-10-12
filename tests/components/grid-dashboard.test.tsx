@@ -364,13 +364,22 @@ describe("GridDashboard — tablet tier (720–1099px)", () => {
     const { container } = render(
       <GridDashboard layout={layout} onChange={vi.fn()} editing={false} renderWidget={renderWidget} onRemove={vi.fn()} onConfigure={vi.fn()} />,
     );
-    const tiles = [...container.querySelectorAll<HTMLElement>("[data-tablet-tile]")];
+    const tiles = [...container.querySelectorAll<HTMLElement>("[data-testid='tablet-tile']")];
     expect(tiles.map((t) => t.firstElementChild?.getAttribute("data-testid"))).toEqual(["widget-wide", "widget-n1", "widget-n2"]);
     expect(tiles[0].style.gridColumn).toBe("1 / -1");
     expect(tiles[1].style.gridColumn).toBe("span 1");
     expect(tiles[2].style.gridColumn).toBe("span 1");
     // Natural height: no absolutely-positioned tile wrapper.
     expect(tiles.every((t) => t.style.position !== "absolute")).toBe(true);
+  });
+
+  it("renders each uid once even if the layout contains a duplicate", () => {
+    withGridWidth(850);
+    const layout = [tile({ uid: "a" }), tile({ uid: "a", y: 4 }), tile({ uid: "b", y: 8 })];
+    const { container } = render(
+      <GridDashboard layout={layout} onChange={vi.fn()} editing={false} renderWidget={renderWidget} onRemove={vi.fn()} onConfigure={vi.fn()} />,
+    );
+    expect(container.querySelectorAll("[data-testid='tablet-tile']")).toHaveLength(2);
   });
 
   it("keeps desktop density (useStacked false) but natural height", async () => {
@@ -391,7 +400,7 @@ describe("GridDashboard — tablet tier (720–1099px)", () => {
       <GridDashboard layout={[tile()]} onChange={vi.fn()} editing={false} renderWidget={() => <Probe />} onRemove={vi.fn()} onConfigure={vi.fn()} />,
     );
     expect(screen.getByTestId("probe").textContent).toBe("false");
-    expect(container.querySelector("[data-tablet-tile]")).toBeNull();
+    expect(container.querySelector("[data-testid='tablet-tile']")).toBeNull();
   });
 
   it("keeps the measured edit grid while editing at tablet width", () => {
@@ -399,7 +408,7 @@ describe("GridDashboard — tablet tier (720–1099px)", () => {
     const { container } = render(
       <GridDashboard layout={[tile()]} onChange={vi.fn()} editing renderWidget={renderWidget} onRemove={vi.fn()} onConfigure={vi.fn()} />,
     );
-    expect(container.querySelector("[data-tablet-tile]")).toBeNull();
+    expect(container.querySelector("[data-testid='tablet-tile']")).toBeNull();
     expect(screen.getByTitle("Remove widget")).toBeInTheDocument();
   });
 });
