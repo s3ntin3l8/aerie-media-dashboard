@@ -591,7 +591,7 @@ export function RailTip({
 }) {
   const [show, setShow] = useState(false);
   return (
-    <div style={{ position: "relative", display: "flex" }} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+    <div style={{ position: "relative", display: "flex" }} onPointerEnter={(e) => e.pointerType === "mouse" && setShow(true)} onPointerLeave={() => setShow(false)}>
       {children}
       {show && (
         <span
