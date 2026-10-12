@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.2.1...aerie-v1.3.0) (2026-10-12)
+
+
+### Features
+
+* **dashboard:** tablet layout tier for foldables ([#244](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/244)) ([8cd2ef1](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/8cd2ef15df99807f9ac30a57c35b0cad70ecb6bb))
+
 ## [1.2.1](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.2.0...aerie-v1.2.1) (2026-08-27)
 
 
