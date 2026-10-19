@@ -22,7 +22,7 @@
   "dependencies": {
     "@auth/core": "^0.41.3",
     "@libsql/client": "^0.18.0",
-    "drizzle-orm": "^0.45.3",
+    "drizzle-orm": "^0.45.4",
     "next": "16.4.0",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.3.0",
