@@ -120,4 +120,9 @@ Backup/restore, `ENCRYPTION_KEY` rotation, deployment update, health check, and 
 
 ## License
 
-[AGPL-3.0](./LICENSE) © 2026 Björn Hansen
+Copyright (C) 2026 Björn Hansen
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See [LICENSE](LICENSE).
