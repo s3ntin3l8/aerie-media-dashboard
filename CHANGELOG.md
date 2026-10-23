@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.3.0...aerie-v1.3.1) (2026-10-23)
+
+
+### Documentation
+
+* state copyright and the AGPL "or any later version" grant in the README ([#265](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/265)) ([b844b1c](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/b844b1cbc68e8914b2a0bf13f29eaeda2614588c))
+
 ## [1.3.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.2.1...aerie-v1.3.0) (2026-10-12)
 
 
