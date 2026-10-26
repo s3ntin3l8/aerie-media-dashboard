@@ -28,4 +28,19 @@ describe("Sparkline", () => {
     // The stroke stays crisp under the horizontal stretch.
     expect(container.querySelector('path[vector-effect="non-scaling-stroke"]')).not.toBeNull();
   });
+
+  it.each([
+    ["no data", []],
+    ["a single point", [5]],
+  ])("draws no path for %s instead of an invalid one", (_label, series) => {
+    const { container } = render(<Sparkline data={series} w={260} h={40} />);
+    const ds = [...container.querySelectorAll("path")].map((p) => p.getAttribute("d"));
+    // An empty `d` is valid SVG; a path with no moveto ("L260 40 L0 40 Z") or NaN is not.
+    expect(ds).toEqual(["", ""]);
+  });
+
+  it("still draws a moveto-led path for two or more points", () => {
+    const { container } = render(<Sparkline data={[1, 2]} w={260} h={40} />);
+    for (const p of container.querySelectorAll("path")) expect(p.getAttribute("d")).toMatch(/^M/);
+  });
 });
