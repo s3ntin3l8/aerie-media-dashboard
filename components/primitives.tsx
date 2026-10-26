@@ -307,6 +307,9 @@ export function Sparkline({
   fluid?: boolean;
 }) {
   const { line, area } = useMemo(() => {
+    // A line needs two points. Empty data (before the first snapshot) would otherwise yield an
+    // area path with no moveto, which the browser logs as an invalid `d`; one point divides by 0.
+    if (data.length < 2) return { line: "", area: "" };
     const max = Math.max(...data, 1),
       min = Math.min(...data, 0);
     const span = max - min || 1;

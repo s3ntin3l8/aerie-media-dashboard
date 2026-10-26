@@ -17,10 +17,16 @@ import { auth } from "@/auth";
  * `/sw.js` registration, so a CSP block there would be silent. `style-src`/`connect-src`/`frame-src`
  * are left unset so the app's inline styles, remote API loads, and service iframes are unconstrained
  * (unchanged from before). HSTS is added at the reverse proxy.
+ *
+ * `'unsafe-eval'` is added in development only: React's dev build uses `eval()` to reconstruct
+ * call stacks, and without it every page logs "eval() is not supported in this environment" (and
+ * Next's dev overlay shows an issue). Production builds never use eval, so the shipped policy is
+ * unchanged. `NODE_ENV` is inlined at build time, so this cannot be flipped on at runtime.
  */
 function cspFor(nonce: string): string {
+  const devEval = process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
   return [
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}`,
     "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

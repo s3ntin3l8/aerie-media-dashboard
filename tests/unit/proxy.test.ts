@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 // auth() is a higher-order wrapper; mock it to the identity so we can call the
 // route-protection handler directly with a synthetic request.
@@ -106,5 +106,20 @@ describe("proxy middleware — security response headers", () => {
     expect(a).toBeTruthy();
     expect(b).toBeTruthy();
     expect(a).not.toBe(b);
+  });
+});
+
+describe("proxy middleware — CSP in development", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const scriptSrc = (res: Response) => res.headers.get("Content-Security-Policy")!.split("; ")[0];
+
+  it("allows 'unsafe-eval' for React's dev call-stack reconstruction", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(scriptSrc(run("/login"))).toMatch(/'strict-dynamic' 'unsafe-eval'$/);
+  });
+
+  it.each(["production", "test"])("never allows 'unsafe-eval' when NODE_ENV is %s", (env) => {
+    vi.stubEnv("NODE_ENV", env);
+    expect(scriptSrc(run("/login"))).not.toContain("unsafe-eval");
   });
 });
