@@ -24,6 +24,15 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icon-512.png", type: "image/png", sizes: "512x512", purpose: "any" },
       { src: "/icon-maskable.png", type: "image/png", sizes: "512x512", purpose: "maskable" },
     ],
+    // Richer install dialog on Android / desktop Chrome. Captured from the demo instance
+    // (`make screenshots-pwa`), so they only ever show fake data. Served from public/ and
+    // exempted in middleware.ts via the /pwa/ prefix.
+    screenshots: [
+      { src: "/pwa/screenshots/home-wide.png", type: "image/png", sizes: "1280x800", form_factor: "wide", label: "Home: live streams, requests and service health" },
+      { src: "/pwa/screenshots/status-wide.png", type: "image/png", sizes: "1280x800", form_factor: "wide", label: "Status: every service at a glance" },
+      { src: "/pwa/screenshots/home-narrow.png", type: "image/png", sizes: "780x1688", form_factor: "narrow", label: "Home on mobile" },
+      { src: "/pwa/screenshots/streams-narrow.png", type: "image/png", sizes: "780x1688", form_factor: "narrow", label: "Streams on mobile" },
+    ],
     // Long-press / right-click shortcuts on the installed icon. Targets are
     // in-scope authenticated portal routes; an unauthenticated tap is handled
     // by proxy.ts (redirect to /login). Admin is intentionally excluded — it is

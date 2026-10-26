@@ -23,7 +23,7 @@ You will receive acknowledgement within 48 hours. Confirmed vulnerabilities will
 
 AERIE is a **private self-hosted portal** — it is not a public-facing multi-tenant service. The expected threat model is:
 
-- Authentication is always required (OIDC or local credentials); unauthenticated routes are `/login`, `/api/auth`, `/api/health`, and static brand assets only.
+- Authentication is always required (OIDC or local credentials); unauthenticated routes are `/login`, `/api/auth`, `/api/health`, static brand assets, and the `/pwa/` prefix (iOS splash images and install-dialog screenshots: public install assets only, nothing behind auth may live there).
 - All service API keys are encrypted at rest (AES-256-GCM, `ENCRYPTION_KEY`); they never reach the browser.
 - Members (non-admins) receive a scrubbed snapshot that excludes admin-only fields (`users`, `groups`, `visibility`, Traefik/Authentik infra, per-service `internalUrl`/`forwardAuthConfig`/`hasSecret`).
 - The app is designed to reach internal LAN hosts (media servers, *arr apps, etc.) — outbound HTTP to private IP ranges is intentional and not considered SSRF.

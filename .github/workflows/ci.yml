@@ -18,7 +18,8 @@ jobs:
       typecheck-script: 'typecheck'
       test-script: 'test:coverage'
       build-env: 'NEXT_TELEMETRY_DISABLED=1'
-    secrets: inherit
+      strict-checks: true
+    secrets: inherit  # pragma: allowlist secret
 
   docker:
     needs: ci
@@ -31,4 +32,4 @@ jobs:
     with:
       image-name: 's3ntin3l8/aerie'
       push-edge: true
-    secrets: inherit
+    secrets: inherit  # pragma: allowlist secret

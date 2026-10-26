@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help demo screenshots screenshots-landing
+.PHONY: help demo screenshots screenshots-landing screenshots-pwa
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-22s %s\n", $$1, $$2}'
@@ -13,3 +13,6 @@ screenshots: ## Regenerate docs/screenshots (dark + light) from an isolated demo
 
 screenshots-landing: ## Landing-page stills + loop into OUT (default ./landing-shots); loop needs ffmpeg
 	node scripts/demo/capture.mjs --profile landing --out "$(or $(OUT),landing-shots)"
+
+screenshots-pwa: ## Regenerate the web app manifest screenshots in public/pwa/screenshots
+	node scripts/demo/capture.mjs --profile pwa

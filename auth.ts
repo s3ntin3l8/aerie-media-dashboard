@@ -50,7 +50,7 @@ const providers: NextAuthConfig["providers"] = authConfigured
         credentials: { email: {}, password: {} },
         async authorize(credentials, request) {
           const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
-          const password = typeof credentials?.password === "string" ? credentials.password : "";
+          const password = typeof credentials?.password === "string" ? credentials.password : ""; // pragma: allowlist secret
           if (!email || !password) return null;
           // Rate-limit by client IP so an attacker rotating email addresses is
           // still blocked, and knowing a valid email can't be used to DoS the

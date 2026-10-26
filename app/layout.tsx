@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { JetBrains_Mono } from "next/font/google";
 import { env } from "@/lib/env";
 import ServiceWorkerRegister from "@/components/pwa/ServiceWorkerRegister";
+import { APPLE_STARTUP_IMAGES } from "./_splash";
 
 // Design-system foundations (ported verbatim from the AERIE design bundle).
 import "../styles/fonts.css";
@@ -35,8 +36,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(env.portalUrl),
   title: "AERIE — Media Command Center",
   description: "Private media portal — every service, one vantage point.",
-  // iOS add-to-home-screen: standalone display + black status bar.
-  appleWebApp: { capable: true, title: "AERIE", statusBarStyle: "black-translucent" },
+  // iOS add-to-home-screen: standalone display + black status bar, plus a branded launch
+  // screen per device size (app/_splash.ts, rendered by app/pwa/splash/[size]).
+  appleWebApp: {
+    capable: true,
+    title: "AERIE",
+    statusBarStyle: "black-translucent",
+    startupImage: APPLE_STARTUP_IMAGES,
+  },
 };
 
 // Inline script that runs synchronously before first paint — reads the

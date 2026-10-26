@@ -17,9 +17,12 @@ import { iconTile } from "./posters.mjs";
  *
  *   npm run screenshots                                   # README set
  *   npm run screenshots -- --profile landing --out DIR    # landing-page stills + loop
+ *   npm run screenshots -- --profile pwa                  # manifest install-dialog screenshots
  *
  * Profiles:
  *  - `readme` (default): Home and Streams × {dark, light} into `docs/screenshots/`.
+ *  - `pwa`: dark-only Home/Status (wide) and Home/Streams (narrow) for the web app manifest's
+ *    `screenshots`, written to `public/pwa/screenshots/` (see app/manifest.ts).
  *  - `landing`: dark-only 2x stills sized for the s3ntin3l8.de landing page, plus a short
  *    silent loop of the live Home dashboard (webm + mp4 + poster, needs ffmpeg on PATH).
  *    Written to --out.
@@ -39,6 +42,7 @@ import { iconTile } from "./posters.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const README_DIR = path.join(REPO_ROOT, "docs/screenshots");
+const PWA_DIR = path.join(REPO_ROOT, "public/pwa/screenshots");
 const ICON_CDN = "cdn.jsdelivr.net";
 
 const { values } = parseArgs({
@@ -48,8 +52,8 @@ const { values } = parseArgs({
     keep: { type: "boolean", default: false },
   },
 });
-if (!["readme", "landing"].includes(values.profile))
-  throw new Error(`unknown --profile "${values.profile}" (readme | landing)`);
+if (!["readme", "landing", "pwa"].includes(values.profile))
+  throw new Error(`unknown --profile "${values.profile}" (readme | landing | pwa)`);
 if (values.profile === "landing" && !values.out)
   throw new Error("--profile landing needs --out <dir>");
 
@@ -73,6 +77,15 @@ const LANDING_FACTORS = [
 // The phone layout only needs the screens that read well in one column.
 const MOBILE_SLUGS = ["home"];
 const LOOP_SECONDS = 8;
+
+// PWA profile: sizes must match the `screenshots` entries in app/manifest.ts (Chrome wants one
+// aspect ratio per form factor, at most 2.3:1; the narrow 780x1688 is ~2.16:1).
+const PWA_SHOTS = [
+  { slug: "home", name: "home-wide", width: 1280, height: 800, deviceScaleFactor: 1, mobile: false },
+  { slug: "status", name: "status-wide", width: 1280, height: 800, deviceScaleFactor: 1, mobile: false },
+  { slug: "home", name: "home-narrow", width: 390, height: 844, deviceScaleFactor: 2, mobile: true },
+  { slug: "streams", name: "streams-narrow", width: 390, height: 844, deviceScaleFactor: 2, mobile: true },
+];
 
 /**
  * Headless Chromium on Linux hints glyphs by default, snapping their advances to the pixel
@@ -304,6 +317,54 @@ async function captureReadme(browser, demo, state, violations) {
   }
 }
 
+async function capturePwa(browser, demo, state, violations) {
+  await mkdir(PWA_DIR, { recursive: true });
+  // Same staging contract as the readme profile: replace committed images only after a clean run.
+  const staging = await mkdtemp(path.join(tmpdir(), "aerie-pwa-shots-"));
+  const written = [];
+  try {
+    for (const mobile of [false, true]) {
+      const shots = PWA_SHOTS.filter((s) => s.mobile === mobile);
+      // One context per form factor, so every shot in it must share a viewport.
+      for (const s of shots)
+        if (s.width !== shots[0].width || s.height !== shots[0].height || s.deviceScaleFactor !== shots[0].deviceScaleFactor)
+          throw new Error(`PWA_SHOTS "${s.name}" differs in viewport from "${shots[0].name}"; split the contexts`);
+      const context = await newContext(
+        browser,
+        "dark",
+        {
+          viewport: { width: shots[0].width, height: shots[0].height },
+          deviceScaleFactor: shots[0].deviceScaleFactor,
+          isMobile: mobile,
+          hasTouch: mobile,
+          storageState: state,
+        },
+        violations,
+      );
+      const page = await context.newPage();
+      for (const shot of shots) {
+        const filename = `${shot.name}.png`;
+        await shoot(page, demo, SCREENS.find((s) => s.slug === shot.slug), path.join(staging, filename));
+        written.push(filename);
+      }
+      await context.close();
+    }
+    assertClean(violations);
+    for (const filename of written) {
+      const tmp = path.join(PWA_DIR, `.${filename}.tmp`);
+      try {
+        await copyFile(path.join(staging, filename), tmp);
+        await rename(tmp, path.join(PWA_DIR, filename));
+      } finally {
+        await rm(tmp, { force: true });
+      }
+    }
+    return written;
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   if (process.platform !== "linux")
     console.warn(
@@ -319,10 +380,8 @@ async function main() {
     try {
       console.log(`[screenshots] capturing (${values.profile} profile)...`);
       const state = demo.storageState;
-      const written =
-        values.profile === "landing"
-          ? await captureLanding(browser, demo, state, violations)
-          : await captureReadme(browser, demo, state, violations);
+      const capture = { landing: captureLanding, pwa: capturePwa, readme: captureReadme }[values.profile];
+      const written = await capture(browser, demo, state, violations);
       assertClean(violations);
       console.log(`[screenshots] done: ${written.length} files (${values.profile} profile)`);
     } finally {

@@ -12,12 +12,12 @@
 export const SERVICES = [
   { id: "plex", name: "Plex", cat: "stream", icon: "play_circle", logoSlug: "plex", version: "1.42.1", note: "External · launch only", central: true, centralLabel: "Stream" },
   { id: "audiobookshelf", name: "Audiobookshelf", cat: "stream", icon: "headphones", logoSlug: "audiobookshelf", version: "2.19.4", note: "External · launch only", central: true, centralLabel: "Audiobooks" },
-  { id: "overseerr", name: "Overseerr", cat: "request", icon: "playlist_add", logoSlug: "overseerr", version: "1.34.0", note: "Per-user requests", apiKey: "demo-overseerr-key", central: true, centralLabel: "Requests" },
-  { id: "sonarr", name: "Sonarr", cat: "automation", icon: "tv", logoSlug: "sonarr", version: "4.0.14", note: "TV automation", apiKey: "demo-sonarr-key" },
-  { id: "radarr", name: "Radarr", cat: "automation", icon: "movie", logoSlug: "radarr", version: "5.21.1", note: "Movie automation", apiKey: "demo-radarr-key" },
+  { id: "overseerr", name: "Overseerr", cat: "request", icon: "playlist_add", logoSlug: "overseerr", version: "1.34.0", note: "Per-user requests", apiKey: "demo-overseerr-key", central: true, centralLabel: "Requests" }, // pragma: allowlist secret
+  { id: "sonarr", name: "Sonarr", cat: "automation", icon: "tv", logoSlug: "sonarr", version: "4.0.14", note: "TV automation", apiKey: "demo-sonarr-key" }, // pragma: allowlist secret
+  { id: "radarr", name: "Radarr", cat: "automation", icon: "movie", logoSlug: "radarr", version: "5.21.1", note: "Movie automation", apiKey: "demo-radarr-key" }, // pragma: allowlist secret
   { id: "prowlarr", name: "Prowlarr", cat: "automation", icon: "travel_explore", logoSlug: "prowlarr", version: "1.32.2", note: "Indexer manager" },
   { id: "nzbget", name: "NZBGet", cat: "automation", icon: "download", logoSlug: "nzbget", version: "24.5", note: "Usenet downloader" },
-  { id: "tautulli", name: "Tautulli", cat: "monitor", icon: "monitoring", logoSlug: "tautulli", version: "2.15.1", note: "Plex stats", apiKey: "demo-tautulli-key" },
+  { id: "tautulli", name: "Tautulli", cat: "monitor", icon: "monitoring", logoSlug: "tautulli", version: "2.15.1", note: "Plex stats", apiKey: "demo-tautulli-key" }, // pragma: allowlist secret
   { id: "gatus", name: "Gatus", cat: "monitor", icon: "favorite", logoSlug: "gatus", version: "5.16.0", note: "Status engine" },
   { id: "prometheus", name: "Prometheus", cat: "monitor", icon: "query_stats", logoSlug: "prometheus", version: "3.2.1", note: "Metrics · admin" },
 ];
