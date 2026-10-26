@@ -56,20 +56,20 @@ No P0 was found.
 | 1 | **P1** Every toggle is a nameless button (120 nodes, critical) | axe `button-name` on Admin (Active/Keep per service), service modal visibility, logs "Auto" | `Toggle` in `components/modals/ModalShell.tsx` | `label` is now a required prop and becomes `aria-label`; all 7 callers pass one (`"<service> active"`, `"Visible to <group>"`, …); `ToggleRow` uses its title. |
 | 2 | **P1** Selects with no name (8 nodes, critical) | axe `select-name` on Admin phone/tablet | Admin mobile sort select, `InstanceSelect`, `BeszelSystemSelect` | `aria-label` "Sort services", "Prometheus node", "Beszel system". |
 | 3 | **P1** Admin column headers render black on navy (contrast 1.17) | axe `color-contrast` on `admin.tablet` | `sortHead` in `AdminServices.tsx` | It passed `color: undefined` in `style`, which overrode `Eyebrow`'s default and left the button's UA black. Colour is now passed as the `color` prop. |
-| 4 | **P1** Light-theme accents under AA on their own tints | axe: orange 4.27–4.34, amber 2.4; unit check also flagged blue, green, red | `styles/colors_and_type.css` (`--originator-court/own/third-party`, `--amber`, `--critical`, light block only) | Darkened the five tokens to ≥4.5:1 on every surface; dark theme unchanged. |
+| 4 | **P1** Light-theme accents under AA on their own tints | axe: orange 4.27–4.34, amber 2.4; unit check also flagged blue, green, red | `styles/colors_and_type.css` (`--originator-court/own/third-party/unknown`, `--amber`, `--warning`, `--critical`, light block only) | Darkened the seven tokens to ≥4.5:1 on every surface; dark theme unchanged. `--originator-unknown` (the `infra` category) and `--warning` were found by the guard and review, not by axe: the demo has no `infra` service. |
 | 5 | **P1** Requests filter counts at 0.7 opacity fall under AA (4.18) | axe `color-contrast` on `requests.tablet` | `components/views/Requests.tsx` | Dropped the opacity. |
 | 6 | **P1** Phone Home card: category chip overlaps the status badge for long names ("Audiobookshelf") | `home.phone.png` before the fix | `CentralCard` in `components/panels.tsx` | Name and chip row wraps (`flexWrap`), chip is `nowrap`; the chip drops under the name instead of over the badge. |
 | 7 | **P1** Unknown URL shows Next's stock white 404 with the portal's light text: unreadable | `not-found.desktop.png` before: near-invisible text, contrast 1.29 | no root `not-found` | Added `app/(portal)/[...missing]/page.tsx` calling `notFound()`, so unknown URLs get the themed in-shell 404. A root `app/not-found.tsx` was tried first and rejected: it puts `next dev` into a reload loop on `/login`. |
-| 8 | **P1** Scrollable panel bodies can't be reached by keyboard | axe `scrollable-region-focusable` (12 nodes) on Home | `PanelShell` body and the horizontal item grid in `panels.tsx` | Scrolling bodies are now `role=region`, labelled with the panel title, and a tab stop. |
-| 9 | **P1** Modals aren't dialogs: no role, no name, focus stays behind | code read of `ModalShell` | `components/modals/ModalShell.tsx` | `role="dialog"`, `aria-modal`, `aria-labelledby` the title; focus moves in on open (unless a child such as an `autoFocus` input already has it) and returns to the last outside element on close. Tab trapping is deferred (#274). |
+| 8 | **P1** Scrollable panel bodies can't be reached by keyboard | axe `scrollable-region-focusable` (12 nodes) on Home | `PanelShell` body and the horizontal item grid in `panels.tsx` | Bodies that actually overflow are now `role=region`, labelled with the panel title, and a tab stop (measured, so tiles that fit add none); the sideways-scrolling poster grids are named after their panel. |
+| 9 | **P1** Modals aren't dialogs: no role, no name, focus stays behind | code read of `ModalShell` | `components/modals/ModalShell.tsx` | `role="dialog"`, `aria-modal`, `aria-labelledby` the title; focus moves in on open (unless a child such as an `autoFocus` input already has it) and returns to the last outside element on close; Tab and Shift+Tab wrap inside it, which `aria-modal` promises. |
 
 ---
 
 ## Guardrails
 
-- `tests/components/a11y-audit-fixes.test.tsx`: Toggle names, `PanelShell` region and tab stop, card-chip wrapping, the catch-all calling `notFound()`, dialog role/name/focus in and out.
+- `tests/components/a11y-audit-fixes.test.tsx`: Toggle names, `PanelShell` region and tab stop, card-chip wrapping, the catch-all calling `notFound()`, dialog role/name/focus in and out, the Tab trap, and the overflow-gated tab stop.
 - `tests/components/admin-sort.test.tsx`, `tests/components/metrics-controls.test.tsx`: names of the toggles and selects, and the header colour that findings 1–3 broke.
-- `tests/unit/theme-contrast.test.ts`: computes WCAG contrast of every accent token on its own tint over each surface, both themes. A token edit that drops under 4.5:1 fails CI.
+- `tests/unit/theme-contrast.test.ts`: computes WCAG contrast of every text accent token (`--near` is excluded: nothing renders text in it) on its own tint over each surface, both themes, and fails if a token goes missing. A token edit that drops under 4.5:1 fails CI.
 - `docs/audit/capture.json` now sets `"axe": true`, so re-running the capture reports axe results for every route.
 - Considered and not added: a CI axe job (the capture needs a full `next dev` boot and Chromium, ~3 minutes); a jsdom axe smoke test (too many rules are meaningless without layout).
 
@@ -94,7 +94,6 @@ retry: a stale Turbopack cache after an interrupted run causes a reload loop.
 
 | Finding | Severity | Issue |
 |---|---|---|
-| Modals don't trap Tab | P2 | [#274](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/274) |
 | ⌘K palette has no combobox/listbox semantics; its list is an unfocusable scroll region | P2 | [#275](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/275) |
 | No `prefers-reduced-motion` handling | P2 | [#276](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/276) |
 | `:focus-visible` only styled for `.btn`; some inputs set `outline: none` | P2 | [#277](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/277) |

@@ -30,7 +30,8 @@ const tint = (fg: string, bg: string, p: number) => {
   return "#" + f.map((v, i) => Math.round(v * p + g[i] * (1 - p)).toString(16).padStart(2, "0")).join("");
 };
 
-const ACCENTS = ["--originator-court", "--originator-opposing", "--originator-own", "--originator-third-party", "--amber", "--critical", "--primary"];
+// `--near` is deliberately absent: nothing renders text in it, so it has no contrast requirement.
+const ACCENTS = ["--originator-court", "--originator-opposing", "--originator-own", "--originator-third-party", "--originator-unknown", "--amber", "--warning", "--critical", "--primary"];
 const SURFACES = ["--surface", "--surface-container", "--surface-container-lowest"];
 
 describe.each([
@@ -44,7 +45,8 @@ describe.each([
 
   for (const accent of ACCENTS) {
     it(`${accent} reads on its own 13% tint over every surface`, () => {
-      if (!t[accent]) return; // not defined as a plain hex in this theme
+      // A renamed or dropped token must fail here, not silently skip its contrast check.
+      expect(t[accent], `${accent} must be a plain hex in this theme`).toMatch(/^#[0-9a-f]{6}$/i);
       for (const surface of SURFACES) {
         const bg = tint(t[accent], t[surface], 0.13);
         expect(ratio(t[accent], bg), `${accent} on ${surface}`).toBeGreaterThanOrEqual(4.5);

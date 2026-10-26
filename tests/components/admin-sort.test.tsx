@@ -140,6 +140,14 @@ describe("Admin — mobile sort select", () => {
 });
 
 describe("Admin — accessible names (2026-10 audit)", () => {
+  it("names the toggles on the mobile cards too", () => {
+    mobile.value = true;
+    seedData([alpha]);
+    render(<Admin />);
+    expect(screen.getByRole("button", { name: "Alpha active", pressed: true })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alpha keep alive", pressed: true })).toBeTruthy();
+  });
+
   it("names each row's Active / Keep toggles after the service", () => {
     mobile.value = false;
     seedData([alpha]);

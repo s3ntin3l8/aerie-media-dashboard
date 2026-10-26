@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
@@ -34,13 +34,30 @@ describe("Toggle — accessible name", () => {
 });
 
 describe("PanelShell — scrollable body", () => {
-  it("is a labelled, keyboard-focusable region when it fills (scrolls) its tile", () => {
-    render(<PanelShell title="Queue" fill>body</PanelShell>);
-    const region = screen.getByRole("region", { name: "Queue" });
-    expect(region.tabIndex).toBe(0);
+  // jsdom has no layout, so fake the overflow the real browser would measure.
+  const sizes = (scrollHeight: number, clientHeight: number) => {
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => scrollHeight });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => clientHeight });
+  };
+  afterEach(() => {
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight;
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
   });
 
-  it("adds no tab stop when it renders at natural height", () => {
+  it("is a labelled, keyboard-focusable region when its body overflows", () => {
+    sizes(400, 200);
+    render(<PanelShell title="Queue" fill>body</PanelShell>);
+    expect(screen.getByRole("region", { name: "Queue" }).tabIndex).toBe(0);
+  });
+
+  it("adds no tab stop when the content fits", () => {
+    sizes(100, 200);
+    render(<PanelShell title="Queue" fill>body</PanelShell>);
+    expect(screen.queryByRole("region", { name: "Queue" })).toBeNull();
+  });
+
+  it("adds no tab stop at natural height (not a scroll container)", () => {
+    sizes(400, 200);
     render(<PanelShell title="Queue">body</PanelShell>);
     expect(screen.queryByRole("region", { name: "Queue" })).toBeNull();
   });
@@ -101,5 +118,35 @@ describe("ModalShell — focus and autoFocus", () => {
       </ModalShell>,
     );
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Name" }));
+  });
+});
+
+describe("ModalShell — Tab trap", () => {
+  const renderModal = () =>
+    render(
+      <>
+        <button>Outside</button>
+        <ModalShell open onClose={() => {}} title="T">
+          <input aria-label="First" />
+          <input aria-label="Second" />
+        </ModalShell>
+      </>,
+    );
+
+  it("wraps Tab from the last focusable element to the first", () => {
+    renderModal();
+    // The header's close button is the first focusable; the second input is the last.
+    const last = screen.getByRole("textbox", { name: "Second" });
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(document.activeElement).toBe(screen.getByTitle("Close (esc)"));
+  });
+
+  it("wraps Shift+Tab from the dialog or its first element to the last", () => {
+    renderModal();
+    const dialog = screen.getByRole("dialog");
+    expect(document.activeElement).toBe(dialog);
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Second" }));
   });
 });

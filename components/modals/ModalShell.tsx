@@ -12,6 +12,8 @@ import { DashboardIconImg } from "@/components/DashboardIconImg";
 
 type CSS = React.CSSProperties;
 
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 // Overlay + centered card. Mirrors CommandPalette's scrim.
 export function ModalShell({
   open,
@@ -101,6 +103,27 @@ export function ModalShell({
         aria-labelledby={titleId}
         tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
+        // aria-modal says the page behind is inert, so Tab must not leave the dialog: wrap at both ends.
+        onKeyDown={(e) => {
+          const dialog = dialogRef.current;
+          if (e.key !== "Tab" || !dialog) return;
+          const nodes = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+          if (nodes.length === 0) {
+            e.preventDefault();
+            dialog.focus();
+            return;
+          }
+          const first = nodes[0];
+          const last = nodes[nodes.length - 1];
+          const active = document.activeElement;
+          if (e.shiftKey && (active === first || active === dialog)) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }}
         style={{
           outline: "none",
           width: "100%",

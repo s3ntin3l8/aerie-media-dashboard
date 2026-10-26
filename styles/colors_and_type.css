@@ -63,14 +63,14 @@
   --originator-opposing:     #b91c1c; /* red    — opposing counsel */
   --originator-own:          #046c4e; /* green  — own lawyer */
   --originator-third-party:  #ab3509; /* orange — third party */
-  --originator-unknown:      #64748b; /* slate  — unknown */
+  --originator-unknown:      #546175; /* slate  — unknown */
 
   /* ── SIGNAL / STATUS ──────────────────────────────── */
   --amber:        #974906;
   --amber-glow:   rgb(217 119 6 / 0.18);
   --critical:     #b41f1f;
   --near:         #ca8a04;
-  --warning:      #b45309;
+  --warning:      #994708;
   --warning-container: #fef3c7;
 
   /* ── ANNOTATION HIGHLIGHTS ────────────────────────── */

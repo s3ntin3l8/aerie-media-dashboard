@@ -169,6 +169,20 @@ export function PanelShell({
   const stacked = useStacked();
   const natural = useNaturalHeight();
   const fillBox = fill && !natural;
+  // A scrolling body needs a tab stop (and a name) so keyboard users can scroll it, but only when it
+  // actually overflows: otherwise every tile would add a pointless stop.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!fillBox || !el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight);
+    measure(); // content can change without the box resizing, so re-check after every render
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   return (
     <section
       style={{
@@ -208,9 +222,9 @@ export function PanelShell({
         {action}
       </header>
       <div
+        ref={bodyRef}
         className={fillBox ? "custom-scrollbar" : undefined}
-        // A scrollable region needs a tab stop, or keyboard users can't scroll it when it holds nothing focusable.
-        {...(fillBox ? { tabIndex: 0, role: "region", "aria-label": title } : {})}
+        {...(fillBox && overflows ? { tabIndex: 0, role: "region", "aria-label": title } : {})}
         style={{ flex: 1, ...(fillBox ? { minHeight: 0, overflowY: "auto" } : {}), ...bodyStyle }}
       >
         {children}
@@ -321,7 +335,7 @@ export function ServiceTiles({ onOpen, onAll, services, fill, serviceIds }: { on
       {list.length === 0 ? (
         <Empty icon="apps" line="No services yet" sub="Add services in Admin to launch them here." />
       ) : fill ? (
-        <FlowGrid items={list} itemW={150} itemH={118} gap={11} padX={14} padY={14} stretch render={(s) => <Tile key={s.id} s={s} />} />
+        <FlowGrid label="Services" items={list} itemW={150} itemH={118} gap={11} padX={14} padY={14} stretch render={(s) => <Tile key={s.id} s={s} />} />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 11 }}>
           {list.map((s) => (
@@ -730,6 +744,7 @@ function FlowGrid<T>({
   padX = 16,
   padY = 12,
   stretch = false,
+  label,
   render,
 }: {
   items: T[];
@@ -739,6 +754,8 @@ function FlowGrid<T>({
   padX?: number;
   padY?: number;
   stretch?: boolean;
+  /** Names the region when the grid scrolls sideways; the owning panel's title, so two grids on a page differ. */
+  label: string;
   render: (item: T, index: number) => React.ReactNode;
 }) {
   const natural = useNaturalHeight();
@@ -802,7 +819,7 @@ function FlowGrid<T>({
     <div
       ref={ref}
       className="custom-scrollbar"
-      {...(scrolls ? { tabIndex: 0, role: "region", "aria-label": "Scrollable list" } : {})}
+      {...(scrolls ? { tabIndex: 0, role: "region", "aria-label": label } : {})}
       style={{ height: "100%", boxSizing: "border-box", padding: `${padY}px ${padX}px`, overflowX: "auto", overflowY: "hidden", display: "flex", flexDirection: "column", gap }}
     >
       {chunks.map((row, r) =>
@@ -862,7 +879,7 @@ export function RecentlyAdded({ fill, limit, mediaKind, title, source, onSelect 
             </div>
             );
           };
-          return fill ? <FlowGrid items={displayItems} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
+          return fill ? <FlowGrid label={title && title.length > 0 ? title : "Recently Added"} items={displayItems} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
         })()
       )}
     </PanelShell>
@@ -1053,7 +1070,7 @@ export function UpcomingPanel({ fill, limit, window: windowDays, title, onSelect
               </div>
             </div>
           );
-          return fill ? <FlowGrid items={list} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{list.map(renderItem)}</PosterStrip>;
+          return fill ? <FlowGrid label={title && title.length > 0 ? title : "Coming Soon"} items={list} itemW={76} itemH={150} render={renderItem} /> : <PosterStrip>{list.map(renderItem)}</PosterStrip>;
         })()
       )}
     </PanelShell>
@@ -1105,7 +1122,7 @@ export function LeaderboardPanel({ fill, limit, title }: { fill?: boolean; limit
                 <Eyebrow style={{ marginBottom: 8 }}>Top media</Eyebrow>
                 {fill ? (
                   <div style={{ flex: 1, minHeight: 0 }}>
-                    <FlowGrid items={topStats.media} itemW={76} itemH={150} gap={10} padX={0} padY={0} render={renderItem} />
+                    <FlowGrid label="Most watched" items={topStats.media} itemW={76} itemH={150} gap={10} padX={0} padY={0} render={renderItem} />
                   </div>
                 ) : (
                   <div className="custom-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", alignItems: "flex-start", paddingLeft: 16, paddingRight: 16, paddingBottom: 16, marginLeft: -16, marginRight: -16 }}>
@@ -1272,7 +1289,7 @@ export function DiscoverPanel({
             );
           };
           return fill
-            ? <FlowGrid items={displayItems} itemW={76} itemH={168} render={renderItem} />
+            ? <FlowGrid label={title ?? "Discover"} items={displayItems} itemW={76} itemH={168} render={renderItem} />
             : <PosterStrip>{displayItems.map(renderItem)}</PosterStrip>;
         })()
       )}

@@ -57,7 +57,8 @@ describe("MediaDetailBody — full variant", () => {
         title="X"
         kind="movie"
         meta={["Movie"]}
-        serviceLinks={<a href="https://radarr.test/movie/1">Open in Radarr</a>}
+        // eslint-disable-next-line @next/next/no-html-link-for-pages -- plain anchor on purpose: the catch-all route makes the rule treat every path as a page
+        serviceLinks={<a href="/svc">Open in Radarr</a>}
         badges={<span>Downloaded</span>}
         releaseRows={<div>In cinemas</div>}
       >
