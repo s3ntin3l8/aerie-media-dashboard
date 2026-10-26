@@ -17,6 +17,12 @@ jobs:
       node-version: '24'
       typecheck-script: 'typecheck'
       test-script: 'test:coverage'
+      # Absolute floor (runway uses 85); current line coverage is ~90%. Codecov still gates the
+      # per-PR delta.
+      coverage-fail-under: '85'
+      # One jsdom environment per worker instead of one per test file: the suite runs ~2x faster
+      # (48s -> 25s locally, same 1490 passing tests and coverage).
+      test-pool: 'vmThreads'
       build-env: 'NEXT_TELEMETRY_DISABLED=1'
       strict-checks: true
     secrets: inherit  # pragma: allowlist secret

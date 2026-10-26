@@ -134,7 +134,7 @@ This is why backing up both the database **and** the key together is essential.
 
 ## Updating the deployment
 
-CI pushes a fresh `ghcr.io/s3ntin3l8/aerie:edge` image on every push to `main`. To pull and apply:
+CI pushes a fresh `ghcr.io/s3ntin3l8/aerie:edge` image on every push to `main`. Cutting a release (Release Please) additionally publishes `:X.Y.Z`, `:X.Y` and `:latest`, so `:latest` (the `docker-compose.yml` default) is the last *release*, while `:edge` tracks every `main` push. To pull and apply:
 
 ```bash
 docker compose pull          # fetch the latest :edge from GHCR

@@ -29,6 +29,12 @@ CI uses `npm run test:coverage` (Vitest + v8 coverage) and uploads to [Codecov](
 
 Every PR that touches `app/**`, `components/**`, or `lib/**` must ship with tests for the new/changed lines. Write tests that assert behavior, not coverage-padding renders. See the "Testing" section below.
 
+## Secret scanning
+
+CI runs [detect-secrets](https://github.com/Yelp/detect-secrets) in strict mode against `.secrets.baseline` (`tests/` is excluded: fake fixtures only). To catch a hit before CI does, install it once — `pip install detect-secrets==1.5.0` (the version CI pins) — and the pre-commit hook scans your staged files with the same baseline. Without it installed the hook just prints a notice and CI stays the gate.
+
+For a false positive (a type name, a demo key), put `// pragma: allowlist secret` (`#` in YAML) on that line rather than baselining it: baselined entries are tracked by line number, so unrelated edits would keep rewriting the baseline.
+
 ## Workflow
 
 ```
