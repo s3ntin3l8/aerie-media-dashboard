@@ -139,6 +139,18 @@ describe("Admin — mobile sort select", () => {
   });
 });
 
+describe("Admin — toggles act on the service they name", () => {
+  it.each([[false], [true]])("flips Active and Keep via the named buttons (mobile=%s)", (isMobile) => {
+    mobile.value = isMobile;
+    seedData([alpha]);
+    render(<Admin />);
+    fireEvent.click(screen.getByRole("button", { name: "Alpha active" }));
+    expect(actions.setServiceActive).toHaveBeenCalledWith("alpha", false);
+    fireEvent.click(screen.getByRole("button", { name: "Alpha keep alive" }));
+    expect(actions.setServiceKeepAlive).toHaveBeenCalledWith("alpha", false);
+  });
+});
+
 describe("Admin — accessible names (2026-10 audit)", () => {
   it("names the toggles on the mobile cards too", () => {
     mobile.value = true;

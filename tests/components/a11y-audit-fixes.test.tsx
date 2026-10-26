@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import React from "react";
 
 // Regression tests for the 2026-10 portal UI/UX audit (docs/audit/2026-10-portal-ui-ux.md).
@@ -10,7 +10,7 @@ const notFound = vi.hoisted(() => vi.fn(() => { throw new Error("NEXT_NOT_FOUND"
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), notFound }));
 vi.mock("@/components/portal/PortalProvider", () => ({ usePortal: () => ({ role: "admin", user: { id: "u1" }, setModalOpen: vi.fn() }) }));
 vi.mock("@/components/portal/DataProvider", () => ({
-  useData: () => ({ services: [{ id: "abs", name: "Audiobookshelf", cat: "stream", icon: "headphones", host: "abs.test", scheme: "https", status: "up", uptime: 99.9, ms: 5, beats: [], version: "1", note: "", central: true, centralLabel: "Audiobooks", active: true, embeddable: false }] }),
+  useData: () => ({ services: ["abs", "plex", "radarr"].map((id) => ({ id, name: id === "abs" ? "Audiobookshelf" : id, cat: "stream", icon: "headphones", host: `${id}.test`, scheme: "https", status: "up", uptime: 99.9, ms: 5, beats: [], version: "1", note: "", central: true, centralLabel: "Audiobooks", active: true, embeddable: false })) }),
   useRefresh: () => vi.fn(),
 }));
 
@@ -56,6 +56,23 @@ describe("PanelShell — scrollable body", () => {
     expect(screen.queryByRole("region", { name: "Queue" })).toBeNull();
   });
 
+  it("re-measures when the body is resized", () => {
+    sizes(100, 200);
+    let measure: () => void = () => {};
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class { constructor(cb: () => void) { measure = cb; } observe = observe; disconnect = disconnect; });
+    const { unmount } = render(<PanelShell title="Queue" fill>body</PanelShell>);
+    expect(observe).toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "Queue" })).toBeNull();
+    sizes(400, 200);
+    act(() => measure());
+    expect(screen.getByRole("region", { name: "Queue" })).toBeTruthy();
+    unmount();
+    expect(disconnect).toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("adds no tab stop at natural height (not a scroll container)", () => {
     sizes(400, 200);
     render(<PanelShell title="Queue">body</PanelShell>);
@@ -66,7 +83,7 @@ describe("PanelShell — scrollable body", () => {
 describe("CentralServices — card header", () => {
   it("lets the category chip wrap below a long name instead of overlapping the status badge", () => {
     render(<CentralServices />);
-    const chip = screen.getByText("Audiobooks");
+    const chip = screen.getAllByText("Audiobooks")[0];
     expect(chip.style.whiteSpace).toBe("nowrap");
     expect(chip.parentElement!.style.flexWrap).toBe("wrap");
   });
@@ -142,11 +159,29 @@ describe("ModalShell — Tab trap", () => {
     expect(document.activeElement).toBe(screen.getByTitle("Close (esc)"));
   });
 
+  it("leaves Tab alone away from the ends, and ignores other keys", () => {
+    renderModal();
+    const first = screen.getByRole("textbox", { name: "First" });
+    first.focus();
+    // fireEvent returns false when the handler called preventDefault.
+    expect(fireEvent.keyDown(first, { key: "Tab" })).toBe(true);
+    expect(fireEvent.keyDown(first, { key: "a" })).toBe(true);
+    expect(document.activeElement).toBe(first);
+  });
+
   it("wraps Shift+Tab from the dialog or its first element to the last", () => {
     renderModal();
     const dialog = screen.getByRole("dialog");
     expect(document.activeElement).toBe(dialog);
     fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Second" }));
+  });
+});
+
+describe("ServiceTiles — sideways-scrolling grid", () => {
+  it("is named after its panel when it scrolls, so two grids on a page stay distinct", async () => {
+    const { ServiceTiles } = await import("@/components/panels");
+    render(<ServiceTiles fill />);
+    expect(screen.getByRole("region", { name: "Services" })).toBeTruthy();
   });
 });

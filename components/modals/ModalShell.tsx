@@ -107,12 +107,8 @@ export function ModalShell({
         onKeyDown={(e) => {
           const dialog = dialogRef.current;
           if (e.key !== "Tab" || !dialog) return;
+          // Never empty: the header's close button is always focusable.
           const nodes = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
-          if (nodes.length === 0) {
-            e.preventDefault();
-            dialog.focus();
-            return;
-          }
           const first = nodes[0];
           const last = nodes[nodes.length - 1];
           const active = document.activeElement;
