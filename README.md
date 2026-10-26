@@ -12,6 +12,12 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-informational.svg" alt="License: AGPL-3.0"></a>
 </p>
 
+<p align="center">
+  <img alt="AERIE home dashboard (dark)" src="./docs/screenshots/home-dark.png" width="49%">
+  <img alt="AERIE home dashboard (light)" src="./docs/screenshots/home-light.png" width="49%">
+</p>
+<p align="center"><sub>Captured from the scripted demo with fictional titles; see <a href="#demo-and-screenshots">Demo and screenshots</a>.</sub></p>
+
 A private media portal for self-hosted services (Plex, Jellyfin, Overseerr, the *arr suite,
 Tautulli/Jellystat, Gatus, Prometheus, Beszel), exposed behind Traefik and authenticated via **any
 OIDC provider** (or a local admin account when OIDC is off). One vantage point to reach
@@ -74,6 +80,34 @@ npm run dev      # http://localhost:3001
 npm run build    # production build + typecheck + lint
 npm run start    # serve the production build
 ```
+
+## Demo and screenshots
+
+`npm run screenshots` (or `make screenshots`) regenerates the images in `docs/screenshots/` from a
+fully scripted, throwaway demo. Aerie shows live upstream data or an empty state, with no mock
+fallback, so the demo boots a fake upstream (`scripts/demo/upstream.mjs`) that stands in for
+Tautulli, Overseerr, Sonarr, Radarr, Gatus, Prometheus and NZBGet and serves a fictional catalogue
+(`scripts/demo/catalog.mjs`) with generated poster art. A scratch SQLite database is provisioned
+from a generated `aerie.yaml`, `next dev` runs against both on dedicated loopback ports, a
+throwaway admin is created through the first-run setup form, Playwright captures the screens, and
+everything is torn down.
+
+| Command                          | What it does                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `make demo`                      | The same demo instance, left running; prints a URL and writes a throwaway login to a private file.      |
+| `make screenshots-landing OUT=…` | 2x dark stills plus a short live-dashboard loop (webm/mp4/poster) for a project page; needs `ffmpeg`.   |
+
+One-time setup for the browser: `npx playwright-core install chromium`. On a slow or heavily loaded
+host, raise `DEMO_HEALTH_TIMEOUT_MS` (default `90000`), the time each readiness probe may take.
+`DEMO_WEB_PORT` (default `3930`) and `DEMO_UPSTREAM_PORT` (default `3931`) move the ports.
+
+**Isolation is enforced, not assumed** (`scripts/demo/env.mjs`, tested in
+`tests/unit/demo-env.test.ts`): the demo process gets a clean environment with nothing inherited
+except `PATH`/locale, all state lives in one temp directory that is deleted afterwards, Next.js is
+told to skip its `.env*` files (so a real `.env` is never read), both ports must be free, and the
+guard refuses to start if any database, path, secret or service URL points outside the scratch
+directory or off loopback. The browser is held to the same rule: any request that is not loopback
+fails the capture.
 
 ## Layout
 
