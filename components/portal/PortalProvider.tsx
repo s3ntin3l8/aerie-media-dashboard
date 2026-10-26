@@ -152,8 +152,11 @@ export function PortalProvider({ user, oidc = false, favorites: initialFavorites
     const onKey = (e: KeyboardEvent) => {
       // A modal owns the keyboard while open (it handles its own Escape).
       if (modalOpenRef.current) return;
-      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase() || "";
-      const typing = tag === "input" || tag === "textarea";
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase() || "";
+      // Anything that takes typed/arrow input owns the keyboard: text fields, <select> (type-ahead
+      // letters), and contenteditable regions.
+      const typing = tag === "input" || tag === "textarea" || tag === "select" || !!target?.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((p) => !p);

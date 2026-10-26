@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import React from "react";
 
 // Smoke: render every mobile screen with a realistic snapshot so their composition runs
@@ -61,4 +61,15 @@ describe("mobile screen smoke renders", () => {
   it("MobileRequests renders", () => { expect(render(<MobileRequests />).container.textContent).toBeTruthy(); });
   it("MobileServices renders", () => { expect(render(<MobileServices onOpen={vi.fn()} />).container.textContent).toBeTruthy(); });
   it("MobileAdmin renders", () => { expect(render(<MobileAdmin onClose={vi.fn()} />).container.textContent).toBeTruthy(); });
+
+  // Each phone screen exposes exactly one level-one heading (2026-10 audit, #278).
+  it.each([
+    ["MobileDashboard", () => <MobileDashboard />],
+    ["MobileStreams", () => <MobileStreams />],
+    ["MobileRequests", () => <MobileRequests />],
+    ["MobileServices", () => <MobileServices onOpen={vi.fn()} />],
+  ])("%s has one h1", (_name, el) => {
+    render(el());
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
 });

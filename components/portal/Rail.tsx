@@ -373,7 +373,7 @@ export function Rail() {
           </div>
         </RailTip>
       </div>
-      <nav style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 4 }}>
+      <nav aria-label="Primary" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 4 }}>
         {RAIL_NAV_ITEMS.filter((item) => !item.adminOnly).map((item) => (
           <RailNav
             key={item.id}

@@ -17,4 +17,4 @@ evidence is local (`docs/audit/assets/`, gitignored). Structure, naming and rule
 
 | Audit | Scope | Outcome |
 |---|---|---|
-| [2026-10 UI/UX](2026-10-portal-ui-ux.md) | portal | 9 P1 fixed with tests; polish deferred to issues |
+| [2026-10 UI/UX](2026-10-portal-ui-ux.md) | portal | 9 P1 fixed with tests; the 7 deferred P2/P3 items (#275–#281) fixed in a follow-up |

@@ -462,6 +462,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
   const sortHead = (col: AdminSortCol, label: string) => {
     const active = sort.col === col;
     return (
+      <div role="columnheader" aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
       <button
         onClick={() => handleSortClick(col)}
         style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
@@ -474,6 +475,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
           style={{ opacity: active ? 1 : 0.4 }}
         />
       </button>
+      </div>
     );
   };
 
@@ -485,24 +487,24 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
     {discoveredEl}
     {nodesEl}
     <div className="aerie-x-scroll">
-      <div style={{ minWidth: 1000, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
+      <div role="table" aria-label="Services" style={{ minWidth: 1000, borderRadius: 16, border: "1px solid var(--outline-variant)", overflow: "hidden", background: "var(--surface-container-lowest)" }}>
+        <div role="row" style={{ display: "grid", gridTemplateColumns: cols, gap: 12, padding: "11px 18px", borderBottom: "1px solid var(--outline-variant)", background: "color-mix(in srgb, var(--surface-container) 50%, transparent)" }}>
           {sortHead("name", "Service")}
           {sortHead("cat", "Category")}
           {sortHead("host", "Host")}
-          <Eyebrow style={{ whiteSpace: "nowrap" }}>Proxy &amp; access</Eyebrow>
+          <div role="columnheader"><Eyebrow style={{ whiteSpace: "nowrap" }}>Proxy &amp; access</Eyebrow></div>
           {sortHead("embed", "Embed")}
           {sortHead("active", "Active")}
           {sortHead("keep", "Keep")}
           {sortHead("key", "API key")}
-          <Eyebrow style={{ textAlign: "right", whiteSpace: "nowrap" }}>Actions</Eyebrow>
+          <div role="columnheader"><Eyebrow style={{ textAlign: "right", whiteSpace: "nowrap" }}>Actions</Eyebrow></div>
         </div>
         {sorted.map((s, i) => {
           const pinned = favorites.includes(s.id);
           const dim = s.active ? undefined : 0.5;
           return (
-            <div key={s.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: listDivider(i) }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, opacity: dim }}>
+            <div key={s.id} role="row" style={{ display: "grid", gridTemplateColumns: cols, gap: 12, alignItems: "center", padding: "12px 18px", borderTop: listDivider(i) }}>
+              <div role="cell" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, opacity: dim }}>
                 <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
                   <ServiceLogo service={s} size={28} radius={7} />
                   <StatusLight service={s} dot={10} />
@@ -514,20 +516,21 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
                   </div>
                 </div>
               </div>
-              <span style={{ opacity: dim, minWidth: 0, whiteSpace: "nowrap" }}><CatBadge cat={s.cat} size="xs" /></span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", ...TRUNCATE, minWidth: 0, opacity: dim }}>{s.host}</span>
+              <span role="cell" style={{ opacity: dim, minWidth: 0, whiteSpace: "nowrap" }}><CatBadge cat={s.cat} size="xs" /></span>
+              <span role="cell" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)", ...TRUNCATE, minWidth: 0, opacity: dim }}>{s.host}</span>
               {/* Cert + SSO + route-health + Authentik access, consolidated into one column. */}
-              <span style={{ opacity: dim, minWidth: 0 }}><ProxyAccessCell route={s.route} access={s.authentik} reserve /></span>
-              <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
-              <Toggle label={`${s.name} active`} on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
+              <span role="cell" style={{ opacity: dim, minWidth: 0 }}><ProxyAccessCell route={s.route} access={s.authentik} reserve /></span>
+              <span role="cell" style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
+              <span role="cell" style={{ display: "inline-flex" }}><Toggle label={`${s.name} active`} on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" /></span>
               <span
+                role="cell"
                 title={s.embeddable ? "Keep this service's iframe mounted (hidden) after first open so its state survives switching" : "Only embeddable services can be kept alive"}
                 style={{ display: "inline-flex", alignItems: "center", opacity: s.embeddable ? undefined : 0.3, pointerEvents: s.embeddable ? undefined : "none" }}
               >
                 <Toggle label={`${s.name} keep alive`} on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
               </span>
-              <KeyIndicator service={s} dim={dim} compact />
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
+              <span role="cell" style={{ display: "inline-flex" }}><KeyIndicator service={s} dim={dim} compact /></span>
+              <div role="cell" style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
                 <button onClick={() => toggleFavorite(s.id)} className="btn btn-ghost btn-sm" style={{ padding: 6, color: pinned ? "var(--amber)" : undefined }} title={pinned ? "Unpin from rail" : "Pin to rail"}>
                   <Icon name={pinned ? "star" : "star_border"} size={15} />
                 </button>

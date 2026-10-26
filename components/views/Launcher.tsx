@@ -98,7 +98,7 @@ export function ServiceView({ s, deepPath }: { s: Service; deepPath?: string }) 
         <div style={{ width: 1, height: 22, background: "var(--outline-variant)" }} />
         <ServiceLogo service={s} size={30} radius={8} />
         <div>
-          <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 14, color: "var(--on-surface)", lineHeight: 1.1 }}>{s.name}</div>
+          <h1 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 14, color: "var(--on-surface)", lineHeight: 1.1 }}>{s.name}</h1>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>v{String(s.version).replace(/^v/i, "")}</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>

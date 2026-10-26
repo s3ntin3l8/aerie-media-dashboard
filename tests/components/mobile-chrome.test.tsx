@@ -177,6 +177,31 @@ describe("MobilePortal", () => {
     expect(screen.getByTestId("screen-admin")).toBeInTheDocument();
   });
 
+  it("renders the themed 404 (not the Dashboard) for an unknown path, with a way home", () => {
+    mockPathname.mockReturnValue("/no/such/page");
+    render(<MobilePortal />);
+    expect(screen.getByRole("heading", { level: 1, name: "Page not found." })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go home" })).toHaveAttribute("href", "/");
+    expect(screen.queryByTestId("screen-dashboard")).not.toBeInTheDocument();
+  });
+
+  it.each([["/", "screen-dashboard"], ["/streams", "screen-streams"], ["/requests/123", "screen-requests"], ["/status", "screen-services"], ["/services", "screen-services"], ["/admin/x", "screen-admin"]])(
+    "keeps known route %s on its screen",
+    (path, testId) => {
+      mockPathname.mockReturnValue(path);
+      render(<MobilePortal />);
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+      expect(screen.queryByText("Page not found.")).not.toBeInTheDocument();
+    },
+  );
+
+  it("exposes banner, navigation and main landmarks", () => {
+    render(<MobilePortal />);
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
+  });
+
   it("renders AppBar and Nav on non-service routes", () => {
     render(<MobilePortal />);
     expect(screen.getByText("AERIE")).toBeInTheDocument();

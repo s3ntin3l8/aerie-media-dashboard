@@ -14,7 +14,8 @@ export function MobileNav() {
   const pendingCount = requests.filter((r) => r.status === "pending").length;
 
   return (
-    <div
+    <nav
+      aria-label="Primary"
       className="aerie-bottom-nav"
       style={{
         flexShrink: 0,
@@ -73,6 +74,6 @@ export function MobileNav() {
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

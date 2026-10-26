@@ -23,9 +23,10 @@ export function MobileDashboard() {
     <div style={{ padding: 18, paddingTop: 8, display: "flex", flexDirection: "column", gap: 18 }}>
       {/* Greeting + edit controls */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div
+        <h1
           suppressHydrationWarning
           style={{
+            margin: 0,
             fontFamily: "var(--font-headline)",
             fontSize: 24,
             fontWeight: 800,
@@ -39,7 +40,7 @@ export function MobileDashboard() {
           }}
         >
           {api.editing ? "Arrange dashboard" : `${greet}, ${user.name}.`}
-        </div>
+        </h1>
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
           {api.editing && (
             <button onClick={api.resetLayout} className="btn btn-ghost btn-sm" title="Restore the default arrangement">

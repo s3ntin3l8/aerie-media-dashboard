@@ -79,6 +79,37 @@ describe("PortalProvider", () => {
     expect(push).toHaveBeenCalledWith("/status");
   });
 
+  it("does not treat g + letter as navigation while a <select> has focus", () => {
+    renderAs("admin");
+    const sel = document.createElement("select");
+    document.body.appendChild(sel);
+    fireEvent.keyDown(sel, { key: "g" });
+    fireEvent.keyDown(sel, { key: "s" });
+    expect(push).not.toHaveBeenCalled();
+    sel.remove();
+  });
+
+  it("does not navigate from a contenteditable element either", () => {
+    renderAs("admin");
+    const div = document.createElement("div");
+    // jsdom doesn't implement isContentEditable; define what a browser reports.
+    Object.defineProperty(div, "isContentEditable", { value: true });
+    document.body.appendChild(div);
+    fireEvent.keyDown(div, { key: "g" });
+    fireEvent.keyDown(div, { key: "s" });
+    expect(push).not.toHaveBeenCalled();
+    div.remove();
+  });
+
+  it("⌘K still works while a <select> has focus", () => {
+    renderAs("admin");
+    const sel = document.createElement("select");
+    document.body.appendChild(sel);
+    fireEvent.keyDown(sel, { key: "k", metaKey: true });
+    expect(screen.getByTestId("palette").textContent).toBe("true");
+    sel.remove();
+  });
+
   it("⌘D toggles the theme", () => {
     renderAs("admin");
     const before = screen.getByTestId("theme").textContent;

@@ -13,6 +13,7 @@ import { MobileRequests } from "@/components/mobile/screens/MobileRequests";
 import { MobileServices } from "@/components/mobile/screens/MobileServices";
 import { MobileServiceView } from "@/components/mobile/screens/MobileServiceView";
 import { Admin } from "@/components/views/Admin";
+import { PortalNotFound } from "@/components/views/NotFound";
 
 export function MobilePortal() {
   const pathname = usePathname();
@@ -44,7 +45,10 @@ export function MobilePortal() {
     // secrets, visibility). It's not mobile-optimised but is fully functional
     // and far better than landing on Home with nothing working.
     if (pathname.startsWith("/admin")) return <Admin />;
-    return <MobileDashboard />;
+    // Only "/" is the Dashboard. Anything else is an unknown URL: show the same themed 404 as
+    // desktop instead of a working-looking Dashboard at the wrong address.
+    if (pathname === "/") return <MobileDashboard />;
+    return <PortalNotFound />;
   }
 
   return (

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import React from "react";
 
 // Hoisted holders the vi.mock factories can read.
@@ -125,6 +125,42 @@ describe("Admin — desktop column sorting", () => {
     // API key: Alpha + Charlie have a stored secret, Bravo does not.
     clickHeader("API key");
     expect(order()).toEqual(["Alpha", "Charlie", "Bravo"]);
+  });
+});
+
+describe("Admin — table semantics (2026-10 audit)", () => {
+  beforeEach(() => {
+    mobile.value = false;
+    seedData([alpha, bravo, charlie]);
+  });
+  // The sort icon's ligature text is part of the name ("Service expand_less"), so match the label as a prefix.
+  const header = (name: string) => screen.getByRole("columnheader", { name: new RegExp(`^${name}`) });
+
+  it("exposes table, row, columnheader and cell roles", () => {
+    render(<Admin />);
+    const table = screen.getByRole("table", { name: "Services" });
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(9);
+    // header row + one row per service, nine cells in each body row
+    const rows = within(table).getAllByRole("row");
+    expect(rows).toHaveLength(4);
+    for (const row of rows.slice(1)) expect(within(row).getAllByRole("cell")).toHaveLength(9);
+  });
+
+  it("marks the sorted column with aria-sort and the rest none, after each click", () => {
+    render(<Admin />);
+    expect(header("Service")).toHaveAttribute("aria-sort", "ascending");
+    expect(header("Category")).toHaveAttribute("aria-sort", "none");
+    clickHeader("Category");
+    expect(header("Category")).toHaveAttribute("aria-sort", "ascending");
+    expect(header("Service")).toHaveAttribute("aria-sort", "none");
+    clickHeader("Category");
+    expect(header("Category")).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("leaves the unsortable columns without aria-sort", () => {
+    render(<Admin />);
+    expect(header("Proxy & access")).not.toHaveAttribute("aria-sort");
+    expect(header("Actions")).not.toHaveAttribute("aria-sort");
   });
 });
 
