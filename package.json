@@ -11,6 +11,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx scripts/seed.ts",
+    "demo": "node scripts/demo/instance.mjs",
+    "screenshots": "node scripts/demo/capture.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -50,6 +52,7 @@
     "husky": "^9.1.7",
     "jsdom": "^30.1.1",
     "lint-staged": "^17.5.1",
+    "playwright-core": "~1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.3"

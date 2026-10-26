@@ -57,6 +57,14 @@ Run coverage locally and inspect which changed lines are uncovered before pushin
 npm run test:coverage   # generates coverage/coverage-summary.json and coverage/lcov.info
 ```
 
+## Screenshots
+
+Images are never taken by hand. `make screenshots` (README set) and `make screenshots-landing OUT=<dir>`
+(landing-page stills and loop) run a scripted capture against an isolated throwaway instance; see
+"Demo and screenshots" in the README. If you add or change a view or an upstream client, extend
+`scripts/demo/upstream.mjs` so its panel is populated in the demo; `tests/unit/demo-upstream.test.ts`
+runs the real clients against the fake and fails when the two drift apart.
+
 ## Architecture notes
 
 See [`CLAUDE.md`](CLAUDE.md) for the full architecture reference (data flow, auth model, persistence, integrations layer, deployment). Highlights:
