@@ -57,7 +57,7 @@ describe("MediaDetailBody — full variant", () => {
         title="X"
         kind="movie"
         meta={["Movie"]}
-        serviceLinks={<a href="/svc">Open in Radarr</a>}
+        serviceLinks={<a href="https://radarr.test/movie/1">Open in Radarr</a>}
         badges={<span>Downloaded</span>}
         releaseRows={<div>In cinemas</div>}
       >

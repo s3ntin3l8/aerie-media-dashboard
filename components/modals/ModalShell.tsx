@@ -3,7 +3,7 @@
 // AERIE — modal shell + shared form primitives
 // (ported from the design's Modals.jsx)
 // ============================================================
-import React, { useEffect } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import type { Category } from "@/lib/types";
 import { Icon, Eyebrow } from "@/components/primitives";
 import { CAT, catColor } from "@/lib/categories";
@@ -57,6 +57,16 @@ export function ModalShell({
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Move focus into the dialog on open and hand it back to the trigger on close, so keyboard and
+  // screen-reader users land in the modal and return to where they were.
+  useEffect(() => {
+    if (!open) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+    return () => trigger?.focus();
+  }, [open]);
   if (!open) return null;
   return (
     <div
@@ -75,8 +85,14 @@ export function ModalShell({
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
         style={{
+          outline: "none",
           width: "100%",
           maxWidth: width,
           margin: "0 16px",
@@ -103,7 +119,7 @@ export function ModalShell({
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
-            <h2 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em", color: "var(--on-surface)", lineHeight: 1.15 }}>{title}</h2>
+            <h2 id={titleId} style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em", color: "var(--on-surface)", lineHeight: 1.15 }}>{title}</h2>
             {sub && <div style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 3, lineHeight: 1.45 }}>{sub}</div>}
           </div>
           {headerActions}
@@ -143,7 +159,7 @@ export function Field({ label, hint, children, full, style }: { label: string; h
   );
 }
 
-export function Toggle({ on, onChange, color = "var(--originator-own)", size = "md" }: { on: boolean; onChange: (v: boolean) => void; color?: string; size?: "sm" | "md" }) {
+export function Toggle({ on, onChange, label, color = "var(--originator-own)", size = "md" }: { on: boolean; onChange: (v: boolean) => void; label: string; color?: string; size?: "sm" | "md" }) {
   const W = size === "sm" ? 30 : 38,
     H = size === "sm" ? 18 : 22,
     K = H - 4;
@@ -152,6 +168,7 @@ export function Toggle({ on, onChange, color = "var(--originator-own)", size = "
       type="button"
       onClick={() => onChange(!on)}
       aria-pressed={on}
+      aria-label={label}
       style={{
         width: W,
         height: H,
@@ -179,7 +196,7 @@ export function ToggleRow({ on, onChange, title, desc, color, icon }: { on: bool
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--on-surface)" }}>{title}</div>
         {desc && <div style={{ fontSize: 11, color: "var(--on-surface-variant)", marginTop: 1 }}>{desc}</div>}
       </div>
-      <Toggle on={on} onChange={onChange} color={c} />
+      <Toggle on={on} onChange={onChange} label={title} color={c} />
     </div>
   );
 }

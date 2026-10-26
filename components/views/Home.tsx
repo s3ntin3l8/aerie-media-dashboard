@@ -4,6 +4,7 @@
 // Pick widgets, drag/resize on a snap grid, per-role saved layouts.
 // ============================================================
 import React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePortal } from "@/components/portal/PortalProvider";
 import { useData } from "@/components/portal/DataProvider";
@@ -165,9 +166,9 @@ export function Home() {
               <Empty icon="dashboard_customize" line="No services configured yet" sub="Add your services and their API keys to light up live data." />
               {role === "admin" && (
                 <div style={{ display: "flex", justifyContent: "center" }}>
-                  <a href="/admin" className="btn btn-primary btn-sm">
+                  <Link href="/admin" className="btn btn-primary btn-sm">
                     <Icon name="settings" size={15} /> Go to Admin
-                  </a>
+                  </Link>
                 </div>
               )}
             </section>

@@ -225,7 +225,7 @@ export function Requests() {
                   color: filter === f ? "var(--originator-court)" : "var(--on-surface-variant)",
                 }}
               >
-                {f} <span style={{ fontFamily: "var(--font-mono)", opacity: 0.7 }}>{counts[f as RequestStatusFilter] ?? 0}</span>
+                {f} <span style={{ fontFamily: "var(--font-mono)" }}>{counts[f as RequestStatusFilter] ?? 0}</span>
               </button>
             ))}
             <button
@@ -258,7 +258,7 @@ export function Requests() {
                     color: requesterFilter === key ? "var(--originator-court)" : "var(--on-surface-variant)",
                   }}
                 >
-                  {name} <span style={{ fontFamily: "var(--font-mono)", opacity: 0.7 }}>{count}</span>
+                  {name} <span style={{ fontFamily: "var(--font-mono)" }}>{count}</span>
                 </button>
               ))}
             </div>

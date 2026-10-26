@@ -209,6 +209,8 @@ export function PanelShell({
       </header>
       <div
         className={fillBox ? "custom-scrollbar" : undefined}
+        // A scrollable region needs a tab stop, or keyboard users can't scroll it when it holds nothing focusable.
+        {...(fillBox ? { tabIndex: 0, role: "region", "aria-label": title } : {})}
         style={{ flex: 1, ...(fillBox ? { minHeight: 0, overflowY: "auto" } : {}), ...bodyStyle }}
       >
         {children}
@@ -396,9 +398,9 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
       <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 16 }}>
         <ServiceLogo service={s} size={40} radius={11} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 7, rowGap: 2 }}>
             <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 16, color: "var(--on-surface)" }}>{s.name}</span>
-            <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: c, padding: "1px 6px", borderRadius: 4, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>
+            <span style={{ whiteSpace: "nowrap", fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: c, padding: "1px 6px", borderRadius: 4, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>
               {s.centralLabel}
             </span>
           </div>
@@ -800,6 +802,7 @@ function FlowGrid<T>({
     <div
       ref={ref}
       className="custom-scrollbar"
+      {...(scrolls ? { tabIndex: 0, role: "region", "aria-label": "Scrollable list" } : {})}
       style={{ height: "100%", boxSizing: "border-box", padding: `${padY}px ${padX}px`, overflowX: "auto", overflowY: "hidden", display: "flex", flexDirection: "column", gap }}
     >
       {chunks.map((row, r) =>

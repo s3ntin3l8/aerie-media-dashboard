@@ -327,6 +327,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
         {discoveredEl}
         {nodesEl}
         <select
+          aria-label="Sort services"
           value={`${sort.col}:${sort.dir}`}
           onChange={(e) => {
             const [col, dir] = e.target.value.split(":") as [AdminSortCol, AdminSortDir];
@@ -374,7 +375,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>Active</Eyebrow>
-                  <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
+                  <Toggle label={`${s.name} active`} on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Eyebrow style={{ width: 52, flexShrink: 0 }}>Keep</Eyebrow>
@@ -382,7 +383,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
                     title={s.embeddable ? "Keep the iframe mounted after first open so its state survives switching" : "Only embeddable services can be kept alive"}
                     style={{ opacity: s.embeddable ? undefined : 0.3, pointerEvents: s.embeddable ? undefined : "none" }}
                   >
-                    <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
+                    <Toggle label={`${s.name} keep alive`} on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -465,7 +466,7 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
         onClick={() => handleSortClick(col)}
         style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
       >
-        <Eyebrow style={{ color: active ? "var(--on-surface)" : undefined, whiteSpace: "nowrap" }}>{label}</Eyebrow>
+        <Eyebrow color={active ? "var(--on-surface)" : undefined} style={{ whiteSpace: "nowrap" }}>{label}</Eyebrow>
         <Icon
           name={active ? (sort.dir === "asc" ? "expand_less" : "expand_more") : "unfold_more"}
           size={13}
@@ -518,12 +519,12 @@ export function AdminServices({ isMobile, onOpenService, onEdit, onAddDiscovered
               {/* Cert + SSO + route-health + Authentik access, consolidated into one column. */}
               <span style={{ opacity: dim, minWidth: 0 }}><ProxyAccessCell route={s.route} access={s.authentik} reserve /></span>
               <span style={{ opacity: dim }}>{s.embeddable ? <Icon name="check" size={16} color="var(--originator-own)" /> : <Icon name="open_in_new" size={15} color="var(--on-surface-variant)" />}</span>
-              <Toggle on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
+              <Toggle label={`${s.name} active`} on={s.active} onChange={() => toggleActive(s)} size="sm" color="var(--originator-own)" />
               <span
                 title={s.embeddable ? "Keep this service's iframe mounted (hidden) after first open so its state survives switching" : "Only embeddable services can be kept alive"}
                 style={{ display: "inline-flex", alignItems: "center", opacity: s.embeddable ? undefined : 0.3, pointerEvents: s.embeddable ? undefined : "none" }}
               >
-                <Toggle on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
+                <Toggle label={`${s.name} keep alive`} on={s.embeddable && s.keepAlive} onChange={() => toggleKeepAlive(s)} size="sm" color="var(--primary)" />
               </span>
               <KeyIndicator service={s} dim={dim} compact />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
