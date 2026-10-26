@@ -92,3 +92,14 @@ describe("ModalShell — dialog semantics", () => {
     expect(document.activeElement).toBe(trigger);
   });
 });
+
+describe("ModalShell — focus and autoFocus", () => {
+  it("leaves focus on a child that claimed it (autoFocus) instead of stealing it", () => {
+    render(
+      <ModalShell open onClose={() => {}} title="Add service">
+        <input aria-label="Name" autoFocus />
+      </ModalShell>,
+    );
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Name" }));
+  });
+});

@@ -59,13 +59,23 @@ export function ModalShell({
   }, [open, onClose]);
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  // Move focus into the dialog on open and hand it back to the trigger on close, so keyboard and
-  // screen-reader users land in the modal and return to where they were.
+  // The last element focused outside the dialog is where focus goes back to on close. Tracked via
+  // focusin rather than read when the effect runs, because a child's `autoFocus` has already moved
+  // focus by then.
+  const returnTo = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      if (e.target instanceof HTMLElement && !dialogRef.current?.contains(e.target)) returnTo.current = e.target;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+  // Move focus into the dialog on open (unless a child, e.g. an autoFocus input, already took it) and
+  // hand it back on close, so keyboard and screen-reader users land in the modal and return after.
   useEffect(() => {
     if (!open) return;
-    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
-    return () => trigger?.focus();
+    if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
+    return () => returnTo.current?.focus();
   }, [open]);
   if (!open) return null;
   return (

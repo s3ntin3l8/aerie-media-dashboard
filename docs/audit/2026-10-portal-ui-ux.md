@@ -61,7 +61,7 @@ No P0 was found.
 | 6 | **P1** Phone Home card: category chip overlaps the status badge for long names ("Audiobookshelf") | `home.phone.png` before the fix | `CentralCard` in `components/panels.tsx` | Name and chip row wraps (`flexWrap`), chip is `nowrap`; the chip drops under the name instead of over the badge. |
 | 7 | **P1** Unknown URL shows Next's stock white 404 with the portal's light text: unreadable | `not-found.desktop.png` before: near-invisible text, contrast 1.29 | no root `not-found` | Added `app/(portal)/[...missing]/page.tsx` calling `notFound()`, so unknown URLs get the themed in-shell 404. A root `app/not-found.tsx` was tried first and rejected: it puts `next dev` into a reload loop on `/login`. |
 | 8 | **P1** Scrollable panel bodies can't be reached by keyboard | axe `scrollable-region-focusable` (12 nodes) on Home | `PanelShell` body and the horizontal item grid in `panels.tsx` | Scrolling bodies are now `role=region`, labelled with the panel title, and a tab stop. |
-| 9 | **P1** Modals aren't dialogs: no role, no name, focus stays behind | code read of `ModalShell` | `components/modals/ModalShell.tsx` | `role="dialog"`, `aria-modal`, `aria-labelledby` the title; focus moves in on open and returns to the trigger on close. Tab trapping is deferred (#274). |
+| 9 | **P1** Modals aren't dialogs: no role, no name, focus stays behind | code read of `ModalShell` | `components/modals/ModalShell.tsx` | `role="dialog"`, `aria-modal`, `aria-labelledby` the title; focus moves in on open (unless a child such as an `autoFocus` input already has it) and returns to the last outside element on close. Tab trapping is deferred (#274). |
 
 ---
 
