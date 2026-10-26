@@ -95,14 +95,17 @@ describe("motion and focus rules in components.css", () => {
         const p = `${dir}/${e.name}`;
         if (e.isDirectory()) walk(p);
         else if (/\.tsx$/.test(e.name))
-          // Line-based, with a flat pattern (no nested quantifiers), to stay linear-time.
+          // Line-based, with flat patterns (no nested quantifiers), to stay linear-time.
           for (const line of readFileSync(p, "utf8").split("\n"))
-            if (line.includes("animation:")) for (const m of line.matchAll(/aerie[A-Za-z]+|modalIn/g)) used.add(m[0]);
+            if (line.includes("animation:"))
+              // The first token of each quoted/template shorthand after `animation:` is the keyframes name
+              // (`"none"` has no trailing space, so it never matches).
+              for (const m of line.slice(line.indexOf("animation:")).matchAll(/[`"']([A-Za-z][\w-]*)\s/g)) used.add(m[1]);
       }
     };
     walk("components");
-    for (const n of ["aeriePulse", "aerieEq", "aerieSpin", "modalIn"]) expect(defined.has(n), n).toBe(true);
-    expect(used.size).toBeGreaterThanOrEqual(3); // the scan must actually find the inline animations
+    for (const n of ["aeriePulse", "aerieEq", "aerieSpin", "modalIn"]) expect(used.has(n) || defined.has(n), n).toBe(true);
+    expect(used.size).toBeGreaterThanOrEqual(4); // the scan must actually find the inline animations
     for (const n of used) expect(defined.has(n), `unknown @keyframes ${n}`).toBe(true);
   });
 
