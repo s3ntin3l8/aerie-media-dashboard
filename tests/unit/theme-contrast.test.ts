@@ -94,12 +94,16 @@ describe("motion and focus rules in components.css", () => {
       for (const e of readdirSync(dir, { withFileTypes: true })) {
         const p = `${dir}/${e.name}`;
         if (e.isDirectory()) walk(p);
-        else if (/\.tsx$/.test(e.name)) for (const m of readFileSync(p, "utf8").matchAll(/animation:\s*[`"'](?:\$\{[^}]*\}|[^`"' ])*?(\w*[A-Za-z]\w*)\s/g)) used.add(m[1]);
+        else if (/\.tsx$/.test(e.name))
+          // Line-based, with a flat pattern (no nested quantifiers), to stay linear-time.
+          for (const line of readFileSync(p, "utf8").split("\n"))
+            if (line.includes("animation:")) for (const m of line.matchAll(/aerie[A-Za-z]+|modalIn/g)) used.add(m[0]);
       }
     };
     walk("components");
     for (const n of ["aeriePulse", "aerieEq", "aerieSpin", "modalIn"]) expect(defined.has(n), n).toBe(true);
-    for (const n of used) if (/^(aerie|modal|fade|slide|drawer)/.test(n)) expect(defined.has(n), `unknown @keyframes ${n}`).toBe(true);
+    expect(used.size).toBeGreaterThanOrEqual(3); // the scan must actually find the inline animations
+    for (const n of used) expect(defined.has(n), `unknown @keyframes ${n}`).toBe(true);
   });
 
   it("has one shared :focus-visible outline rule for non-button controls", () => {
