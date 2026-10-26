@@ -5,8 +5,9 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { assertDemoEnv, assertPortsFree, demoEnv } from "./env.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createDemoAdmin, warmEnrichment } from "./admin.mjs";
+import { assertDemoEnv, assertPortsFree, assertStorageStatePath, demoEnv } from "./env.mjs";
 import { startUpstream } from "./upstream.mjs";
 import { aerieYaml } from "./config.mjs";
 
@@ -35,6 +36,8 @@ export const DEMO_WEB_PORT = process.env.DEMO_WEB_PORT ?? "3930";
 export const DEMO_UPSTREAM_PORT = process.env.DEMO_UPSTREAM_PORT ?? "3931";
 
 const DEFAULT_HEALTH_TIMEOUT_MS = 90_000;
+// Signals this close together are one stop request delivered twice, not a second Ctrl-C.
+const DOUBLE_SIGNAL_MS = 1_500;
 // Node timers (and AbortSignal.timeout) overflow above this and fire at once.
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -269,28 +272,84 @@ async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer, spawnFailed }) 
 }
 
 /**
- * Start the demo. The admin login is generated per run (throwaway credentials) and
- * created through the app's own first-run setup form, so nothing writes the DB directly.
+ * Creates the admin, then warms the request-title cache (see warmEnrichment), so the ready line
+ * means a complete first page load. `onSessionWritten` fires as soon as the session file exists
+ * (see createDemoAdmin), so a failure after that point, such as the warm-up, still cleans it up.
  *
- * `boot` replaces the spawn/wait sequence; tests use it to fail startup without
- * running the real server.
+ * @param {Parameters<typeof createDemoAdmin>[0] & { timeoutMs: number, onSessionWritten: () => void }} options
+ */
+async function signInDemoAdmin({ timeoutMs, onSessionWritten, ...admin }) {
+  console.log("[demo] creating the throwaway admin...");
+  const state = await createDemoAdmin({ ...admin, onSessionWritten });
+  console.log("[demo] warming the request-title cache...");
+  await warmEnrichment({ webUrl: admin.webUrl, state, timeoutMs });
+  return state;
+}
+
+let epipeGuarded = false;
+
+/**
+ * The reader of our stdout/stderr can go away while a server is still logging: the audit capture
+ * closes its end of the pipe once it has seen the ready line and then stops the demo. A write to a
+ * closed pipe emits EPIPE as an unhandled stream error, which would crash the teardown halfway
+ * (leaving the scratch dir and next-server processes behind), so it is ignored; anything else is
+ * rethrown as before.
+ */
+function ignoreClosedPipes() {
+  if (epipeGuarded) return;
+  epipeGuarded = true;
+  for (const stream of [process.stdout, process.stderr])
+    stream.on("error", (err) => {
+      if (err.code !== "EPIPE") throw err;
+    });
+}
+
+/**
+ * Start the demo. The admin login is generated per run (throwaway credentials) and
+ * created through the app's own first-run setup form (see ./admin.mjs), so nothing writes the
+ * DB directly and nobody has to log in. The returned `storageState` is that signed-in session;
+ * with `storageStatePath` (default: `$DEMO_STORAGE_STATE`) it is also written to disk for an
+ * external browser driver (the audit capture) and removed again on stop.
+ *
+ * The session file is removed only when this run wrote it (and not under `keep`, where the
+ * database it belongs to survives too): a caller's own state file is never deleted.
+ *
+ * `boot` replaces the spawn/wait sequence, `createAdmin: false` skips the sign-in and `signIn`
+ * replaces it; tests use them to exercise startup and teardown without the real server.
  *
  * @param {{
  *   quiet?: boolean,
  *   keep?: boolean,
+ *   createAdmin?: boolean,
+ *   signIn?: typeof signInDemoAdmin,
+ *   storageStatePath?: string,
  *   boot?: (ctx: {
  *     spawnServer: (name: string, cmd: string, args: string[], opts: object, quiet: boolean) => unknown,
  *     spawnFailed: Promise<never>,
  *   } & Record<string, unknown>) => Promise<void>,
  * }} [options]
  */
-export async function startDemo({ quiet = false, keep = false, boot } = {}) {
+export async function startDemo({
+  quiet = false,
+  keep = false,
+  createAdmin = true,
+  signIn = signInDemoAdmin,
+  storageStatePath = process.env.DEMO_STORAGE_STATE ? path.resolve(process.env.DEMO_STORAGE_STATE) : undefined,
+  boot,
+} = {}) {
+  ignoreClosedPipes();
   // Refused before anything is created: nothing to tear down yet.
+  if (storageStatePath) assertStorageStatePath(storageStatePath);
   const timeoutMs = healthTimeoutMs();
   await assertPortsFree([DEMO_WEB_PORT, DEMO_UPSTREAM_PORT]);
 
   const demoDir = await mkdtemp(path.join(tmpdir(), "aerie-demo-"));
   const upstreamUrl = `http://127.0.0.1:${DEMO_UPSTREAM_PORT}`;
+  const webUrl = `http://127.0.0.1:${DEMO_WEB_PORT}`;
+  /** The signed-in session, set once the admin exists. */
+  let storageState;
+  /** Whether this run wrote the session file (so it, and only it, may delete it). */
+  let wroteState = false;
   const login = {
     name: "Demo Admin",
     email: "demo@aerie.invalid",
@@ -307,6 +366,9 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
     // recreate files under the scratch HOME after it was deleted.
     await Promise.all(children.map((child) => killGroup(child)));
     await upstream?.close();
+    // A session for a database that is about to be deleted; don't leave it lying around. Only
+    // ours, and not under `keep`, where the database survives and the session still works.
+    if (wroteState && !keep) await rm(storageStatePath, { force: true });
     // Then anything they spawned outside their groups (Next's telemetry flush).
     await killStrays(home);
     process.off("SIGINT", onSignal);
@@ -327,7 +389,14 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
   // Installed before anything is spawned: the server runs in its own process group,
   // out of reach of the terminal's Ctrl-C, so without this a Ctrl-C during boot
   // would orphan it. A second Ctrl-C during the grace period SIGKILLs the groups.
+  //
+  // One stop request can arrive twice at once: signalling the whole process group (the audit
+  // capture's way) reaches this process directly and again through `make`, which forwards it. That
+  // is not a second Ctrl-C, so a repeat within DOUBLE_SIGNAL_MS of the first is ignored.
+  let firstSignalAt = 0;
   function onSignal() {
+    if (!firstSignalAt) firstSignalAt = Date.now();
+    else if (Date.now() - firstSignalAt < DOUBLE_SIGNAL_MS) return;
     if (stopping) {
       const targets = [...children.map((child) => child.pid), ...hardKillTree(children.map((c) => c.pid))];
       const deadline = Date.now() + 2_000;
@@ -339,6 +408,7 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
         // A dying worker can recreate files just after the delete, so repeat it.
         for (const pid of strayPids(home)) signalPid(pid, "SIGKILL");
         rmSync(demoDir, { recursive: true, force: true });
+        if (wroteState) rmSync(storageStatePath, { force: true });
         if (++attempts < 5)
           return setTimeout(() => (existsSync(demoDir) ? finish() : process.exit(130)), 500);
         if (existsSync(demoDir)) console.warn(`[demo] hard stop: remove ${demoDir} by hand`);
@@ -384,6 +454,9 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
       OIDC_CLIENT_ID: "",
       OIDC_CLIENT_SECRET: "",
       PORT: DEMO_WEB_PORT,
+      // Overseerr posters: see fetch-hook.mjs.
+      DEMO_UPSTREAM_URL: upstreamUrl,
+      NODE_OPTIONS: `--import ${pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "fetch-hook.mjs")).href}`,
     });
     assertDemoEnv(webEnv, demoDir, { cwd: REPO_ROOT });
 
@@ -397,6 +470,16 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
       spawnFailed,
       stop,
     });
+    if (createAdmin) {
+      if (storageStatePath) await mkdir(path.dirname(storageStatePath), { recursive: true });
+      storageState = await signIn({
+        webUrl,
+        login,
+        storageStatePath,
+        timeoutMs,
+        onSessionWritten: () => (wroteState = Boolean(storageStatePath)),
+      });
+    }
   } catch (err) {
     // A stop (Ctrl-C/SIGTERM) mid-boot fails the step it killed; that is no startup failure.
     if (!stopping) console.error(`[demo] startup failed, tearing down: ${err?.message ?? err}`);
@@ -404,13 +487,7 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
     throw err;
   }
 
-  return {
-    webUrl: `http://127.0.0.1:${DEMO_WEB_PORT}`,
-    upstreamUrl,
-    demoDir,
-    login,
-    stop,
-  };
+  return { webUrl, upstreamUrl, demoDir, login, storageState, storageStatePath, stop };
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
@@ -419,17 +496,18 @@ if (invokedDirectly) {
   let demo;
   try {
     demo = await startDemo({ keep });
-    // The throwaway login goes to a private file in the scratch dir (deleted on
-    // exit) rather than to the terminal. The admin does not exist yet: the first
-    // visit to /login shows the setup form, and these are the values to enter.
+    // The throwaway login goes to a private file in the scratch dir (deleted on exit) rather
+    // than to the terminal. The admin already exists and a session is stored for a driver; the
+    // file is for a human who wants to sign in to the credentials form in their own browser.
     const loginFile = path.join(demo.demoDir, "login.txt");
     await writeFile(loginFile, `email    ${demo.login.email}\npassword ${demo.login.password}\n`, {
       mode: 0o600,
     });
     console.log(`
 [demo] Aerie demo is up: ${demo.webUrl}
-[demo] First visit shows the setup form; use the throwaway login in ${loginFile}
-[demo] Ctrl-C stops it and deletes all demo data.`);
+[demo] Admin already created; sign in with the throwaway login in ${loginFile}
+[demo] Ctrl-C stops it and deletes all demo data.
+DEMO_READY url=${demo.webUrl}`);
   } catch (err) {
     console.error(`[demo] ${err?.stack ?? err}`);
     await demo?.stop();

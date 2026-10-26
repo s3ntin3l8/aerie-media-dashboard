@@ -6,7 +6,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { assertDemoEnv, assertPortsFree, demoEnv, isLoopbackUrl } from "../../scripts/demo/env.mjs";
+import { assertDemoEnv, assertPortsFree, assertStorageStatePath, demoEnv, isLoopbackUrl } from "../../scripts/demo/env.mjs";
 import { healthTimeoutMs } from "../../scripts/demo/instance.mjs";
 
 let demoDir: string;
@@ -145,5 +145,29 @@ describe("healthTimeoutMs", () => {
     expect(healthTimeoutMs("240000")).toBe(240_000);
     for (const bad of ["0", "-1", "1.5", "abc", String(2 ** 31)])
       expect(() => healthTimeoutMs(bad)).toThrow(/DEMO_HEALTH_TIMEOUT_MS/);
+  });
+});
+
+describe("assertStorageStatePath", () => {
+  // The demo deletes this file on stop, and the path comes from the caller's environment.
+  it("accepts a new .json path and a leftover Playwright state", () => {
+    expect(() => assertStorageStatePath(path.join(demoDir, "new-state.json"))).not.toThrow();
+    const left = path.join(demoDir, "left-over.json");
+    writeFileSync(left, JSON.stringify({ cookies: [], origins: [] }));
+    expect(() => assertStorageStatePath(left)).not.toThrow();
+  });
+
+  it("refuses anything that is not a .json file", () => {
+    expect(() => assertStorageStatePath(path.join(demoDir, "notes.txt"))).toThrow(/must be a .json file/);
+    expect(() => assertStorageStatePath("/etc/passwd")).toThrow(/must be a .json file/);
+  });
+
+  it("refuses an existing .json file that is not a storage state", () => {
+    const other = path.join(demoDir, "package.json");
+    writeFileSync(other, JSON.stringify({ name: "precious" }));
+    expect(() => assertStorageStatePath(other)).toThrow(/not a Playwright storage state/);
+    const broken = path.join(demoDir, "broken.json");
+    writeFileSync(broken, "{ not json");
+    expect(() => assertStorageStatePath(broken)).toThrow(/not a Playwright storage state/);
   });
 });

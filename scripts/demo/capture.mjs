@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright-core";
+import { chromium } from "playwright";
 import { SETTLE_TITLES } from "./catalog.mjs";
 import { playwrightBrowsersPath, isLoopbackUrl } from "./env.mjs";
 import { startDemo } from "./instance.mjs";
-import { iconTile, posterForRef } from "./posters.mjs";
+import { iconTile } from "./posters.mjs";
 
 /**
  * Reproducible screenshot pipeline: boot an isolated demo instance (fake upstream +
@@ -24,17 +24,17 @@ import { iconTile, posterForRef } from "./posters.mjs";
  *    silent loop of the live Home dashboard (webm + mp4 + poster, needs ffmpeg on PATH).
  *    Written to --out.
  *
- * Auth: the first-run setup form on /login creates a throwaway local admin through the
- * app's own `createInitialAdmin` action; nothing writes the database directly.
+ * Auth: `startDemo` creates a throwaway local admin through the first-run setup form (see
+ * ./admin.mjs) and hands back its signed-in storage state, which every context here reuses.
  *
  * Clean: any console error or uncaught exception fails the run, so a half-rendered page can't
  * ship as a screenshot. Nothing is excluded: the two errors an earlier version had to tolerate
  * (React's dev eval() under the nonce CSP, and Sparkline's invalid path for empty data) were
  * fixed in the app (#269), not papered over here.
  *
- * Offline: the browser may only talk to loopback. The two hosts the app would otherwise
- * reach (the TMDB poster CDN, fetched server-side by /api/artwork, and the dashboard-icons
- * CDN) are answered from ./posters.mjs, and any other request fails the run.
+ * Offline: the browser may only talk to loopback. The dashboard-icons CDN is answered from
+ * ./posters.mjs, and any other request fails the run. (The TMDB poster CDN is fetched by the app
+ * server, not the browser; ./fetch-hook.mjs points that at the fake upstream.)
  */
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -159,12 +159,6 @@ async function newContext(browser, theme, options, violations) {
   }, theme);
   await context.route("**/*", (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === "/api/artwork" && url.searchParams.get("svc") === "overseerr") {
-      // The app server fetches these from image.tmdb.org itself, out of reach of a
-      // browser route, so the browser request is answered with the local poster instead.
-      const { contentType, body } = posterForRef(url.searchParams.get("ref") ?? "");
-      return route.fulfill({ status: 200, contentType, body });
-    }
     if (url.hostname === ICON_CDN) {
       const slug = path.basename(url.pathname).replace(/\.[^.]+$/, "");
       const { contentType, body } = iconTile(slug);
@@ -176,22 +170,6 @@ async function newContext(browser, theme, options, violations) {
     return route.abort();
   });
   return context;
-}
-
-/** Creates the throwaway admin through the first-run setup form; returns the signed-in state. */
-async function signIn(browser, demo, violations) {
-  const context = await newContext(browser, "dark", { viewport: { width: 1280, height: 800 } }, violations);
-  const page = await context.newPage();
-  await page.goto(`${demo.webUrl}/login`, { waitUntil: "networkidle" });
-  await page.fill('input[name="name"]', demo.login.name);
-  await page.fill('input[name="email"]', demo.login.email);
-  await page.fill('input[name="password"]', demo.login.password);
-  await page.fill('input[name="confirm"]', demo.login.password);
-  await page.click('button[type="submit"]');
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 60_000 });
-  const state = await context.storageState();
-  await context.close();
-  return state;
 }
 
 // Not `networkidle`: the portal polls /api/snapshot every few seconds, so the network is never
@@ -340,7 +318,7 @@ async function main() {
     const violations = [];
     try {
       console.log(`[screenshots] capturing (${values.profile} profile)...`);
-      const state = await signIn(browser, demo, violations);
+      const state = demo.storageState;
       const written =
         values.profile === "landing"
           ? await captureLanding(browser, demo, state, violations)

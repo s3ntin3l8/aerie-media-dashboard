@@ -68,3 +68,6 @@ test-results/
 
 # Landing-page capture output (make screenshots-landing)
 /landing-shots/
+
+# Visual-audit captures and the demo session they sign in with (docs/audit/capture.json)
+/docs/audit/assets/

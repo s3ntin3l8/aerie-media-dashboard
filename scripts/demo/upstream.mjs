@@ -616,6 +616,9 @@ export async function startUpstream({ port = 0, clock = Date.now } = {}) {
     };
     const notFound = () => json({ error: "not found", path: url.pathname }, 404);
 
+    // image.tmdb.org stand-in: fetch-hook.mjs rewrites the app's server-side TMDB poster fetches here.
+    if (svc === "tmdb") return image(posterForRef(parts.at(-1) ?? ""));
+
     if (!svc || !SERVICE_IDS.has(svc)) return notFound();
 
     try {
