@@ -27,8 +27,10 @@ import { iconTile, posterForRef } from "./posters.mjs";
  * Auth: the first-run setup form on /login creates a throwaway local admin through the
  * app's own `createInitialAdmin` action; nothing writes the database directly.
  *
- * Clean: besides one known dev-mode CSP message, a console error or uncaught exception fails
- * the run, so a half-rendered page can't ship as a screenshot.
+ * Clean: any console error or uncaught exception fails the run, so a half-rendered page can't
+ * ship as a screenshot. Nothing is excluded: the two errors an earlier version had to tolerate
+ * (React's dev eval() under the nonce CSP, and Sparkline's invalid path for empty data) were
+ * fixed in the app (#269), not papered over here.
  *
  * Offline: the browser may only talk to loopback. The two hosts the app would otherwise
  * reach (the TMDB poster CDN, fetched server-side by /api/artwork, and the dashboard-icons
@@ -83,19 +85,6 @@ const CHROMIUM_ARGS = ["--font-render-hinting=none"];
 const DEV_INDICATOR_HIDE_CSS = "nextjs-portal { display: none !important; }";
 
 /**
- * The console errors the run tolerates; anything else fails it (see newContext).
- *  - `next dev` under Aerie's own CSP (no 'unsafe-eval') makes React log the eval() message once
- *    per page. It is a dev-mode artifact, not a defect in what is captured.
- *  - Status' metric cards render `<Sparkline data={[]}>` until the first snapshot arrives, and
- *    Sparkline turns empty data into an invalid path ("L260 40 L0 40 Z" with no moveto). It is
- *    transient, and the settled page is unaffected.
- */
-const KNOWN_ERRORS = [
-  /eval\(\) is not supported in this environment/,
-  /<path> attribute d: Expected moveto path command/,
-];
-
-/**
  * Evaluated in the page, so it must be self-contained. Returns whether the screen is ready,
  * or with `describe` the readiness conditions still unmet.
  */
@@ -123,7 +112,8 @@ function pendingConditions({ text, describe }) {
 
 async function settle(page, { slug, text = "" }) {
   await page.evaluate(() => document.fonts.ready);
-  // Function form, not a string: the app's CSP has no 'unsafe-eval'.
+  // Function form, not a string: a string predicate is eval()'d in the page, which the production
+  // CSP forbids (and `next dev` only allows for React's own use).
   try {
     await page.waitForFunction(pendingConditions, { text }, { timeout: 60_000, polling: 250 });
   } catch (err) {
@@ -143,7 +133,7 @@ async function settle(page, { slug, text = "" }) {
 /**
  * A browser context that can only reach loopback. Everything the app would fetch from the
  * internet is answered locally; anything else is recorded in `violations` and blocked, as is
- * any console error or uncaught exception (see KNOWN_ERRORS).
+ * any console error or uncaught exception.
  */
 async function newContext(browser, theme, options, violations) {
   const context = await browser.newContext({ colorScheme: theme, ...options });
@@ -152,10 +142,12 @@ async function newContext(browser, theme, options, violations) {
   // Anything the page logs as an error would otherwise be invisible once the dev badge is
   // hidden, so it fails the run (a 502 poster, a hydration error, an uncaught exception).
   context.on("console", (msg) => {
-    if (msg.type() === "error" && !KNOWN_ERRORS.some((known) => known.test(msg.text())))
-      violations.push(`console error: ${msg.text().slice(0, 300)}`);
+    if (msg.type() === "error")
+      violations.push(`console error on ${msg.page()?.url() ?? "an unknown page"}: ${msg.text().slice(0, 300)}`);
   });
-  context.on("weberror", (err) => violations.push(`uncaught: ${err.error().message.slice(0, 300)}`));
+  context.on("weberror", (err) =>
+    violations.push(`uncaught on ${err.page()?.url() ?? "an unknown page"}: ${err.error().message.slice(0, 300)}`),
+  );
   // The theme script in app/layout.tsx reads this before hydration, so <html> has the
   // right class from first paint.
   await context.addInitScript((t) => {
