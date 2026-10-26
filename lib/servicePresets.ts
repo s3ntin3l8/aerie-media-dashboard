@@ -9,7 +9,7 @@
  *  label/hint/placeholder and the colon-pair format validation):
  *  - "apiKey"   → a single token (the default for any service without an explicit kind)
  *  - "userpass" → a colon-separated pair stored in the same field (user:password / email:password) */
-export type SecretKind = "apiKey" | "userpass";
+export type SecretKind = "apiKey" | "userpass"; // pragma: allowlist secret
 
 export interface ServicePreset {
   cat: string;
