@@ -92,6 +92,20 @@ export function CommandPalette() {
     };
   }, [paletteOpen]);
 
+  // aria-modal promises the page behind is inert. The input is the palette's only tab stop (options are
+  // driven by aria-activedescendant), so Tab/Shift+Tab just keeps focus there, even if it had wandered
+  // behind the scrim, where the portal's g+letter shortcuts would otherwise fire.
+  useEffect(() => {
+    if (!paletteOpen) return;
+    const onTab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onTab, true);
+    return () => window.removeEventListener("keydown", onTab, true);
+  }, [paletteOpen]);
+
   if (!paletteOpen) return null;
 
   const close = () => setPaletteOpen(false);
@@ -174,7 +188,7 @@ export function CommandPalette() {
             role="combobox"
             aria-label="Search services and pages"
             aria-expanded={items.length > 0}
-            aria-controls={listId}
+            aria-controls={items.length > 0 ? listId : undefined}
             aria-autocomplete="list"
             aria-activedescendant={cur >= 0 ? optId(items[cur].key) : undefined}
             placeholder="Search services, pages, requests…"
@@ -182,6 +196,10 @@ export function CommandPalette() {
           />
           <Kbd>esc</Kbd>
         </div>
+        {items.length === 0 ? (
+          // Outside any listbox: a listbox may only contain options/groups, and the popup is collapsed.
+          <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "var(--on-surface-variant)" }}>No matches.</div>
+        ) : (
         <div id={listId} role="listbox" aria-label="Results" className="custom-scrollbar" style={{ maxHeight: 380, overflowY: "auto", padding: 8 }}>
           {navMatches.length > 0 && (
             <div role="group" aria-label="Navigate">
@@ -222,10 +240,8 @@ export function CommandPalette() {
               ))}
             </div>
           )}
-          {items.length === 0 && (
-            <div style={{ padding: 24, textAlign: "center", fontSize: 13, color: "var(--on-surface-variant)" }}>No matches.</div>
-          )}
         </div>
+        )}
       </div>
     </div>
   );

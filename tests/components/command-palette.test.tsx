@@ -198,10 +198,25 @@ describe("CommandPalette", () => {
       expect(box).toHaveAttribute("aria-activedescendant", screen.getAllByRole("option")[0].id);
     });
 
+    it("keeps Tab inside the dialog, pulling stray focus back to the input", () => {
+      render(<CommandPalette />);
+      const outside = document.createElement("button");
+      document.body.appendChild(outside);
+      outside.focus();
+      const ev = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      window.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(input());
+      outside.remove();
+    });
+
     it("has no active descendant and is collapsed when nothing matches; Enter does nothing", () => {
       render(<CommandPalette />);
       const box = screen.getByRole("combobox");
       fireEvent.change(box, { target: { value: "zzz-no-such-thing" } });
+      // The empty message lives outside any listbox, and aria-controls no longer points at nothing.
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(box).not.toHaveAttribute("aria-controls");
       expect(box).toHaveAttribute("aria-expanded", "false");
       expect(box).not.toHaveAttribute("aria-activedescendant");
       fireEvent.keyDown(box, { key: "ArrowDown" });

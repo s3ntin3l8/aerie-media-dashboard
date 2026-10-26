@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 // Guardrail from the 2026-10 portal UI/UX audit: the accent/status tokens are used as text on a
 // 12-13% tint of themselves (pills, badges), over the page surfaces. axe only sees what a capture
@@ -79,10 +79,27 @@ describe("motion and focus rules in components.css", () => {
     expect(m![1]).toMatch(/transition-duration:[^;]*!important/);
   });
 
-  it("every @keyframes lives in a file the reduced-motion block covers (global *)", () => {
-    // The block uses the universal selector, so any keyframes in these two stylesheets are covered.
-    const names = [...(components + globals).matchAll(/@keyframes\s+(\w+)/g)].map((x) => x[1]);
-    expect(names.length).toBeGreaterThanOrEqual(7);
+  it("defines @keyframes only in stylesheets the global reduced-motion block reaches", () => {
+    // The block uses the universal selector, so it covers every animation, but only where the sheet
+    // is loaded app-wide. A keyframe added to any other stylesheet fails here until that is checked.
+    const sheets = [...readdirSync("styles").filter((f) => f.endsWith(".css")).map((f) => `styles/${f}`), "app/globals.css"];
+    const withKeyframes = sheets.filter((f) => /@keyframes\s/.test(readFileSync(f, "utf8")));
+    expect(withKeyframes.sort()).toEqual(["app/globals.css", "styles/components.css"]);
+  });
+
+  it("every animation name used inline in components is a defined @keyframes", () => {
+    const defined = new Set([...(components + globals).matchAll(/@keyframes\s+(\w+)/g)].map((x) => x[1]));
+    const used = new Set<string>();
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = `${dir}/${e.name}`;
+        if (e.isDirectory()) walk(p);
+        else if (/\.tsx$/.test(e.name)) for (const m of readFileSync(p, "utf8").matchAll(/animation:\s*[`"'](?:\$\{[^}]*\}|[^`"' ])*?(\w*[A-Za-z]\w*)\s/g)) used.add(m[1]);
+      }
+    };
+    walk("components");
+    for (const n of ["aeriePulse", "aerieEq", "aerieSpin", "modalIn"]) expect(defined.has(n), n).toBe(true);
+    for (const n of used) if (/^(aerie|modal|fade|slide|drawer)/.test(n)) expect(defined.has(n), `unknown @keyframes ${n}`).toBe(true);
   });
 
   it("has one shared :focus-visible outline rule for non-button controls", () => {

@@ -7,9 +7,11 @@ desktop (1600×1000), dark and light. Out of scope: `/login` (not captured; the 
 through the first-run form before the capture starts), upstream service UIs, the PWA install flow.
 
 **Status.** Nine P1 findings are fixed in this PR, each with a regression test. Everything else is
-tracked in the [Deferred backlog](#deferred-backlog). A re-capture after the follow-up PR that fixed that backlog reports no axe violations on any of the 36 route/viewport captures (the earlier 3 `scrollable-region-focusable` palette nodes, `page-has-heading-one` and `region` are gone). Not captured: the scrolled-to-the-end state of phone Requests, so the FAB clearance is checked by arithmetic (FAB top is 144px above the viewport bottom, the nav is ~59px, the list pads 98px), not by screenshot. axe-core totals on the capture set went from
-120 critical `button-name` + 8 critical `select-name` + 45 serious `color-contrast` + 12 serious
-`scrollable-region-focusable` nodes to none of the first three and 3 of the last (the palette, #275).
+tracked in the [Deferred backlog](#deferred-backlog). A re-capture after the follow-up PR that fixed that backlog reports no axe violations on any of the 36 route/viewport captures (`page-has-heading-one`, `region` and the palette's `scrollable-region-focusable` are gone). Not captured: the scrolled-to-the-end state of phone Requests, so the FAB clearance is checked by arithmetic (FAB top is 144px above the viewport bottom, the nav is ~59px, the list pads 98px), not by screenshot.
+
+axe-core totals on the capture set: 120 critical `button-name` + 8 critical `select-name` + 45 serious
+`color-contrast` + 12 serious `scrollable-region-focusable` nodes before the P1 fixes; after them, none of
+the first three and 3 of the last (the palette, #275); after the follow-up PR, none at all.
 
 ---
 
