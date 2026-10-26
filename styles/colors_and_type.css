@@ -59,18 +59,18 @@
   --on-error-container:       #752121;
 
   /* ── ORIGINATOR ACCENTS — document provenance ─────── */
-  --originator-court:        #0369a1; /* blue   — the court */
+  --originator-court:        #036499; /* blue   — the court */
   --originator-opposing:     #b91c1c; /* red    — opposing counsel */
-  --originator-own:          #047857; /* green  — own lawyer */
-  --originator-third-party:  #c2410c; /* orange — third party */
-  --originator-unknown:      #64748b; /* slate  — unknown */
+  --originator-own:          #046c4e; /* green  — own lawyer */
+  --originator-third-party:  #ab3509; /* orange — third party */
+  --originator-unknown:      #546175; /* slate  — unknown */
 
   /* ── SIGNAL / STATUS ──────────────────────────────── */
-  --amber:        #d97706;
+  --amber:        #974906;
   --amber-glow:   rgb(217 119 6 / 0.18);
-  --critical:     #dc2626;
+  --critical:     #b41f1f;
   --near:         #ca8a04;
-  --warning:      #b45309;
+  --warning:      #994708;
   --warning-container: #fef3c7;
 
   /* ── ANNOTATION HIGHLIGHTS ────────────────────────── */

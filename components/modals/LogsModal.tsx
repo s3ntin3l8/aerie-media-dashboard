@@ -78,7 +78,7 @@ export function LogsModal({
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
       <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--on-surface-variant)" }}>
         Auto
-        <Toggle on={auto} onChange={setAuto} size="sm" color="var(--primary)" />
+        <Toggle label="Auto-refresh logs" on={auto} onChange={setAuto} size="sm" color="var(--primary)" />
       </label>
       <button onClick={() => void load()} className="btn btn-secondary btn-sm" style={{ padding: "5px 9px", gap: 5 }} title="Refresh logs">
         <Icon name="refresh" size={15} />

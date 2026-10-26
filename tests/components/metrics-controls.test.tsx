@@ -53,7 +53,8 @@ describe("InstanceSelect", () => {
     render(<InstanceSelect current={null} />);
     // "All nodes" + the two fetched options become available once the effect resolves.
     expect(await screen.findByRole("option", { name: "node-b" })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "node-b" } });
+    // Named, so assistive tech announces what the picker chooses (2026-10 audit).
+    fireEvent.change(screen.getByRole("combobox", { name: "Prometheus node" }), { target: { value: "node-b" } });
     await waitFor(() => expect(setPrometheusInstance).toHaveBeenCalledWith("node-b"));
   });
 
@@ -80,7 +81,7 @@ describe("BeszelSystemSelect", () => {
     ] })) as never);
     render(<BeszelSystemSelect current={null} />);
     expect(await screen.findByRole("option", { name: "Node 2" })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "sys2" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Beszel system" }), { target: { value: "sys2" } });
     await waitFor(() => expect(setBeszelSystem).toHaveBeenCalledWith("sys2"));
   });
 });

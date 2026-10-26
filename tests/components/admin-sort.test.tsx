@@ -134,8 +134,46 @@ describe("Admin — mobile sort select", () => {
     seedData([alpha, bravo, charlie]);
     render(<Admin />);
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "cat:asc" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort services" }), { target: { value: "cat:asc" } });
     expect(order()).toEqual(["Bravo", "Charlie", "Alpha"]);
+  });
+});
+
+describe("Admin — toggles act on the service they name", () => {
+  it.each([[false], [true]])("flips Active and Keep via the named buttons (mobile=%s)", (isMobile) => {
+    mobile.value = isMobile;
+    seedData([alpha]);
+    render(<Admin />);
+    fireEvent.click(screen.getByRole("button", { name: "Alpha active" }));
+    expect(actions.setServiceActive).toHaveBeenCalledWith("alpha", false);
+    fireEvent.click(screen.getByRole("button", { name: "Alpha keep alive" }));
+    expect(actions.setServiceKeepAlive).toHaveBeenCalledWith("alpha", false);
+  });
+});
+
+describe("Admin — accessible names (2026-10 audit)", () => {
+  it("names the toggles on the mobile cards too", () => {
+    mobile.value = true;
+    seedData([alpha]);
+    render(<Admin />);
+    expect(screen.getByRole("button", { name: "Alpha active", pressed: true })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alpha keep alive", pressed: true })).toBeTruthy();
+  });
+
+  it("names each row's Active / Keep toggles after the service", () => {
+    mobile.value = false;
+    seedData([alpha]);
+    render(<Admin />);
+    expect(screen.getByRole("button", { name: "Alpha active", pressed: true })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Alpha keep alive", pressed: true })).toBeTruthy();
+  });
+
+  it("gives inactive column headers an explicit colour, so they don't fall back to black button text", () => {
+    mobile.value = false;
+    seedData([alpha]);
+    render(<Admin />);
+    // Eyebrow's own colour must survive: a `color: undefined` style key would override it.
+    expect((screen.getByText("Category") as HTMLElement).style.color).toBe("var(--on-surface-variant)");
   });
 });
 

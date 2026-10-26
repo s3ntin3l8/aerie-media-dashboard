@@ -4,6 +4,7 @@
   "readyOutput": "DEMO_READY",
   "startTimeoutSec": 420,
   "storageState": "docs/audit/assets/demo-storage-state.json",
+  "axe": true,
   "viewports": {
     "phone": { "width": 390, "height": 844 },
     "tablet": { "width": 820, "height": 1180 },
@@ -15,6 +16,12 @@
     { "name": "streams", "path": "/streams", "settle": "text=The Lantern Archive" },
     { "name": "requests", "path": "/requests", "settle": "text=Brightwater Station" },
     { "name": "status", "path": "/status", "settle": "text=NZBGet" },
-    { "name": "admin", "path": "/admin", "settle": 2000 }
+    { "name": "admin", "path": "/admin", "settle": 2000 },
+    { "name": "services", "path": "/services", "settle": 2000 },
+    { "name": "status-light", "path": "/status", "localStorage": { "aerie.theme": "light" }, "settle": "text=NZBGet" },
+    { "name": "admin-light", "path": "/admin", "localStorage": { "aerie.theme": "light" }, "settle": 2000 },
+    { "name": "embed-sonarr", "path": "/s/sonarr", "settle": 2000 },
+    { "name": "not-found", "path": "/does-not-exist", "settle": 1000 },
+    { "name": "palette", "path": "/", "settle": "text=Brightwater Station", "steps": [{ "press": "Control+k" }, { "wait": 600 }]}
   ]
 }

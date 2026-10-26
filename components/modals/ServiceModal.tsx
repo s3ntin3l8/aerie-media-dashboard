@@ -650,7 +650,7 @@ export function ServiceModal({
                       always
                     </span>
                   ) : (
-                    <Toggle on={vis[g.name] ?? false} onChange={(v) => { visTouched.current = true; setVis((p) => ({ ...p, [g.name]: v })); }} size="sm" color="var(--originator-court)" />
+                    <Toggle label={`Visible to ${g.name}`} on={vis[g.name] ?? false} onChange={(v) => { visTouched.current = true; setVis((p) => ({ ...p, [g.name]: v })); }} size="sm" color="var(--originator-court)" />
                   )}
                 </div>
               );

@@ -3,7 +3,7 @@
 // AERIE — modal shell + shared form primitives
 // (ported from the design's Modals.jsx)
 // ============================================================
-import React, { useEffect } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import type { Category } from "@/lib/types";
 import { Icon, Eyebrow } from "@/components/primitives";
 import { CAT, catColor } from "@/lib/categories";
@@ -11,6 +11,8 @@ import { usePortal } from "@/components/portal/PortalProvider";
 import { DashboardIconImg } from "@/components/DashboardIconImg";
 
 type CSS = React.CSSProperties;
+
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 // Overlay + centered card. Mirrors CommandPalette's scrim.
 export function ModalShell({
@@ -57,6 +59,53 @@ export function ModalShell({
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // The last element focused outside the dialog is where focus goes back to on close. Tracked via
+  // focusin rather than read when the effect runs, because a child's `autoFocus` has already moved
+  // focus by then.
+  const returnTo = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      if (e.target instanceof HTMLElement && !dialogRef.current?.contains(e.target)) returnTo.current = e.target;
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+  // aria-modal says the page behind is inert, so Tab must not leave the dialog. A window-capture listener
+  // (like Escape above) also catches Tab pressed while focus is outside it: pull focus back in; at the
+  // ends, wrap.
+  useEffect(() => {
+    if (!open) return;
+    const onTab = (e: KeyboardEvent) => {
+      const dialog = dialogRef.current;
+      if (e.key !== "Tab" || !dialog) return;
+      // Never empty: the header's close button is always focusable.
+      const nodes = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement;
+      if (!dialog.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && (active === first || active === dialog)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onTab, true);
+    return () => window.removeEventListener("keydown", onTab, true);
+  }, [open]);
+  // Move focus into the dialog on open (unless a child, e.g. an autoFocus input, already took it) and
+  // hand it back on close, so keyboard and screen-reader users land in the modal and return after.
+  useEffect(() => {
+    if (!open) return;
+    if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
+    return () => returnTo.current?.focus();
+  }, [open]);
   if (!open) return null;
   return (
     <div
@@ -75,8 +124,14 @@ export function ModalShell({
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
         style={{
+          outline: "none",
           width: "100%",
           maxWidth: width,
           margin: "0 16px",
@@ -103,7 +158,7 @@ export function ModalShell({
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
-            <h2 style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em", color: "var(--on-surface)", lineHeight: 1.15 }}>{title}</h2>
+            <h2 id={titleId} style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 17, letterSpacing: "-0.01em", color: "var(--on-surface)", lineHeight: 1.15 }}>{title}</h2>
             {sub && <div style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginTop: 3, lineHeight: 1.45 }}>{sub}</div>}
           </div>
           {headerActions}
@@ -143,7 +198,7 @@ export function Field({ label, hint, children, full, style }: { label: string; h
   );
 }
 
-export function Toggle({ on, onChange, color = "var(--originator-own)", size = "md" }: { on: boolean; onChange: (v: boolean) => void; color?: string; size?: "sm" | "md" }) {
+export function Toggle({ on, onChange, label, color = "var(--originator-own)", size = "md" }: { on: boolean; onChange: (v: boolean) => void; label: string; color?: string; size?: "sm" | "md" }) {
   const W = size === "sm" ? 30 : 38,
     H = size === "sm" ? 18 : 22,
     K = H - 4;
@@ -152,6 +207,7 @@ export function Toggle({ on, onChange, color = "var(--originator-own)", size = "
       type="button"
       onClick={() => onChange(!on)}
       aria-pressed={on}
+      aria-label={label}
       style={{
         width: W,
         height: H,
@@ -179,7 +235,7 @@ export function ToggleRow({ on, onChange, title, desc, color, icon }: { on: bool
         <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--on-surface)" }}>{title}</div>
         {desc && <div style={{ fontSize: 11, color: "var(--on-surface-variant)", marginTop: 1 }}>{desc}</div>}
       </div>
-      <Toggle on={on} onChange={onChange} color={c} />
+      <Toggle on={on} onChange={onChange} label={title} color={c} />
     </div>
   );
 }

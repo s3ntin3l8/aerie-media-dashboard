@@ -4,7 +4,7 @@
 // stripe tiles, heartbeat status). Variant switchers from the
 // design-time Tweaks panel were intentionally dropped.
 // ============================================================
-import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import type { Role, Service, ServiceStatus, DiscoverItem, RequestStatus, UpcomingItem, SelectMediaHint } from "@/lib/types";
 import { useData, useRefresh } from "@/components/portal/DataProvider";
 import { setQueueSource } from "@/app/(portal)/admin/actions";
@@ -138,6 +138,9 @@ function PageControls({
   );
 }
 
+/** The title of the PanelShell a widget renders in, so nested scroll regions can be named after it. */
+const PanelTitleContext = createContext("Scrollable list");
+
 export function PanelShell({
   title,
   icon,
@@ -169,6 +172,20 @@ export function PanelShell({
   const stacked = useStacked();
   const natural = useNaturalHeight();
   const fillBox = fill && !natural;
+  // A scrolling body needs a tab stop (and a name) so keyboard users can scroll it, but only when it
+  // actually overflows: otherwise every tile would add a pointless stop.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!fillBox || !el) return;
+    const measure = () => setOverflows(el.scrollHeight > el.clientHeight);
+    measure(); // content can change without the box resizing, so re-check after every render
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   return (
     <section
       style={{
@@ -208,10 +225,12 @@ export function PanelShell({
         {action}
       </header>
       <div
+        ref={bodyRef}
         className={fillBox ? "custom-scrollbar" : undefined}
+        {...(fillBox && overflows ? { tabIndex: 0, role: "region", "aria-label": title } : {})}
         style={{ flex: 1, ...(fillBox ? { minHeight: 0, overflowY: "auto" } : {}), ...bodyStyle }}
       >
-        {children}
+        <PanelTitleContext.Provider value={title}>{children}</PanelTitleContext.Provider>
       </div>
     </section>
   );
@@ -396,9 +415,9 @@ function CentralCard({ s, onOpen }: { s: Service; onOpen?: (s: Service) => void 
       <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 16 }}>
         <ServiceLogo service={s} size={40} radius={11} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 7, rowGap: 2 }}>
             <span style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 16, color: "var(--on-surface)" }}>{s.name}</span>
-            <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: c, padding: "1px 6px", borderRadius: 4, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>
+            <span style={{ whiteSpace: "nowrap", fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: c, padding: "1px 6px", borderRadius: 4, background: `color-mix(in srgb, ${c} 12%, transparent)` }}>
               {s.centralLabel}
             </span>
           </div>
@@ -740,6 +759,7 @@ function FlowGrid<T>({
   render: (item: T, index: number) => React.ReactNode;
 }) {
   const natural = useNaturalHeight();
+  const label = useContext(PanelTitleContext);
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -800,6 +820,7 @@ function FlowGrid<T>({
     <div
       ref={ref}
       className="custom-scrollbar"
+      {...(scrolls ? { tabIndex: 0, role: "region", "aria-label": label } : {})}
       style={{ height: "100%", boxSizing: "border-box", padding: `${padY}px ${padX}px`, overflowX: "auto", overflowY: "hidden", display: "flex", flexDirection: "column", gap }}
     >
       {chunks.map((row, r) =>

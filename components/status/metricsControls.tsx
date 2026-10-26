@@ -74,7 +74,7 @@ export function InstanceSelect({ current }: { current: string | null }) {
   }
 
   return (
-    <select value={value} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
+    <select aria-label="Prometheus node" value={value} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
       <option value="">All nodes</option>
       {instances.map((inst) => (
         <option key={inst} value={inst}>{inst}</option>
@@ -153,7 +153,7 @@ export function BeszelSystemSelect({ current }: { current: string | null }) {
   }
 
   return (
-    <select value={effective} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
+    <select aria-label="Beszel system" value={effective} onChange={handleChange} disabled={pending} style={{ ...PICKER_SELECT_STYLE, opacity: pending ? 0.5 : 1 }}>
       {systems.map((s) => (
         <option key={s.id} value={s.id}>{s.name}</option>
       ))}
