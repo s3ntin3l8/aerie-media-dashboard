@@ -273,15 +273,14 @@ async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer, spawnFailed }) 
 
 /**
  * Creates the admin, then warms the request-title cache (see warmEnrichment), so the ready line
- * means a complete first page load. `onSessionWritten` fires as soon as the session file exists,
- * before the warm-up, so a failed warm-up still cleans it up.
+ * means a complete first page load. `onSessionWritten` fires as soon as the session file exists
+ * (see createDemoAdmin), so a failure after that point, such as the warm-up, still cleans it up.
  *
  * @param {Parameters<typeof createDemoAdmin>[0] & { timeoutMs: number, onSessionWritten: () => void }} options
  */
 async function signInDemoAdmin({ timeoutMs, onSessionWritten, ...admin }) {
   console.log("[demo] creating the throwaway admin...");
-  const state = await createDemoAdmin(admin);
-  onSessionWritten();
+  const state = await createDemoAdmin({ ...admin, onSessionWritten });
   console.log("[demo] warming the request-title cache...");
   await warmEnrichment({ webUrl: admin.webUrl, state, timeoutMs });
   return state;

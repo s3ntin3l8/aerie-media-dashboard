@@ -11,9 +11,12 @@ import { playwrightBrowsersPath } from "./env.mjs";
  * The browser runs in this process with the real HOME, where Playwright keeps its browsers;
  * only the demo's server processes get the scratch one.
  *
- * @param {{ webUrl: string, login: { name: string, email: string, password: string }, storageStatePath?: string }} options
+ * `onSessionWritten` fires right after the file is written, before anything that can still fail
+ * (the chmod, closing the browser), so a caller that owns cleanup of that file knows when it exists.
+ *
+ * @param {{ webUrl: string, login: { name: string, email: string, password: string }, storageStatePath?: string, onSessionWritten?: () => void }} options
  */
-export async function createDemoAdmin({ webUrl, login, storageStatePath }) {
+export async function createDemoAdmin({ webUrl, login, storageStatePath, onSessionWritten }) {
   process.env.PLAYWRIGHT_BROWSERS_PATH ??= playwrightBrowsersPath();
   const browser = await chromium.launch();
   try {
@@ -29,6 +32,7 @@ export async function createDemoAdmin({ webUrl, login, storageStatePath }) {
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 60_000 });
     const state = await context.storageState(storageStatePath ? { path: storageStatePath } : undefined);
+    if (storageStatePath) onSessionWritten?.();
     if (storageStatePath) await chmod(storageStatePath, 0o600);
     return state;
   } finally {

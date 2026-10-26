@@ -98,7 +98,7 @@ everything is torn down.
 | `make screenshots-landing OUT=…` | 2x dark stills plus a short live-dashboard loop (webm/mp4/poster) for a project page; needs `ffmpeg`.   |
 
 One-time setup for the browser: `npx playwright install chromium`. On a slow or heavily loaded
-host, raise `DEMO_HEALTH_TIMEOUT_MS` (default `90000`), the time each readiness probe may take.
+host, raise `DEMO_HEALTH_TIMEOUT_MS` (default `90000`), the time each readiness probe may take. It also bounds the request-title warm-up, so the worst-case startup is about `2 x DEMO_HEALTH_TIMEOUT_MS + 3 minutes`; if you raise it above `120000`, raise `startTimeoutSec` in `docs/audit/capture.json` to match.
 `DEMO_WEB_PORT` (default `3930`) and `DEMO_UPSTREAM_PORT` (default `3931`) move the ports.
 
 **Visual audits.** `make demo` follows the audit skill's demo contract (one foreground command, scratch
