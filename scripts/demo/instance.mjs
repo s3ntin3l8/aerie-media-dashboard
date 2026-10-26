@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -53,8 +53,11 @@ export function healthTimeoutMs(value = process.env.DEMO_HEALTH_TIMEOUT_MS) {
  * Own process group (`detached`) so stop() can kill everything a server forks
  * (next dev spawns workers); a plain child.kill() would leak them.
  */
-function spawnServer(name, cmd, args, opts, quiet) {
+function spawnServer(name, cmd, args, opts, quiet, onError) {
   const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"], detached: true, ...opts });
+  // Without a listener a failed spawn (e.g. node_modules/.bin/next missing before `npm ci`) is an
+  // unhandled `error` event that exits Node outside startDemo's try, leaving the scratch dir.
+  child.on("error", (err) => onError?.(new Error(`${name} failed to start: ${err.message}`)));
   const out = (d) => !quiet && process.stdout.write(`[${name}] ${d}`);
   child.stdout.on("data", out);
   child.stderr.on("data", (d) => process.stderr.write(`[${name}] ${d}`));
@@ -110,7 +113,7 @@ export function descendantGroups(rows, roots, self = process.pid) {
  * /proc). Synchronous, since the second-Ctrl-C path runs in a signal handler. Fails
  * soft: without a usable `ps`, there is nothing extra to kill.
  */
-function snapshotDescendantGroups(roots) {
+export function snapshotDescendantGroups(roots) {
   try {
     const out = execFileSync("ps", ["-A", "-o", "pid=,ppid=,pgid="], {
       encoding: "utf8",
@@ -244,7 +247,7 @@ export async function waitForHttp(url, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS) {
 }
 
 /** Start `next dev` against the scratch env and wait until it answers. */
-async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer }) {
+async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer, spawnFailed }) {
   console.log("[demo] starting web...");
   spawnServer(
     "web",
@@ -253,7 +256,11 @@ async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer }) {
     { cwd: REPO_ROOT, env: webEnv },
     quiet,
   );
-  await waitForHttp(`http://127.0.0.1:${DEMO_WEB_PORT}/api/health`, timeoutMs);
+  // A server that never started fails the boot at once instead of after the readiness timeout.
+  await Promise.race([
+    waitForHttp(`http://127.0.0.1:${DEMO_WEB_PORT}/api/health`, timeoutMs),
+    spawnFailed,
+  ]);
 }
 
 /**
@@ -262,6 +269,15 @@ async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer }) {
  *
  * `boot` replaces the spawn/wait sequence; tests use it to fail startup without
  * running the real server.
+ *
+ * @param {{
+ *   quiet?: boolean,
+ *   keep?: boolean,
+ *   boot?: (ctx: {
+ *     spawnServer: (name: string, cmd: string, args: string[], opts: object, quiet: boolean) => unknown,
+ *     spawnFailed: Promise<never>,
+ *   } & Record<string, unknown>) => Promise<void>,
+ * }} [options]
  */
 export async function startDemo({ quiet = false, keep = false, boot } = {}) {
   // Refused before anything is created: nothing to tear down yet.
@@ -330,10 +346,15 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
 
+  /** Rejects when a server fails to spawn; the catch below then runs the normal teardown. */
+  let failSpawn;
+  const spawnFailed = new Promise((_, reject) => (failSpawn = reject));
+  spawnFailed.catch(() => {}); // Observed by boot via race; never an unhandled rejection.
+
   /** spawnServer that registers the group for teardown; refuses once stopping. */
-  const startServer = (...args) => {
+  const startServer = (name, cmd, args, opts, quiet) => {
     if (stopping) throw new Error("demo is stopping; not starting more servers");
-    const child = spawnServer(...args);
+    const child = spawnServer(name, cmd, args, opts, quiet, failSpawn);
     children.push(child);
     return child;
   };
@@ -361,13 +382,14 @@ export async function startDemo({ quiet = false, keep = false, boot } = {}) {
     });
     assertDemoEnv(webEnv, demoDir, { cwd: REPO_ROOT });
 
-    upstream = await startUpstream({ port: Number(DEMO_UPSTREAM_PORT), demoDir });
+    upstream = await startUpstream({ port: Number(DEMO_UPSTREAM_PORT) });
     await (boot ?? bootDemo)({
       demoDir,
       webEnv,
       quiet,
       timeoutMs,
       spawnServer: startServer,
+      spawnFailed,
       stop,
     });
   } catch (err) {

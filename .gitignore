@@ -66,6 +66,5 @@ test-results/
 # Developer worktrees (per AGENTS.md make wt convention)
 .wt/
 
-
 # Landing-page capture output (make screenshots-landing)
 /landing-shots/

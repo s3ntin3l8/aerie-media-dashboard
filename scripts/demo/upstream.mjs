@@ -604,7 +604,6 @@ export async function startUpstream({ port = 0, clock = Date.now } = {}) {
         return p;
       }
     });
-    const ctx = { now: clock(), elapsedSec: (clock() - startedAt) / 1000 };
     const q = url.searchParams;
 
     const json = (body, status = 200) => {
@@ -620,6 +619,8 @@ export async function startUpstream({ port = 0, clock = Date.now } = {}) {
     if (!svc || !SERVICE_IDS.has(svc)) return notFound();
 
     try {
+      const now = clock();
+      const ctx = { now, elapsedSec: (now - startedAt) / 1000 };
       // Artwork first: Tautulli's image proxy and the *arr MediaCover paths.
       if (svc === "tautulli" && q.get("cmd") === "pms_image_proxy") {
         const img = q.get("img") ?? "";
@@ -657,7 +658,9 @@ export async function startUpstream({ port = 0, clock = Date.now } = {}) {
       }
       return data === undefined ? notFound() : json(data);
     } catch (err) {
-      return json({ error: String(err?.message ?? err) }, 500);
+      // Logged here, not echoed: the response must not carry stack or error details.
+      console.error(`[upstream] ${url.pathname}: ${err?.stack ?? err}`);
+      return json({ error: "internal error" }, 500);
     }
   });
 

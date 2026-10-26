@@ -259,3 +259,28 @@ describe("aerieYaml", () => {
     expect(text).not.toMatch(/https?:\/\/(?!127\.0\.0\.1)/);
   });
 });
+
+describe("upstream error responses", () => {
+  it("does not echo error details or stack traces to the client", async () => {
+    const { startUpstream } = await import("../../scripts/demo/upstream.mjs");
+    let calls = 0;
+    const boom = await startUpstream({
+      port: 0,
+      // The first call is the server's own start time; every request after it blows up.
+      clock: () => {
+        if (calls++ > 0) throw new Error("secret-internal-detail at /srv/aerie/x.js:1:1");
+        return Date.now();
+      },
+    });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await fetch(`${boom.url}/tautulli/api/v2?cmd=get_activity`);
+      const body = await res.text();
+      expect(res.ok).toBe(false);
+      expect(body).not.toMatch(/secret-internal-detail|\/srv\/|\.js:/);
+    } finally {
+      errors.mockRestore();
+      await boom.close();
+    }
+  });
+});

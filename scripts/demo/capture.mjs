@@ -290,6 +290,11 @@ async function captureLanding(browser, demo, state, violations) {
   return written;
 }
 
+function assertClean(violations) {
+  if (violations.length > 0)
+    throw new Error(`the capture was not clean:\n  - ${[...new Set(violations)].join("\n  - ")}`);
+}
+
 async function captureReadme(browser, demo, state, violations) {
   await mkdir(README_DIR, { recursive: true });
   // Capture into a staging dir outside the repo and copy in only once every shot
@@ -312,6 +317,8 @@ async function captureReadme(browser, demo, state, violations) {
       }
       await context.close();
     }
+    // The cleanliness contract is checked before anything replaces the committed images.
+    assertClean(violations);
     for (const filename of written) {
       const tmp = path.join(README_DIR, `.${filename}.tmp`);
       try {
@@ -346,8 +353,7 @@ async function main() {
         values.profile === "landing"
           ? await captureLanding(browser, demo, state, violations)
           : await captureReadme(browser, demo, state, violations);
-      if (violations.length > 0)
-        throw new Error(`the capture was not clean:\n  - ${[...new Set(violations)].join("\n  - ")}`);
+      assertClean(violations);
       console.log(`[screenshots] done: ${written.length} files (${values.profile} profile)`);
     } finally {
       await browser.close();
