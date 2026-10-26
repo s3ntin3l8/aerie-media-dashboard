@@ -61,5 +61,7 @@ describe("MobileShell", () => {
     expect(screen.getByTestId("palette")).toBeInTheDocument();
     expect(screen.getByTestId("page")).toBeInTheDocument();
     expect(screen.queryByTestId("mobile-portal")).not.toBeInTheDocument();
+    // the page content sits inside the single <main> landmark
+    expect(screen.getByRole("main")).toContainElement(screen.getByTestId("page"));
   });
 });

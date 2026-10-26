@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 // Guardrail from the 2026-10 portal UI/UX audit: the accent/status tokens are used as text on a
 // 12-13% tint of themselves (pills, badges), over the page surfaces. axe only sees what a capture
@@ -53,4 +53,63 @@ describe.each([
       }
     });
   }
+});
+
+// Focus ring (audit #277): WCAG 1.4.11 wants >= 3:1 for the indicator against what it sits on.
+describe.each([
+  ["light", tokens(lightBlock)],
+  ["dark", tokens(darkBlock)],
+])("%s theme focus ring", (_name, t) => {
+  for (const surface of SURFACES) {
+    it(`--primary outline reads on ${surface}`, () => {
+      expect(ratio(t["--primary"], t[surface])).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
+
+describe("motion and focus rules in components.css", () => {
+  const components = readFileSync("styles/components.css", "utf8");
+  const globals = readFileSync("app/globals.css", "utf8");
+
+  it("has a prefers-reduced-motion block that stops animations and transitions", () => {
+    const m = components.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/);
+    expect(m, "missing @media (prefers-reduced-motion: reduce)").not.toBeNull();
+    expect(m![1]).toMatch(/animation-duration:[^;]*!important/);
+    expect(m![1]).toMatch(/animation-iteration-count:\s*1\s*!important/);
+    expect(m![1]).toMatch(/transition-duration:[^;]*!important/);
+  });
+
+  it("defines @keyframes only in stylesheets the global reduced-motion block reaches", () => {
+    // The block uses the universal selector, so it covers every animation, but only where the sheet
+    // is loaded app-wide. A keyframe added to any other stylesheet fails here until that is checked.
+    const sheets = [...readdirSync("styles").filter((f) => f.endsWith(".css")).map((f) => `styles/${f}`), "app/globals.css"];
+    const withKeyframes = sheets.filter((f) => /@keyframes\s/.test(readFileSync(f, "utf8")));
+    expect(withKeyframes.sort()).toEqual(["app/globals.css", "styles/components.css"]);
+  });
+
+  it("every animation name used inline in components is a defined @keyframes", () => {
+    const defined = new Set([...(components + globals).matchAll(/@keyframes\s+(\w+)/g)].map((x) => x[1]));
+    const used = new Set<string>();
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = `${dir}/${e.name}`;
+        if (e.isDirectory()) walk(p);
+        else if (/\.tsx$/.test(e.name))
+          // Line-based, with flat patterns (no nested quantifiers), to stay linear-time.
+          for (const line of readFileSync(p, "utf8").split("\n"))
+            if (line.includes("animation:"))
+              // The first token of each quoted/template shorthand after `animation:` is the keyframes name
+              // (`"none"` has no trailing space, so it never matches).
+              for (const m of line.slice(line.indexOf("animation:")).matchAll(/[`"']([A-Za-z][\w-]*)\s/g)) used.add(m[1]);
+      }
+    };
+    walk("components");
+    for (const n of ["aeriePulse", "aerieEq", "aerieSpin", "modalIn"]) expect(used.has(n), `${n} not found in components`).toBe(true);
+    expect(used.size).toBeGreaterThanOrEqual(4); // the scan must actually find the inline animations
+    for (const n of used) expect(defined.has(n), `unknown @keyframes ${n}`).toBe(true);
+  });
+
+  it("has one shared :focus-visible outline rule for non-button controls", () => {
+    expect(components).toMatch(/:where\([^{]*\[role="tab"\][^{]*:focus-visible\s*\{\s*outline:\s*2px solid var\(--primary\)/);
+  });
 });

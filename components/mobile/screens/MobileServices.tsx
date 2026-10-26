@@ -106,9 +106,9 @@ export function MobileServices({ onOpen }: { onOpen: (s: Service) => void }) {
       {/* Header */}
       <div>
         <Eyebrow color="var(--primary)">Service directory · live health</Eyebrow>
-        <div style={{ fontFamily: "var(--font-headline)", fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--on-surface)", marginTop: 4 }}>
+        <h1 style={{ fontFamily: "var(--font-headline)", fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--on-surface)", margin: "4px 0 0" }}>
           Services
-        </div>
+        </h1>
         <div style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginTop: 3 }}>
           {services.length} services · embeddable open in-portal
         </div>

@@ -70,7 +70,7 @@ export function MobileServiceView({ s, onClose }: { s: Service; onClose: () => v
         </button>
         <ServiceLogo service={s} size={30} radius={8} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", lineHeight: 1.1, ...TRUNCATE }}>{s.name}</div>
+          <h1 style={{ margin: 0, fontFamily: "var(--font-headline)", fontWeight: 800, fontSize: 15, color: "var(--on-surface)", lineHeight: 1.1, ...TRUNCATE }}>{s.name}</h1>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--on-surface-variant)" }}>v{String(s.version).replace(/^v/i, "")} · {s.embeddable ? "embedded" : "external"}</div>
         </div>
         <button

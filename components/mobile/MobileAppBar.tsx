@@ -11,7 +11,7 @@ export function MobileAppBar({ onAdmin }: { onAdmin: () => void }) {
   const myAvatar = users.find((u) => u.id === user.id)?.avatar;
 
   return (
-    <div
+    <header
       className="aerie-app-bar"
       style={{
         flexShrink: 0,
@@ -61,6 +61,6 @@ export function MobileAppBar({ onAdmin }: { onAdmin: () => void }) {
       >
         <Avatar name={user.name} src={myAvatar} size={32} you />
       </button>
-    </div>
+    </header>
   );
 }

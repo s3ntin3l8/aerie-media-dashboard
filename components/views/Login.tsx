@@ -95,9 +95,8 @@ function Field({ label, ...props }: { label: string } & React.InputHTMLAttribute
           border: "1px solid var(--outline-variant)",
           background: "var(--surface-container-lowest)",
           color: "var(--on-surface)",
-          outline: "none",
           boxSizing: "border-box",
-          // focus ring handled via global .aerie-login-input:focus
+          // focus: global .aerie-login-input:focus recolours the border; the shared :focus-visible rule draws the 2px outline
         }}
         className="aerie-login-input"
       />

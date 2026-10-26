@@ -113,6 +113,10 @@ export function MobileRequests() {
       style={{
         padding: 18,
         paddingTop: 4,
+        // The FAB is fixed 88px above the viewport bottom and 56px tall, so it reaches 144px up while the
+        // list's scroll area already ends at the bottom nav (~64px). Pad by the difference plus a gap so
+        // the last card (and its status badge) can scroll clear of the button.
+        paddingBottom: 18 + 88 + 56 - 64,
         display: "flex",
         flexDirection: "column",
         gap: 13,
@@ -123,8 +127,9 @@ export function MobileRequests() {
         <Eyebrow color="var(--originator-court)">
           {isAdmin ? "Overseerr · All members" : "Overseerr · Your library"}
         </Eyebrow>
-        <div
+        <h1
           style={{
+            margin: 0,
             fontFamily: "var(--font-headline)",
             fontSize: 24,
             fontWeight: 800,
@@ -134,7 +139,7 @@ export function MobileRequests() {
           }}
         >
           Requests
-        </div>
+        </h1>
       </div>
 
       {/* Account-link warning (non-admin, unlinked Overseerr account) */}

@@ -41,12 +41,14 @@ export function MiniStat({ label, value, icon, color = "var(--primary)" }: {
   label: string; value: string | number; icon: string; color?: string;
 }) {
   return (
-    <div className="card" style={{ padding: "11px 12px", borderRadius: 14, background: "var(--surface-container)", minWidth: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--on-surface-variant)", ...TRUNCATE }}>{label}</span>
+    <div className="card" style={{ padding: "11px 10px", borderRadius: 14, background: "var(--surface-container)", minWidth: 0 }}>
+      {/* The label takes the whole tile width (icon sits beside the value) with tight tracking, so
+          "Approved" fits on one line at 390px with 4 tiles per row; longer labels wrap at word breaks. */}
+      <div style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 800, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--on-surface-variant)", overflowWrap: "break-word", lineHeight: 1.2, marginBottom: 4 }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+        <span style={{ fontFamily: "var(--font-headline)", fontSize: 22, fontWeight: 800, color: color, lineHeight: 1, minWidth: 0 }}>{value}</span>
         <Icon name={icon} size={13} color={color} />
       </div>
-      <div style={{ fontFamily: "var(--font-headline)", fontSize: 22, fontWeight: 800, color: color, lineHeight: 1 }}>{value}</div>
     </div>
   );
 }

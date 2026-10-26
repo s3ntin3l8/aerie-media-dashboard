@@ -145,7 +145,7 @@
   font-family: var(--font-body);
 }
 .input::placeholder { color: color-mix(in srgb, var(--on-surface-variant) 60%, transparent); }
-.input:focus { outline: none; border-color: var(--primary); }
+.input:focus { border-color: var(--primary); } /* the ring itself comes from the shared :focus-visible rule */
 
 /* ── SIGNIFICANCE DOTS (●●○) ─────────────────────────── */
 .sig-dots { display: inline-flex; align-items: center; gap: 2px; }
@@ -169,3 +169,35 @@
 .fade-in { animation: fadeIn .16s ease both; }
 .slide-in-right { animation: slideRight .24s cubic-bezier(.2,.7,.2,1) both; }
 .drawer-slide-in { animation: drawerSlideIn .22s cubic-bezier(.2,.7,.2,1) both; }
+
+/* ── FOCUS ───────────────────────────────────────────── */
+/* One ring for every interactive element (audit #277). :where() keeps specificity at 0 so component
+   rules (.btn:focus-visible, the palette search row) can still refine it. --primary is >= 3:1 on every
+   surface in both themes (tests/unit/theme-contrast.test.ts). */
+:where(a, button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"]), [role="button"], [role="tab"], [role="switch"], [role="option"]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+/* The palette search input is borderless inside a bordered row: show focus on the row instead. */
+.aerie-palette-search input:focus-visible { outline: none; }
+.aerie-palette-search:focus-within { box-shadow: inset 0 -2px 0 var(--primary); }
+
+/* ── VISUALLY HIDDEN ─────────────────────────────────── */
+/* Present for assistive tech, invisible on screen (e.g. an h1 where the design has no visible title). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ── REDUCED MOTION ──────────────────────────────────── */
+/* Honour the OS setting (audit #276). !important because several animations (spinner, equalizer,
+   heartbeat pulse, modal entrance) are applied through inline styles. Status is still conveyed by
+   colour and text; only the movement stops. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

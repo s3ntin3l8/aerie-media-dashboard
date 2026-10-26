@@ -7,9 +7,11 @@ desktop (1600×1000), dark and light. Out of scope: `/login` (not captured; the 
 through the first-run form before the capture starts), upstream service UIs, the PWA install flow.
 
 **Status.** Nine P1 findings are fixed in this PR, each with a regression test. Everything else is
-tracked in the [Deferred backlog](#deferred-backlog). axe-core totals on the capture set went from
-120 critical `button-name` + 8 critical `select-name` + 45 serious `color-contrast` + 12 serious
-`scrollable-region-focusable` nodes to none of the first three and 3 of the last (the palette, #275).
+tracked in the [Deferred backlog](#deferred-backlog). A re-capture after the follow-up PR that fixed that backlog reports no axe violations on any of the 36 route/viewport captures (`page-has-heading-one`, `region` and the palette's `scrollable-region-focusable` are gone). Not captured: the scrolled-to-the-end state of phone Requests, so the FAB clearance is checked by arithmetic (FAB top is 144px above the viewport bottom, the nav is ~59px, the list pads 98px), not by screenshot.
+
+axe-core totals on the capture set: 120 critical `button-name` + 8 critical `select-name` + 45 serious
+`color-contrast` + 12 serious `scrollable-region-focusable` nodes before the P1 fixes; after them, none of
+the first three and 3 of the last (the palette, #275); after the follow-up PR, none at all.
 
 ---
 
@@ -30,7 +32,7 @@ for every panel), `/login`.
 Checked and left alone. A fix here would be a regression.
 
 - **Escape** closes a modal and stops propagation (`ModalShell`), so it doesn't also close the palette behind it.
-- **Shortcuts** (`g` + letter, ⌘K, ⌘D) are suppressed while a modal is open, and while typing in an `input` or `textarea`.
+- **Shortcuts** (`g` + letter, ⌘K, ⌘D) are suppressed while a modal is open, and while typing in an `input`, `textarea`, `select` or contenteditable element (the last two added in #281; ⌘K and ⌘D still work from any of them).
 - **Dark theme** accent tokens already meet AA on their own tints (checked by `tests/unit/theme-contrast.test.ts`).
 - **No horizontal overflow or clipping** at phone, tablet or desktop on the reviewed captures; the Requests filter chips scroll sideways on purpose.
 - **Light theme** is legible on the reviewed captures after the token fix.
@@ -70,6 +72,7 @@ No P0 was found.
 - `tests/components/a11y-audit-fixes.test.tsx`: Toggle names, `PanelShell` region and tab stop, card-chip wrapping, the catch-all calling `notFound()`, dialog role/name/focus in and out, the Tab trap, and the overflow-gated tab stop.
 - `tests/components/admin-sort.test.tsx`, `tests/components/metrics-controls.test.tsx`: names of the toggles and selects, and the header colour that findings 1–3 broke.
 - `tests/unit/theme-contrast.test.ts`: computes WCAG contrast of every text accent token (`--near` is excluded: nothing renders text in it) on its own tint over each surface, both themes, and fails if a token goes missing. A token edit that drops under 4.5:1 fails CI.
+- `tests/unit/theme-contrast.test.ts` also asserts the focus ring colour (≥ 3:1 on every surface) and that the reduced-motion block and the shared `:focus-visible` rule exist.
 - `docs/audit/capture.json` now sets `"axe": true`, so re-running the capture reports axe results for every route.
 - Considered and not added: a CI axe job (the capture needs a full `next dev` boot and Chromium, ~3 minutes); a jsdom axe smoke test (too many rules are meaningless without layout).
 
@@ -92,12 +95,14 @@ retry: a stale Turbopack cache after an interrupted run causes a reload loop.
 
 ## Deferred backlog
 
-| Finding | Severity | Issue |
-|---|---|---|
-| ⌘K palette has no combobox/listbox semantics; its list is an unfocusable scroll region | P2 | [#275](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/275) |
-| No `prefers-reduced-motion` handling | P2 | [#276](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/276) |
-| `:focus-visible` only styled for `.btn`; some inputs set `outline: none` | P2 | [#277](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/277) |
-| No level-one heading and content outside landmarks on most pages (axe `page-has-heading-one`, `region`) | P3 | [#278](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/278) |
-| Admin service table lacks table/`aria-sort` semantics | P3 | [#279](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/279) |
-| Mobile shell shows the Dashboard for unknown URLs | P3 | [#280](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/280) |
-| Phone Requests: truncated stat labels, FAB over the last badge; shortcuts fire in selects | P3 | [#281](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/281) |
+All seven were fixed in the follow-up PR; each row links its issue.
+
+| Finding | Severity | Issue | Fixed |
+|---|---|---|---|
+| ⌘K palette has no combobox/listbox semantics; its list is an unfocusable scroll region | P2 | [#275](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/275) | Dialog + combobox/listbox/option roles with `aria-activedescendant`; the palette also gained the arrow/Home/End/Enter/Escape navigation it never had; focus returns to the opener. |
+| No `prefers-reduced-motion` handling | P2 | [#276](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/276) | One `@media (prefers-reduced-motion: reduce)` block in `styles/components.css` covers all 7 keyframes (`!important`: four are applied inline). The spinner, equalizer and heartbeat pulse stand still; state remains in colour and text. |
+| `:focus-visible` only styled for `.btn`; some inputs set `outline: none` | P2 | [#277](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/277) | One zero-specificity `:where(...):focus-visible` 2px `--primary` rule; inline `outline: none` removed from the palette and login inputs (`ModalShell`'s `tabIndex=-1` dialog target is not a control and keeps it); `--primary` ≥ 3:1 on every surface is a unit test. |
+| No level-one heading and content outside landmarks on most pages (axe `page-has-heading-one`, `region`) | P3 | [#278](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/278) | Mobile screens' titles are `<h1>`; `MobileAppBar` is `<header>`, `MobileNav` and the Rail are `<nav aria-label="Primary">`; the embed view and the 404 have an `<h1>`; `.sr-only` for the Streams title. |
+| Admin service table lacks table/`aria-sort` semantics | P3 | [#279](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/279) | `role=table/row/columnheader/cell` on the existing grid (a real `<table>` would break the layout); `aria-sort` on the sorted column. |
+| Mobile shell shows the Dashboard for unknown URLs | P3 | [#280](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/280) | `MobilePortal` renders the shared `PortalNotFound` for any path it doesn't know. It can't call `notFound()`: the boundary above the layout is the root one that #282 rejected. |
+| Phone Requests: truncated stat labels, FAB over the last badge; shortcuts fire in selects | P3 | [#281](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/281) | `MiniStat` labels wrap (the icon moved beside the value; shared with Mobile Admin); the list pads past the FAB; `select` and contenteditable count as typing. |

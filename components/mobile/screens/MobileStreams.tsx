@@ -276,6 +276,7 @@ export function MobileStreams() {
         gap: 13,
       }}
     >
+      <h1 className="sr-only">Streams</h1>
       <StreamTabs tab={tab} setTab={setTab} />
 
       {tab === "history" ? (
