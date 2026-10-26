@@ -10,3 +10,20 @@ jobs:
       contents: write
       pull-requests: write
     uses: s3ntin3l8/.github/.github/workflows/release-please.yml@main
+
+  # Publish the versioned image (:X.Y.Z, :X.Y, :latest) when Release Please cuts a release.
+  # Tags carry the component (`aerie-v1.3.0`); docker-publish strips the prefix before it
+  # derives the semver tags.
+  docker:
+    needs: release
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: s3ntin3l8/.github/.github/workflows/docker-publish.yml@main
+    with:
+      image-name: 's3ntin3l8/aerie'
+      push-release: true
+      release-tag: ${{ needs.release.outputs.tag_name }}
+    secrets: inherit  # pragma: allowlist secret
