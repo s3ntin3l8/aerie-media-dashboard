@@ -19,7 +19,9 @@ describe("installTmdbRewrite", () => {
     await fetch(url, { cache: "no-store" });
     await fetch(new URL(url));
     await fetch(new Request(url));
-    expect(real.mock.calls.map((c) => c[0])).toEqual(Array(3).fill(`${UPSTREAM}/tmdb/t/p/w342/demo-9101.jpg`));
+    expect(real.mock.calls.map((c) => (c[0] instanceof Request ? c[0].url : c[0]))).toEqual(
+      Array(3).fill(`${UPSTREAM}/tmdb/t/p/w342/demo-9101.jpg`),
+    );
     // The caller's options are passed through untouched.
     expect(real.mock.calls[0][1]).toEqual({ cache: "no-store" });
   });
@@ -39,5 +41,25 @@ describe("installTmdbRewrite", () => {
       "https://image.tmdb.org.evil.example/x.jpg",
       "http://image.tmdb.org/x.jpg",
     ]);
+  });
+
+  it("keeps a Request's own signal, redirect mode, method and headers when it rewrites it", async () => {
+    const { real, fetch } = hooked();
+    const abort = new AbortController();
+    await fetch(
+      new Request("https://image.tmdb.org/t/p/w342/demo-9101.jpg", {
+        method: "POST",
+        redirect: "manual",
+        headers: { "x-demo": "1" },
+        signal: abort.signal,
+      }),
+    );
+    const sent = real.mock.calls[0][0] as Request;
+    expect(sent.url).toBe(`${UPSTREAM}/tmdb/t/p/w342/demo-9101.jpg`);
+    expect(sent.method).toBe("POST");
+    expect(sent.redirect).toBe("manual");
+    expect(sent.headers.get("x-demo")).toBe("1");
+    abort.abort();
+    expect(sent.signal.aborted).toBe(true);
   });
 });

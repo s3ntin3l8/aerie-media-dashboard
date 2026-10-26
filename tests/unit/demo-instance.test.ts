@@ -1,7 +1,7 @@
 // Guards for the demo instance's teardown machinery (scripts/demo/instance.mjs): the process-group
 // helpers it relies on to leave nothing running, and that a failed startup removes the scratch dir.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -119,13 +119,16 @@ describe("stopping the demo with a signal", () => {
     try {
       const demo = await startDemo({
         quiet: true,
-        createAdmin: false,
         storageStatePath: stateFile,
-        boot: async () => {
-          mkdirSync(path.dirname(stateFile), { recursive: true });
-          writeFileSync(stateFile, "{}");
+        boot: async () => {},
+        // The real sign-in drives a browser; this one just writes the file the way it would.
+        signIn: async ({ storageStatePath, onSessionWritten }: { storageStatePath?: string; onSessionWritten: () => void }) => {
+          writeFileSync(storageStatePath as string, JSON.stringify({ cookies: [], origins: [] }));
+          onSessionWritten();
+          return { cookies: [], origins: [] };
         },
       });
+      expect(existsSync(stateFile)).toBe(true);
       process.emit("SIGTERM");
       process.emit("SIGTERM");
       await demo.stop();
@@ -161,4 +164,62 @@ describe("stopping the demo with a signal", () => {
       rmSync(tmp, { recursive: true, force: true });
     }
   }, 30_000);
+
+  describe("the session file", () => {
+    const withTmp = async (run: (tmp: string) => Promise<void>) => {
+      const tmp = mkdtempSync(path.join(tmpdir(), "aerie-demo-state-"));
+      const saved = process.env.TMPDIR;
+      process.env.TMPDIR = tmp;
+      try {
+        await run(tmp);
+      } finally {
+        if (saved === undefined) delete process.env.TMPDIR;
+        else process.env.TMPDIR = saved;
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    };
+    const state = JSON.stringify({ cookies: [{ name: "mine" }], origins: [] });
+    const fakeSignIn = async ({ storageStatePath, onSessionWritten }: { storageStatePath?: string; onSessionWritten: () => void }) => {
+      writeFileSync(storageStatePath as string, state);
+      onSessionWritten();
+      return { cookies: [], origins: [] };
+    };
+
+    it("is never deleted when this run did not write it", async () => {
+      await withTmp(async (tmp) => {
+        const callers = path.join(tmp, "callers-session.json");
+        writeFileSync(callers, state);
+        const demo = await startDemo({ quiet: true, createAdmin: false, storageStatePath: callers, boot: async () => {} });
+        await demo.stop();
+        expect(readFileSync(callers, "utf8")).toBe(state);
+      });
+    });
+
+    it("survives a kept demo, whose database it still belongs to", async () => {
+      await withTmp(async (tmp) => {
+        const file = path.join(tmp, "kept.json");
+        const demo = await startDemo({ quiet: true, keep: true, storageStatePath: file, signIn: fakeSignIn, boot: async () => {} });
+        await demo.stop();
+        expect(existsSync(file)).toBe(true);
+      });
+    });
+
+    it("is removed when this run wrote it, even if a later step then fails", async () => {
+      await withTmp(async (tmp) => {
+        const file = path.join(tmp, "ours.json");
+        await expect(
+          startDemo({
+            quiet: true,
+            storageStatePath: file,
+            boot: async () => {},
+            signIn: async (opts: { storageStatePath?: string; onSessionWritten: () => void }) => {
+              await fakeSignIn(opts);
+              throw new Error("warm-up failed");
+            },
+          }),
+        ).rejects.toThrow("warm-up failed");
+        expect(existsSync(file)).toBe(false);
+      });
+    });
+  });
 });

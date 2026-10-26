@@ -13,8 +13,12 @@ export function installTmdbRewrite(target, upstreamUrl) {
   const real = target.fetch;
   target.fetch = (input, init) => {
     const href = typeof input === "string" ? input : input instanceof URL ? input.href : input?.url;
-    if (typeof href === "string" && href.startsWith(TMDB))
-      return real(`${upstreamUrl}/tmdb/${href.slice(TMDB.length)}`, init);
+    if (typeof href === "string" && href.startsWith(TMDB)) {
+      const rewritten = `${upstreamUrl}/tmdb/${href.slice(TMDB.length)}`;
+      // A Request carries its own signal, redirect mode, method and headers; rebuild it so the
+      // caller's guards (e.g. redirect: "manual", an abort timeout) survive the rewrite.
+      return real(input instanceof Request ? new Request(rewritten, input) : rewritten, init);
+    }
     return real(input, init);
   };
 }

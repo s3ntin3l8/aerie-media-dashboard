@@ -2,7 +2,7 @@
   "baseUrl": "http://127.0.0.1:3930",
   "start": "DEMO_STORAGE_STATE=docs/audit/assets/demo-storage-state.json make demo",
   "readyOutput": "DEMO_READY",
-  "startTimeoutSec": 300,
+  "startTimeoutSec": 420,
   "storageState": "docs/audit/assets/demo-storage-state.json",
   "viewports": {
     "phone": { "width": 390, "height": 844 },

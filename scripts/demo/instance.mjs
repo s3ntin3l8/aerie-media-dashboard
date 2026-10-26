@@ -271,6 +271,22 @@ async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer, spawnFailed }) 
   ]);
 }
 
+/**
+ * Creates the admin, then warms the request-title cache (see warmEnrichment), so the ready line
+ * means a complete first page load. `onSessionWritten` fires as soon as the session file exists,
+ * before the warm-up, so a failed warm-up still cleans it up.
+ *
+ * @param {Parameters<typeof createDemoAdmin>[0] & { timeoutMs: number, onSessionWritten: () => void }} options
+ */
+async function signInDemoAdmin({ timeoutMs, onSessionWritten, ...admin }) {
+  console.log("[demo] creating the throwaway admin...");
+  const state = await createDemoAdmin(admin);
+  onSessionWritten();
+  console.log("[demo] warming the request-title cache...");
+  await warmEnrichment({ webUrl: admin.webUrl, state, timeoutMs });
+  return state;
+}
+
 let epipeGuarded = false;
 
 /**
@@ -296,13 +312,17 @@ function ignoreClosedPipes() {
  * with `storageStatePath` (default: `$DEMO_STORAGE_STATE`) it is also written to disk for an
  * external browser driver (the audit capture) and removed again on stop.
  *
- * `boot` replaces the spawn/wait sequence and `createAdmin: false` skips the sign-in; tests
- * use them to exercise startup and teardown without running the real server.
+ * The session file is removed only when this run wrote it (and not under `keep`, where the
+ * database it belongs to survives too): a caller's own state file is never deleted.
+ *
+ * `boot` replaces the spawn/wait sequence, `createAdmin: false` skips the sign-in and `signIn`
+ * replaces it; tests use them to exercise startup and teardown without the real server.
  *
  * @param {{
  *   quiet?: boolean,
  *   keep?: boolean,
  *   createAdmin?: boolean,
+ *   signIn?: typeof signInDemoAdmin,
  *   storageStatePath?: string,
  *   boot?: (ctx: {
  *     spawnServer: (name: string, cmd: string, args: string[], opts: object, quiet: boolean) => unknown,
@@ -314,6 +334,7 @@ export async function startDemo({
   quiet = false,
   keep = false,
   createAdmin = true,
+  signIn = signInDemoAdmin,
   storageStatePath = process.env.DEMO_STORAGE_STATE ? path.resolve(process.env.DEMO_STORAGE_STATE) : undefined,
   boot,
 } = {}) {
@@ -328,6 +349,8 @@ export async function startDemo({
   const webUrl = `http://127.0.0.1:${DEMO_WEB_PORT}`;
   /** The signed-in session, set once the admin exists. */
   let storageState;
+  /** Whether this run wrote the session file (so it, and only it, may delete it). */
+  let wroteState = false;
   const login = {
     name: "Demo Admin",
     email: "demo@aerie.invalid",
@@ -344,8 +367,9 @@ export async function startDemo({
     // recreate files under the scratch HOME after it was deleted.
     await Promise.all(children.map((child) => killGroup(child)));
     await upstream?.close();
-    // A session for a database that is about to be deleted; don't leave it lying around.
-    if (storageStatePath) await rm(storageStatePath, { force: true });
+    // A session for a database that is about to be deleted; don't leave it lying around. Only
+    // ours, and not under `keep`, where the database survives and the session still works.
+    if (wroteState && !keep) await rm(storageStatePath, { force: true });
     // Then anything they spawned outside their groups (Next's telemetry flush).
     await killStrays(home);
     process.off("SIGINT", onSignal);
@@ -381,14 +405,11 @@ export async function startDemo({
       const finish = () => {
         if (targets.some((pgid) => signalGroup(pgid, 0)) && Date.now() < deadline)
           return setTimeout(finish, 50);
-        if (keep) {
-          if (storageStatePath) rmSync(storageStatePath, { force: true });
-          process.exit(130);
-        }
+        if (keep) process.exit(130);
         // A dying worker can recreate files just after the delete, so repeat it.
         for (const pid of strayPids(home)) signalPid(pid, "SIGKILL");
         rmSync(demoDir, { recursive: true, force: true });
-        if (storageStatePath) rmSync(storageStatePath, { force: true });
+        if (wroteState) rmSync(storageStatePath, { force: true });
         if (++attempts < 5)
           return setTimeout(() => (existsSync(demoDir) ? finish() : process.exit(130)), 500);
         if (existsSync(demoDir)) console.warn(`[demo] hard stop: remove ${demoDir} by hand`);
@@ -451,11 +472,14 @@ export async function startDemo({
       stop,
     });
     if (createAdmin) {
-      console.log("[demo] creating the throwaway admin...");
       if (storageStatePath) await mkdir(path.dirname(storageStatePath), { recursive: true });
-      storageState = await createDemoAdmin({ webUrl, login, storageStatePath });
-      console.log("[demo] warming the request-title cache...");
-      await warmEnrichment({ webUrl, state: storageState, timeoutMs });
+      storageState = await signIn({
+        webUrl,
+        login,
+        storageStatePath,
+        timeoutMs,
+        onSessionWritten: () => (wroteState = Boolean(storageStatePath)),
+      });
     }
   } catch (err) {
     // A stop (Ctrl-C/SIGTERM) mid-boot fails the step it killed; that is no startup failure.
