@@ -72,6 +72,33 @@ export function ModalShell({
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
   }, []);
+  // aria-modal says the page behind is inert, so Tab must not leave the dialog. A window-capture listener
+  // (like Escape above) also catches Tab pressed while focus is outside it: pull focus back in; at the
+  // ends, wrap.
+  useEffect(() => {
+    if (!open) return;
+    const onTab = (e: KeyboardEvent) => {
+      const dialog = dialogRef.current;
+      if (e.key !== "Tab" || !dialog) return;
+      // Never empty: the header's close button is always focusable.
+      const nodes = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement;
+      if (!dialog.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && (active === first || active === dialog)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onTab, true);
+    return () => window.removeEventListener("keydown", onTab, true);
+  }, [open]);
   // Move focus into the dialog on open (unless a child, e.g. an autoFocus input, already took it) and
   // hand it back on close, so keyboard and screen-reader users land in the modal and return after.
   useEffect(() => {
@@ -103,23 +130,6 @@ export function ModalShell({
         aria-labelledby={titleId}
         tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
-        // aria-modal says the page behind is inert, so Tab must not leave the dialog: wrap at both ends.
-        onKeyDown={(e) => {
-          const dialog = dialogRef.current;
-          if (e.key !== "Tab" || !dialog) return;
-          // Never empty: the header's close button is always focusable.
-          const nodes = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
-          const first = nodes[0];
-          const last = nodes[nodes.length - 1];
-          const active = document.activeElement;
-          if (e.shiftKey && (active === first || active === dialog)) {
-            e.preventDefault();
-            last.focus();
-          } else if (!e.shiftKey && active === last) {
-            e.preventDefault();
-            first.focus();
-          }
-        }}
         style={{
           outline: "none",
           width: "100%",

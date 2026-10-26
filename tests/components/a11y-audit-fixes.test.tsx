@@ -39,9 +39,13 @@ describe("PanelShell — scrollable body", () => {
     Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => scrollHeight });
     Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => clientHeight });
   };
+  // `sizes` shadows jsdom's Element getters with own properties on HTMLElement.prototype; removing
+  // those restores the originals (which are never touched). Stubbed globals are reset too, even
+  // when an assertion threw.
   afterEach(() => {
-    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight;
-    delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientHeight;
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+    Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
+    vi.unstubAllGlobals();
   });
 
   it("is a labelled, keyboard-focusable region when its body overflows", () => {
@@ -70,7 +74,6 @@ describe("PanelShell — scrollable body", () => {
     expect(screen.getByRole("region", { name: "Queue" })).toBeTruthy();
     unmount();
     expect(disconnect).toHaveBeenCalled();
-    vi.unstubAllGlobals();
   });
 
   it("adds no tab stop at natural height (not a scroll container)", () => {
@@ -167,6 +170,17 @@ describe("ModalShell — Tab trap", () => {
     expect(fireEvent.keyDown(first, { key: "Tab" })).toBe(true);
     expect(fireEvent.keyDown(first, { key: "a" })).toBe(true);
     expect(document.activeElement).toBe(first);
+  });
+
+  it("pulls focus back in when Tab is pressed while focus is outside the dialog", () => {
+    renderModal();
+    const outside = screen.getByRole("button", { name: "Outside" });
+    outside.focus();
+    expect(fireEvent.keyDown(outside, { key: "Tab" })).toBe(false);
+    expect(document.activeElement).toBe(screen.getByTitle("Close (esc)"));
+    outside.focus();
+    fireEvent.keyDown(outside, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Second" }));
   });
 
   it("wraps Shift+Tab from the dialog or its first element to the last", () => {
