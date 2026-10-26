@@ -28,6 +28,8 @@ describe("proxy middleware — public asset exemptions (PWA)", () => {
     "/apple-icon",
     "/opengraph-image",
     "/twitter-image",
+    "/pwa/splash/1290x2796",
+    "/pwa/screenshots/home-wide.png",
   ])("%s is public when unauthenticated", (path) => {
     const res = run(path, null);
     expect(isPassThrough(res)).toBe(true);
@@ -43,7 +45,7 @@ describe("proxy middleware — public asset exemptions (PWA)", () => {
 });
 
 describe("proxy middleware — auth gate still enforced", () => {
-  it.each(["/", "/status", "/icon-999.png", "/manifest.json"])(
+  it.each(["/", "/status", "/icon-999.png", "/manifest.json", "/pwa", "/pwax/splash"])(
     "redirects unauthenticated %s to /login",
     (path) => {
       expect(redirectedTo(run(path, null))).toBe(`${ORIGIN}/login`);

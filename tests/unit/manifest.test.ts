@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import manifest from "@/app/manifest";
 
 // The PWA install contract. These assertions are what a browser reads to decide
@@ -59,5 +61,35 @@ describe("app/manifest.ts", () => {
     expect(shortcuts.some((s) => s.url.startsWith("/admin"))).toBe(false);
     // Every shortcut url is in-scope (under scope "/").
     expect(shortcuts.every((s) => s.url.startsWith("/"))).toBe(true);
+  });
+
+  describe("screenshots (richer install dialog)", () => {
+    const shots = m.screenshots ?? [];
+    const dims = (sizes?: string) => (sizes ?? "").split("x").map(Number) as [number, number];
+
+    it("ships both form factors", () => {
+      expect(shots.some((s) => s.form_factor === "wide")).toBe(true);
+      expect(shots.some((s) => s.form_factor === "narrow")).toBe(true);
+    });
+
+    it("points at committed public files whose real PNG size matches the declared size", () => {
+      for (const s of shots) {
+        expect(s.src.startsWith("/pwa/screenshots/")).toBe(true);
+        expect(s.type).toBe("image/png");
+        const file = readFileSync(path.join(process.cwd(), "public", s.src));
+        // PNG IHDR: width/height are big-endian u32 at bytes 16 and 20.
+        expect([file.readUInt32BE(16), file.readUInt32BE(20)]).toEqual(dims(s.sizes));
+      }
+    });
+
+    it("keeps Chrome's rules: wide is landscape, narrow is portrait, ratio <= 2.3, one size per form factor", () => {
+      for (const s of shots) {
+        const [w, h] = dims(s.sizes);
+        expect(Math.max(w, h) / Math.min(w, h)).toBeLessThanOrEqual(2.3);
+        expect(s.form_factor === "wide" ? w > h : h > w).toBe(true);
+      }
+      for (const ff of ["wide", "narrow"] as const)
+        expect(new Set(shots.filter((s) => s.form_factor === ff).map((s) => s.sizes)).size).toBe(1);
+    });
   });
 });

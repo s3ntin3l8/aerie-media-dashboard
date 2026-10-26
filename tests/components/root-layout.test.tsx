@@ -16,7 +16,8 @@ vi.mock("next/font/google", () => ({
 vi.mock("@/lib/env", () => ({ env: { portalUrl: "https://media.example.com" } }));
 vi.mock("@/components/pwa/ServiceWorkerRegister", () => ({ default: () => null }));
 
-import RootLayout from "@/app/layout";
+import RootLayout, { metadata } from "@/app/layout";
+import { APPLE_STARTUP_IMAGES } from "@/app/_splash";
 
 // Depth-first search for the first raw <script> element in the returned tree.
 function findScript(node: unknown): React.ReactElement | null {
@@ -56,5 +57,12 @@ describe("RootLayout — CSP nonce on the inline theme script", () => {
   it("falls back to an undefined nonce when no x-nonce header is present", async () => {
     const script = await themeScript(null);
     expect((script.props as { nonce?: string }).nonce).toBeUndefined();
+  });
+});
+
+describe("RootLayout — iOS launch screens", () => {
+  it("links every splash variant as an apple-touch-startup-image", () => {
+    expect(metadata.appleWebApp).toMatchObject({ capable: true, startupImage: APPLE_STARTUP_IMAGES });
+    expect(APPLE_STARTUP_IMAGES.length).toBeGreaterThan(0);
   });
 });

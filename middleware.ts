@@ -72,7 +72,10 @@ export default auth((req) => {
     pathname === "/sw.js" ||
     pathname === "/icon-192.png" ||
     pathname === "/icon-512.png" ||
-    pathname === "/icon-maskable.png";
+    pathname === "/icon-maskable.png" ||
+    // iOS splash images + manifest screenshots. Public install assets only: nothing behind
+    // auth may ever live under /pwa/.
+    pathname.startsWith("/pwa/");
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
