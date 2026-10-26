@@ -325,6 +325,10 @@ async function capturePwa(browser, demo, state, violations) {
   try {
     for (const mobile of [false, true]) {
       const shots = PWA_SHOTS.filter((s) => s.mobile === mobile);
+      // One context per form factor, so every shot in it must share a viewport.
+      for (const s of shots)
+        if (s.width !== shots[0].width || s.height !== shots[0].height || s.deviceScaleFactor !== shots[0].deviceScaleFactor)
+          throw new Error(`PWA_SHOTS "${s.name}" differs in viewport from "${shots[0].name}"; split the contexts`);
       const context = await newContext(
         browser,
         "dark",

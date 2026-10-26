@@ -35,7 +35,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
           color: "#e6f7fb",
         }}
       >
-        { }
         <img
           width={mark}
           height={mark}
