@@ -54,3 +54,38 @@ describe.each([
     });
   }
 });
+
+// Focus ring (audit #277): WCAG 1.4.11 wants >= 3:1 for the indicator against what it sits on.
+describe.each([
+  ["light", tokens(lightBlock)],
+  ["dark", tokens(darkBlock)],
+])("%s theme focus ring", (_name, t) => {
+  for (const surface of SURFACES) {
+    it(`--primary outline reads on ${surface}`, () => {
+      expect(ratio(t["--primary"], t[surface])).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
+
+describe("motion and focus rules in components.css", () => {
+  const components = readFileSync("styles/components.css", "utf8");
+  const globals = readFileSync("app/globals.css", "utf8");
+
+  it("has a prefers-reduced-motion block that stops animations and transitions", () => {
+    const m = components.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/);
+    expect(m, "missing @media (prefers-reduced-motion: reduce)").not.toBeNull();
+    expect(m![1]).toMatch(/animation-duration:[^;]*!important/);
+    expect(m![1]).toMatch(/animation-iteration-count:\s*1\s*!important/);
+    expect(m![1]).toMatch(/transition-duration:[^;]*!important/);
+  });
+
+  it("every @keyframes lives in a file the reduced-motion block covers (global *)", () => {
+    // The block uses the universal selector, so any keyframes in these two stylesheets are covered.
+    const names = [...(components + globals).matchAll(/@keyframes\s+(\w+)/g)].map((x) => x[1]);
+    expect(names.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("has one shared :focus-visible outline rule for non-button controls", () => {
+    expect(components).toMatch(/:where\([^{]*\[role="tab"\][^{]*:focus-visible\s*\{\s*outline:\s*2px solid var\(--primary\)/);
+  });
+});
