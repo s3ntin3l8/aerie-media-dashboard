@@ -4,7 +4,15 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+// The demo's ports are read when the module loads. Move them off 3930/3931 so this test never
+// owns (or collides with) the ports a real `make demo` or capture holds.
+vi.hoisted(() => {
+  const base = 20_000 + Math.floor(Math.random() * 20_000);
+  process.env.DEMO_WEB_PORT = String(base);
+  process.env.DEMO_UPSTREAM_PORT = String(base + 1);
+});
+
 import { descendantGroups, parsePsRows, snapshotDescendantGroups, startDemo } from "../../scripts/demo/instance.mjs";
 
 describe("parsePsRows", () => {
@@ -75,6 +83,7 @@ describe("startDemo failure", () => {
   });
 
   it("rejects at once and removes the scratch dir when a server cannot be spawned", async () => {
+    const started = Date.now();
     const tmp = mkdtempSync(path.join(tmpdir(), "aerie-demo-fail-"));
     dirs.push(tmp);
     const saved = process.env.TMPDIR;
@@ -90,6 +99,7 @@ describe("startDemo failure", () => {
         }),
       ).rejects.toThrow(/web failed to start/);
       expect(readdirSync(tmp).filter((f) => f.startsWith("aerie-demo-"))).toEqual([]);
+      expect(Date.now() - started).toBeLessThan(10_000);
     } finally {
       if (saved === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = saved;

@@ -227,15 +227,17 @@ async function killStrays(home, graceMs = 2_000) {
   await waitGone(1_000);
 }
 
-export async function waitForHttp(url, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS) {
+export async function waitForHttp(url, timeoutMs = DEFAULT_HEALTH_TIMEOUT_MS, signal) {
   const start = Date.now();
   let lastError;
   while (Date.now() - start < timeoutMs) {
+    if (signal?.aborted) throw new Error(`Stopped waiting for ${url}`);
     try {
       // Bound each request too: a server that accepts but never answers would
       // otherwise hold the loop past the deadline (undici's own limit is 5 min).
       const remaining = Math.max(1, timeoutMs - (Date.now() - start));
-      const res = await fetch(url, { signal: AbortSignal.timeout(remaining) });
+      const timeout = AbortSignal.timeout(remaining);
+      const res = await fetch(url, { signal: signal ? AbortSignal.any([timeout, signal]) : timeout });
       if (res.status < 500) return;
     } catch (err) {
       lastError = err;
@@ -257,8 +259,11 @@ async function bootDemo({ webEnv, quiet, timeoutMs, spawnServer, spawnFailed }) 
     quiet,
   );
   // A server that never started fails the boot at once instead of after the readiness timeout.
+  // The poll is cancelled then too, so no timer outlives the failure and holds the process open.
+  const stopPolling = new AbortController();
+  spawnFailed.catch(() => stopPolling.abort());
   await Promise.race([
-    waitForHttp(`http://127.0.0.1:${DEMO_WEB_PORT}/api/health`, timeoutMs),
+    waitForHttp(`http://127.0.0.1:${DEMO_WEB_PORT}/api/health`, timeoutMs, stopPolling.signal),
     spawnFailed,
   ]);
 }
