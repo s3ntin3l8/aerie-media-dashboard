@@ -64,6 +64,8 @@ Images are never taken by hand. `make screenshots` (README set) and `make screen
 "Demo and screenshots" in the README. If you add or change a view or an upstream client, extend
 `scripts/demo/upstream.mjs` so its panel is populated in the demo; `tests/unit/demo-upstream.test.ts`
 runs the real clients against the fake and fails when the two drift apart.
+`make demo` is also what the visual-audit capture starts (`docs/audit/capture.json`); keep its `DEMO_READY` line and the
+session file it writes for `$DEMO_STORAGE_STATE` working when you change `scripts/demo/instance.mjs`.
 
 ## Architecture notes
 

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -159,4 +159,26 @@ export async function assertPortsFree(ports, hosts = ["127.0.0.1", "::1"]) {
     for (const host of hosts)
       if (await listening(port, host))
         throw new Error(`port ${port} is already in use on ${host}; refusing to start the demo`);
+}
+
+/**
+ * `DEMO_STORAGE_STATE` names a file the demo writes the admin's session to and deletes again on
+ * stop. It comes from the caller's environment, so a wrong value must never end in deleting
+ * something real: it has to be a `.json` file, and if it already exists it has to be a Playwright
+ * storage state (a leftover of a crashed run), never any other file.
+ *
+ * @param {string} file
+ */
+export function assertStorageStatePath(file) {
+  if (path.extname(file) !== ".json")
+    throw new Error(`DEMO_STORAGE_STATE=${file} must be a .json file; the demo deletes it on stop`);
+  if (!existsSync(file)) return;
+  let isState = false;
+  try {
+    isState = Array.isArray(JSON.parse(readFileSync(file, "utf8"))?.cookies);
+  } catch {
+    // Not JSON.
+  }
+  if (!isState)
+    throw new Error(`DEMO_STORAGE_STATE=${file} exists and is not a Playwright storage state; refusing to overwrite and later delete it`);
 }

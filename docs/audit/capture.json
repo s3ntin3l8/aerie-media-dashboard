@@ -1,0 +1,20 @@
+{
+  "baseUrl": "http://127.0.0.1:3930",
+  "start": "DEMO_STORAGE_STATE=docs/audit/assets/demo-storage-state.json make demo",
+  "readyOutput": "DEMO_READY",
+  "startTimeoutSec": 300,
+  "storageState": "docs/audit/assets/demo-storage-state.json",
+  "viewports": {
+    "phone": { "width": 390, "height": 844 },
+    "tablet": { "width": 820, "height": 1180 },
+    "desktop": { "width": 1600, "height": 1000 }
+  },
+  "routes": [
+    { "name": "home", "path": "/", "settle": "text=Brightwater Station" },
+    { "name": "home-light", "path": "/", "localStorage": { "aerie.theme": "light" }, "settle": "text=Brightwater Station" },
+    { "name": "streams", "path": "/streams", "settle": "text=The Lantern Archive" },
+    { "name": "requests", "path": "/requests", "settle": "text=Brightwater Station" },
+    { "name": "status", "path": "/status", "settle": "text=NZBGet" },
+    { "name": "admin", "path": "/admin", "settle": 2000 }
+  ]
+}

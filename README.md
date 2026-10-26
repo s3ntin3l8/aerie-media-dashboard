@@ -94,12 +94,22 @@ everything is torn down.
 
 | Command                          | What it does                                                                                            |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `make demo`                      | The same demo instance, left running; prints a URL and writes a throwaway login to a private file.      |
+| `make demo`                      | The same demo instance, left running, with the admin already created. Prints `DEMO_READY url=<url>` once it is up and its request titles are loaded; the throwaway login is in a private file in the scratch dir. |
 | `make screenshots-landing OUT=…` | 2x dark stills plus a short live-dashboard loop (webm/mp4/poster) for a project page; needs `ffmpeg`.   |
 
-One-time setup for the browser: `npx playwright-core install chromium`. On a slow or heavily loaded
+One-time setup for the browser: `npx playwright install chromium`. On a slow or heavily loaded
 host, raise `DEMO_HEALTH_TIMEOUT_MS` (default `90000`), the time each readiness probe may take.
 `DEMO_WEB_PORT` (default `3930`) and `DEMO_UPSTREAM_PORT` (default `3931`) move the ports.
+
+**Visual audits.** `make demo` follows the audit skill's demo contract (one foreground command, scratch
+everything, loopback only, no manual login, a ready line, clean teardown on SIGINT/SIGTERM).
+`docs/audit/capture.json` lists the routes, viewports and a dark/light pair; the skill's
+`capture.mjs <YYYY-MM-portal-ui-ux>` starts the demo, waits for `DEMO_READY`, signs in with the stored session and
+captures every route. The demo writes that session to `$DEMO_STORAGE_STATE` when it is set (the config sets it to
+`docs/audit/assets/demo-storage-state.json`, which is gitignored) and removes it on stop. The audit needs the
+`playwright` dev dependency and its browser (`npx playwright install chromium`). Two caveats: the dashboard icons
+load from `cdn.jsdelivr.net` (the app's own choice), so an offline capture shows the fallback tiles, and `next dev`'s
+corner badge appears in the screenshots because the audit script cannot hide it.
 
 **Isolation is enforced, not assumed** (`scripts/demo/env.mjs`, tested in
 `tests/unit/demo-env.test.ts`): the demo process gets a clean environment with nothing inherited

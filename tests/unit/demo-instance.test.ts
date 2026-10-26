@@ -1,7 +1,7 @@
 // Guards for the demo instance's teardown machinery (scripts/demo/instance.mjs): the process-group
 // helpers it relies on to leave nothing running, and that a failed startup removes the scratch dir.
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -103,6 +103,62 @@ describe("startDemo failure", () => {
     } finally {
       if (saved === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = saved;
+    }
+  }, 30_000);
+});
+
+describe("stopping the demo with a signal", () => {
+  // The audit capture stops the demo by signalling its whole process group, which reaches the
+  // demo directly and again via `make`. That must be one graceful stop, not a hard stop.
+  it("treats a doubled SIGTERM as one request and removes the scratch dir and session file", async () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "aerie-demo-sig-"));
+    const stateFile = path.join(tmp, "state", "demo-storage-state.json");
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    try {
+      const demo = await startDemo({
+        quiet: true,
+        createAdmin: false,
+        storageStatePath: stateFile,
+        boot: async () => {
+          mkdirSync(path.dirname(stateFile), { recursive: true });
+          writeFileSync(stateFile, "{}");
+        },
+      });
+      process.emit("SIGTERM");
+      process.emit("SIGTERM");
+      await demo.stop();
+      await vi.waitFor(() => expect(exit).toHaveBeenCalled(), { timeout: 10_000 });
+      expect(exit.mock.calls).toEqual([[0]]); // never the hard-stop code 130
+      expect(readdirSync(tmp).filter((f) => f.startsWith("aerie-demo-"))).toEqual([]);
+      expect(existsSync(stateFile)).toBe(false);
+    } finally {
+      exit.mockRestore();
+      if (saved === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = saved;
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("survives its reader closing the pipe while a server is still logging (EPIPE)", async () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "aerie-demo-pipe-"));
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    try {
+      const demo = await startDemo({ quiet: true, createAdmin: false, boot: async () => {} });
+      const epipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+      expect(() => process.stdout.emit("error", epipe)).not.toThrow();
+      expect(() => process.stderr.emit("error", epipe)).not.toThrow();
+      // Other stream errors are still fatal.
+      expect(() => process.stdout.emit("error", Object.assign(new Error("boom"), { code: "EIO" }))).toThrow("boom");
+      await demo.stop();
+    } finally {
+      exit.mockRestore();
+      if (saved === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = saved;
+      rmSync(tmp, { recursive: true, force: true });
     }
   }, 30_000);
 });

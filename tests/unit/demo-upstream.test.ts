@@ -284,3 +284,18 @@ describe("upstream error responses", () => {
     }
   });
 });
+
+describe("tmdb stand-in", () => {
+  it("serves poster art for the paths fetch-hook.mjs rewrites image.tmdb.org to", async () => {
+    const { startUpstream } = await import("../../scripts/demo/upstream.mjs");
+    const up = await startUpstream({ port: 0 });
+    try {
+      const res = await fetch(`${up.url}/tmdb/t/p/w342/demo-9101.jpg`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("image/svg+xml");
+      expect(await res.text()).toContain("<svg");
+    } finally {
+      await up.close();
+    }
+  });
+});
