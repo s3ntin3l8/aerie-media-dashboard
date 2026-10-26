@@ -104,7 +104,7 @@ describe("motion and focus rules in components.css", () => {
       }
     };
     walk("components");
-    for (const n of ["aeriePulse", "aerieEq", "aerieSpin", "modalIn"]) expect(used.has(n) || defined.has(n), n).toBe(true);
+    for (const n of ["aeriePulse", "aerieEq", "aerieSpin", "modalIn"]) expect(used.has(n), `${n} not found in components`).toBe(true);
     expect(used.size).toBeGreaterThanOrEqual(4); // the scan must actually find the inline animations
     for (const n of used) expect(defined.has(n), `unknown @keyframes ${n}`).toBe(true);
   });
