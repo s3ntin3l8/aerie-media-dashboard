@@ -27,8 +27,10 @@ import { iconTile, posterForRef } from "./posters.mjs";
  * Auth: the first-run setup form on /login creates a throwaway local admin through the
  * app's own `createInitialAdmin` action; nothing writes the database directly.
  *
- * Clean: a console error or uncaught exception fails
- * the run, so a half-rendered page can't ship as a screenshot.
+ * Clean: any console error or uncaught exception fails the run, so a half-rendered page can't
+ * ship as a screenshot. Nothing is excluded: the two errors an earlier version had to tolerate
+ * (React's dev eval() under the nonce CSP, and Sparkline's invalid path for empty data) were
+ * fixed in the app (#269), not papered over here.
  *
  * Offline: the browser may only talk to loopback. The two hosts the app would otherwise
  * reach (the TMDB poster CDN, fetched server-side by /api/artwork, and the dashboard-icons
@@ -110,7 +112,8 @@ function pendingConditions({ text, describe }) {
 
 async function settle(page, { slug, text = "" }) {
   await page.evaluate(() => document.fonts.ready);
-  // Function form, not a string: the app's CSP has no 'unsafe-eval'.
+  // Function form, not a string: a string predicate is eval()'d in the page, which the production
+  // CSP forbids (and `next dev` only allows for React's own use).
   try {
     await page.waitForFunction(pendingConditions, { text }, { timeout: 60_000, polling: 250 });
   } catch (err) {
@@ -140,9 +143,11 @@ async function newContext(browser, theme, options, violations) {
   // hidden, so it fails the run (a 502 poster, a hydration error, an uncaught exception).
   context.on("console", (msg) => {
     if (msg.type() === "error")
-      violations.push(`console error: ${msg.text().slice(0, 300)}`);
+      violations.push(`console error on ${msg.page()?.url() ?? "an unknown page"}: ${msg.text().slice(0, 300)}`);
   });
-  context.on("weberror", (err) => violations.push(`uncaught: ${err.error().message.slice(0, 300)}`));
+  context.on("weberror", (err) =>
+    violations.push(`uncaught on ${err.page()?.url() ?? "an unknown page"}: ${err.error().message.slice(0, 300)}`),
+  );
   // The theme script in app/layout.tsx reads this before hydration, so <html> has the
   // right class from first paint.
   await context.addInitScript((t) => {
