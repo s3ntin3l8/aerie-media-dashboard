@@ -216,6 +216,27 @@ describe("CommandPalette", () => {
       expect(screen.getByRole("combobox")).toHaveAttribute("aria-activedescendant", opts[2].id);
     });
 
+    it("hovering a service option activates it (index continues after the nav items)", () => {
+      render(<CommandPalette />);
+      const svc = screen.getByRole("group", { name: "Services" }).querySelectorAll('[role="option"]')[1];
+      fireEvent.mouseMove(svc);
+      expect(screen.getByRole("combobox")).toHaveAttribute("aria-activedescendant", svc.id);
+    });
+
+    it("scrolls the active option into view when the arrow keys move it", () => {
+      const scrollIntoView = vi.fn();
+      const original = HTMLElement.prototype.scrollIntoView;
+      HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      try {
+        render(<CommandPalette />);
+        scrollIntoView.mockClear();
+        fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+      } finally {
+        HTMLElement.prototype.scrollIntoView = original;
+      }
+    });
+
     it("returns focus to the opener when it closes", () => {
       const opener = document.createElement("button");
       document.body.appendChild(opener);
