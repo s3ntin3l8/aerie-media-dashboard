@@ -57,8 +57,8 @@ Only run `db:generate` when you change `lib/db/schema.ts`.
 - **CI** (`.github/workflows/`): calls org reusable workflows from `s3ntin3l8/.github`:
   - `ci.yml` → `ci-node` (lint, typecheck, test with coverage, Codecov upload, build) + `docker-publish` (edge image push to GHCR on main)
   - `codeql.yml` → CodeQL security scan (weekly + on push/PR to main)
-  - `release.yml` → Release Please (changelog + versioning on push to main) + `docker-publish` of the versioned image (`:X.Y.Z`, `:X.Y`, `:latest`) when a release is cut
-  - `cleanup.yml` → GHCR untagged image cleanup (weekly)
+  - `release-please.yml` → Release Please (changelog + versioning on push to main, or a manual `workflow_dispatch` run) + `docker-publish` of the versioned image (`:X.Y.Z`, `:X.Y`, `:latest`) when a release is cut
+  - `ghcr-cleanup.yml` → GHCR untagged image cleanup (weekly)
 - **pre-commit** (Husky + lint-staged): `eslint --fix` on staged `*.{ts,tsx,js,mjs}`, then `scripts/detect-secrets-staged.sh` (detect-secrets over the staged files; skips with a notice if `detect-secrets` isn't installed — CI's strict step is the hard gate).
 - **pre-push** (Husky): the full `npm run typecheck && npm run lint && npm run test && npm run build`.
   A push will be rejected locally if any of these fail.
@@ -244,7 +244,7 @@ misconfigured deployment fails closed rather than encrypting with a weak default
 
 ## Deployment
 
-Standalone `Dockerfile` + `docker-compose.yml` behind Traefik. CI pushes `:edge` images to `ghcr.io/s3ntin3l8/aerie` on every main push; cutting a release (`release.yml`) pushes `:X.Y.Z`, `:X.Y` and `:latest`. Production setup:
+Standalone `Dockerfile` + `docker-compose.yml` behind Traefik. CI pushes `:edge` images to `ghcr.io/s3ntin3l8/aerie` on every main push; cutting a release (`release-please.yml`) pushes `:X.Y.Z`, `:X.Y` and `:latest`. Production setup:
 `cp .env.example .env` (OIDC creds **or** leave them blank for the first-run local-admin setup;
 `AUTH_SECRET`, `ENCRYPTION_KEY`) → `db:migrate` (or rely on runtime bootstrap) → sign in (OIDC or
 create the local admin at `/login`) → add services and enter each API key in **Admin → Services**
