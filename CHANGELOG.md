@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.3.0...aerie-v1.4.0) (2026-10-27)
+
+
+### Features
+
+* **demo:** create the admin automatically; follow the audit demo contract ([#273](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/273)) ([7121f8a](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/7121f8a87e7a5c6aa571dc4f8c73de2dde6c43e4))
+* **demo:** reproducible screenshot pipeline (make screenshots-landing) ([#268](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/268)) ([febc62f](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/febc62f2d531d84cd4c5116a27e3c0d498b477fd))
+* **pwa:** iOS splash screens and manifest screenshots; opt in to detect-secrets ([#285](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/285)) ([8f004a8](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/8f004a87b5254d2b104328829322e605f6c1f658))
+
+
+### Bug Fixes
+
+* **a11y:** audit backlog: palette, focus, motion, landmarks, admin table, mobile 404, phone polish ([#283](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/283)) ([9efecf3](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/9efecf343385abc6b3a307d2e5e9ecc8a49696ce))
+* **a11y:** portal UI/UX audit: P1 fixes, report, axe in the capture ([#282](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/282)) ([25b97c2](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/25b97c2436013c87e618b5c1d284d5a3d0022d1d))
+* dev CSP allows eval for React; Sparkline draws no path for &lt;2 points ([#269](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/269)) ([2d0e626](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/2d0e626bdb83d3672bf002af10f611371fbb10a2))
+
+
+### Documentation
+
+* state copyright and the AGPL "or any later version" grant in the README ([#265](https://github.com/s3ntin3l8/aerie-media-dashboard/issues/265)) ([b844b1c](https://github.com/s3ntin3l8/aerie-media-dashboard/commit/b844b1cbc68e8914b2a0bf13f29eaeda2614588c))
+
 ## [1.3.0](https://github.com/s3ntin3l8/aerie-media-dashboard/compare/aerie-v1.2.1...aerie-v1.3.0) (2026-10-12)
 
 
