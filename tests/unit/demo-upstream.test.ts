@@ -2,7 +2,7 @@
 // real clients parse: the REAL integration clients run against it over real HTTP, with only the
 // credential lookup stubbed (so no DB is pulled in). If a client starts reading a field or
 // endpoint the fake doesn't serve, the matching assertion here fails before the screenshots do.
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { parse } from "yaml";
 import { mockClientsRegistry, mockEnv } from "./clientsMocks";
 
@@ -62,6 +62,10 @@ afterAll(async () => {
   await upstream.close();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
   clearCache();
   vi.mocked(getServiceCredentials).mockImplementation((async (id: string) => ({
@@ -112,6 +116,10 @@ describe("tautulli", () => {
   });
 
   it("serves users, libraries, history, recently added and the leaderboard", async () => {
+    // The client windows its history/plays queries on the real Date.now(); pin it to the
+    // upstream's clock or the fixture rows age out of those windows as the calendar moves on.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
     expect((await tautulliUsers()).length).toBeGreaterThan(USERS.length);
     const libs = await tautulliLibraries();
     expect(libs.map((l) => l.id)).toEqual(["movies", "shows", "music"]);
