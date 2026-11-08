@@ -98,6 +98,14 @@ describe("catalogue", () => {
 });
 
 describe("tautulli", () => {
+  beforeEach(() => {
+    // The client windows its history/plays queries on the real Date.now(); pin it to the
+    // upstream's clock or the fixture rows age out of those windows as the calendar moves on.
+    // (Restored by the file-level afterEach.)
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+  });
+
   it("serves live sessions that advance with the clock", async () => {
     const a = await tautulliActivity();
     expect(a.sessions).toHaveLength(4);
@@ -116,10 +124,6 @@ describe("tautulli", () => {
   });
 
   it("serves users, libraries, history, recently added and the leaderboard", async () => {
-    // The client windows its history/plays queries on the real Date.now(); pin it to the
-    // upstream's clock or the fixture rows age out of those windows as the calendar moves on.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(now);
     expect((await tautulliUsers()).length).toBeGreaterThan(USERS.length);
     const libs = await tautulliLibraries();
     expect(libs.map((l) => l.id)).toEqual(["movies", "shows", "music"]);
