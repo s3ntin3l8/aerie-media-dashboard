@@ -72,6 +72,7 @@ test-results/
 # visual-kit: the launcher extracted from the pinned image, check output, and staging leftovers of a killed run
 /visual/.kit/
 /visual/.out/
+*.staging
 
 # The demo's signed-in session while `make demo` runs (visual/host-hooks.sh hands it to the capture)
 /.demo/

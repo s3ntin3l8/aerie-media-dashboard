@@ -110,7 +110,7 @@ the stills and runs from `DEMO_NOW` for the loop (`POST /__clock/<mode>`, driven
 One-time setup for the browser the demo signs in with: `npx playwright install chromium`. On a slow or heavily
 loaded host, raise `DEMO_HEALTH_TIMEOUT_MS` (default `90000`), the time each readiness probe may take. It also
 bounds the request-title warm-up, so the worst-case startup is about `2 x DEMO_HEALTH_TIMEOUT_MS + 3 minutes`;
-if you raise it above `240000`, raise `startTimeoutSec` in `visual/scenes.json` to match.
+if you raise it above `300000`, raise `startTimeoutSec` in `visual/scenes.json` to match.
 `DEMO_WEB_PORT` (default `3930`) and `DEMO_UPSTREAM_PORT` (default `3931`) move the ports.
 
 `make demo` follows the audit skill's demo contract (one foreground command, scratch everything, loopback only,

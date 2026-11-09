@@ -30,6 +30,10 @@ export async function createDemoAdmin({ webUrl, login, storageStatePath, onSessi
     const attempts = 4;
     for (let attempt = 1; ; attempt++) {
       await page.goto(`${webUrl}/login`, { waitUntil: "networkidle" });
+      // The setup form has a confirm field; the plain login form (an admin already exists) does not.
+      if ((await page.locator('input[name="confirm"]').count()) === 0)
+        throw new Error("the first-run setup form is not shown: the demo database already has an admin");
+      if (attempt > 1) console.warn(`[demo] sign-in attempt ${attempt} of ${attempts} (the form posted before the page hydrated)`);
       await page.fill('input[name="name"]', login.name);
       await page.fill('input[name="email"]', login.email);
       await page.fill('input[name="password"]', login.password);
