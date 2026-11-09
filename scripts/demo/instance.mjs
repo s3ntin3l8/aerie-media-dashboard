@@ -10,6 +10,7 @@ import { createDemoAdmin, warmEnrichment } from "./admin.mjs";
 import { assertDemoEnv, assertPortsFree, assertStorageStatePath, demoEnv } from "./env.mjs";
 import { startUpstream } from "./upstream.mjs";
 import { aerieYaml } from "./config.mjs";
+import { createDemoClock, parseDemoNow } from "./clock.mjs";
 
 /**
  * An isolated, throwaway Aerie instance: a fake upstream server with a fictional
@@ -17,7 +18,7 @@ import { aerieYaml } from "./config.mjs";
  * `aerie.yaml`, and `next dev` pointed at both. Everything is torn down on stop.
  *
  *   make demo          # interactive: prints a URL and a throwaway login
- *   make screenshots   # uses startDemo() from scripts/demo/capture.mjs
+ *   make screenshots   # renders the README set through visual-kit (visual/scenes.json)
  *
  * Aerie has no mock fallback (panels are empty until an upstream answers), so the
  * fake upstream stands in for Tautulli, Overseerr, Sonarr, Radarr, Gatus, Prometheus
@@ -31,6 +32,8 @@ import { aerieYaml } from "./config.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const BIN = (name) => path.join(REPO_ROOT, "node_modules", ".bin", name);
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const preload = (file) => `--import ${pathToFileURL(path.join(SCRIPT_DIR, file)).href}`;
 
 export const DEMO_WEB_PORT = process.env.DEMO_WEB_PORT ?? "3930";
 export const DEMO_UPSTREAM_PORT = process.env.DEMO_UPSTREAM_PORT ?? "3931";
@@ -323,6 +326,7 @@ function ignoreClosedPipes() {
  *   createAdmin?: boolean,
  *   signIn?: typeof signInDemoAdmin,
  *   storageStatePath?: string,
+ *   demoNow?: string,
  *   boot?: (ctx: {
  *     spawnServer: (name: string, cmd: string, args: string[], opts: object, quiet: boolean) => unknown,
  *     spawnFailed: Promise<never>,
@@ -335,14 +339,21 @@ export async function startDemo({
   createAdmin = true,
   signIn = signInDemoAdmin,
   storageStatePath = process.env.DEMO_STORAGE_STATE ? path.resolve(process.env.DEMO_STORAGE_STATE) : undefined,
+  demoNow = process.env.DEMO_NOW,
   boot,
 } = {}) {
   ignoreClosedPipes();
+  // Refused before anything is created, like a bad DEMO_HEALTH_TIMEOUT_MS.
+  const anchor = parseDemoNow(demoNow);
   // Refused before anything is created: nothing to tear down yet.
   if (storageStatePath) assertStorageStatePath(storageStatePath);
   const timeoutMs = healthTimeoutMs();
   await assertPortsFree([DEMO_WEB_PORT, DEMO_UPSTREAM_PORT]);
 
+  // The real moment DEMO_NOW stands for; the Next server and the fake upstream both count from it. The
+  // upstream stays frozen until a capture asks for `live` (see ./clock.mjs).
+  const clockBase = Date.now();
+  const demoClock = anchor === null ? null : createDemoClock(anchor);
   const demoDir = await mkdtemp(path.join(tmpdir(), "aerie-demo-"));
   const upstreamUrl = `http://127.0.0.1:${DEMO_UPSTREAM_PORT}`;
   const webUrl = `http://127.0.0.1:${DEMO_WEB_PORT}`;
@@ -439,12 +450,15 @@ export async function startDemo({
   // dir or process group behind.
   try {
     console.log(`[demo] scratch dir ${demoDir}`);
+    if (anchor !== null) console.log(`[demo] clock fixed at ${new Date(anchor).toISOString()}`);
     for (const dir of ["home", "tmp"]) await mkdir(path.join(demoDir, dir), { recursive: true });
 
     const configFile = path.join(demoDir, "aerie.yaml");
     await writeFile(configFile, aerieYaml(upstreamUrl));
     const webEnv = demoEnv(demoDir, {
       NODE_ENV: "development",
+      // The server renders the greeting ("Good morning", the date) in its own timezone.
+      TZ: "UTC",
       DATABASE_URL: `file:${path.join(demoDir, "aerie.db")}`,
       AERIE_CONFIG_FILE: configFile,
       ENCRYPTION_KEY: randomBytes(32).toString("base64"),
@@ -456,11 +470,25 @@ export async function startDemo({
       PORT: DEMO_WEB_PORT,
       // Overseerr posters: see fetch-hook.mjs.
       DEMO_UPSTREAM_URL: upstreamUrl,
-      NODE_OPTIONS: `--import ${pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "fetch-hook.mjs")).href}`,
+      // The preloads reach `next dev`'s worker processes too. freeze-time moves the server's clock to DEMO_NOW.
+      NODE_OPTIONS: [preload("fetch-hook.mjs"), ...(anchor === null ? [] : [preload("freeze-time.mjs")])].join(" "),
+      ...(anchor === null
+        ? {}
+        : {
+            DEMO_NOW: demoNow,
+            DEMO_CLOCK_BASE: String(clockBase),
+            // The session cookie's expiry is the server's (fixed) clock plus this. A browser judges it
+            // by the real clock, so it has to reach past the distance between the two, or the cookie is
+            // already expired when it is set.
+            AUTH_SESSION_MAX_AGE: String(Math.max(0, Math.ceil((clockBase - anchor) / 1000)) + 7 * 86_400),
+          }),
     });
     assertDemoEnv(webEnv, demoDir, { cwd: REPO_ROOT });
 
-    upstream = await startUpstream({ port: Number(DEMO_UPSTREAM_PORT) });
+    upstream = await startUpstream({
+      port: Number(DEMO_UPSTREAM_PORT),
+      ...(demoClock && { clock: demoClock.now, control: demoClock }),
+    });
     await (boot ?? bootDemo)({
       demoDir,
       webEnv,

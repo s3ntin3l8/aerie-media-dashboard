@@ -69,5 +69,12 @@ test-results/
 # Landing-page capture output (make screenshots-landing)
 /landing-shots/
 
-# Visual-audit captures and the demo session they sign in with (docs/audit/capture.json)
+# visual-kit: the launcher extracted from the pinned image, check output, and staging leftovers of a killed run
+/visual/.kit/
+/visual/.out/
+
+# The demo's signed-in session while `make demo` runs (visual/host-hooks.sh hands it to the capture)
+/.demo/
+
+# Visual-audit evidence (make screenshots-audit)
 /docs/audit/assets/

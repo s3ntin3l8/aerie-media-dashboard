@@ -590,9 +590,11 @@ const SERVICE_IDS = new Set(SERVICES.map((s) => s.id));
 
 /**
  * Start the fake upstream on 127.0.0.1. `port` 0 picks a free one. `clock` is injectable so
- * tests can pin time. Resolves to `{ url, port, close() }`; `url` has no trailing slash.
+ * tests can pin time. `control` (a `createDemoClock()` from ./clock.mjs) lets a capture switch that clock
+ * between frozen and live with `POST /__clock/<mode>`; the answer says whether the mode changed.
+ * Resolves to `{ url, port, close() }`; `url` has no trailing slash.
  */
-export async function startUpstream({ port = 0, clock = Date.now } = {}) {
+export async function startUpstream({ port = 0, clock = Date.now, control = null } = {}) {
   const startedAt = clock();
 
   const server = http.createServer(async (req, res) => {
@@ -615,6 +617,15 @@ export async function startUpstream({ port = 0, clock = Date.now } = {}) {
       res.end(body);
     };
     const notFound = () => json({ error: "not found", path: url.pathname }, 404);
+
+    if (svc === "__clock") {
+      if (!control || req.method !== "POST") return notFound();
+      try {
+        return json({ mode: parts[0], changed: control.set(parts[0]) });
+      } catch (err) {
+        return json({ error: err.message }, 400);
+      }
+    }
 
     // image.tmdb.org stand-in: fetch-hook.mjs rewrites the app's server-side TMDB poster fetches here.
     if (svc === "tmdb") return image(posterForRef(parts.at(-1) ?? ""));

@@ -13,8 +13,8 @@
 </p>
 
 <p align="center">
-  <img alt="AERIE home dashboard (dark)" src="./docs/screenshots/home-dark.png" width="49%">
-  <img alt="AERIE home dashboard (light)" src="./docs/screenshots/home-light.png" width="49%">
+  <img alt="AERIE home dashboard (dark)" src="./docs/screenshots/home-dark-desktop.png" width="49%">
+  <img alt="AERIE home dashboard (light)" src="./docs/screenshots/home-light-desktop.png" width="49%">
 </p>
 <p align="center"><sub>Captured from the scripted demo with fictional titles; see <a href="#demo-and-screenshots">Demo and screenshots</a>.</sub></p>
 
@@ -83,41 +83,48 @@ npm run start    # serve the production build
 
 ## Demo and screenshots
 
-`npm run screenshots` (or `make screenshots`) regenerates the images in `docs/screenshots/` from a
-fully scripted, throwaway demo. Aerie shows live upstream data or an empty state, with no mock
-fallback, so the demo boots a fake upstream (`scripts/demo/upstream.mjs`) that stands in for
-Tautulli, Overseerr, Sonarr, Radarr, Gatus, Prometheus and NZBGet and serves a fictional catalogue
-(`scripts/demo/catalog.mjs`) with generated poster art. A scratch SQLite database is provisioned
-from a generated `aerie.yaml`, `next dev` runs against both on dedicated loopback ports, a
-throwaway admin is created through the first-run setup form, Playwright captures the screens, and
-everything is torn down.
+`make screenshots` regenerates the images in `docs/screenshots/` (and the copies the web app manifest
+lists in `public/pwa/screenshots/`) from a fully scripted, throwaway demo, rendered in the pinned
+[visual-kit](https://github.com/s3ntin3l8/visual-kit) image (Docker). Aerie shows live upstream data or an
+empty state, with no mock fallback, so the demo boots a fake upstream (`scripts/demo/upstream.mjs`) that
+stands in for Tautulli, Overseerr, Sonarr, Radarr, Gatus, Prometheus and NZBGet and serves a fictional
+catalogue (`scripts/demo/catalog.mjs`) with generated poster art. A scratch SQLite database is provisioned
+from a generated `aerie.yaml`, `next dev` runs against both on dedicated loopback ports, a throwaway admin is
+created through the first-run setup form, and everything is torn down afterwards. The scenes, viewports and
+what each waits for are in `visual/scenes.json` and `visual/hooks.mjs`.
 
-| Command                          | What it does                                                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `make demo`                      | The same demo instance, left running, with the admin already created. Prints `DEMO_READY url=<url>` once it is up and its request titles are loaded; the throwaway login is in a private file in the scratch dir. |
-| `make screenshots-landing OUT=…` | 2x dark stills plus a short live-dashboard loop (webm/mp4/poster) for a project page; needs `ffmpeg`.   |
+| Command                              | What it does                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `make demo`                          | The demo instance, left running, with the admin already created. Prints `DEMO_READY url=<url>` once it is up and its request titles are loaded; the throwaway login is in a private file in the scratch dir. |
+| `make screenshots`                   | README images: `docs/screenshots/<scene>-<light\|dark>-<desktop\|mobile>.png`, plus the manifest copies. |
+| `make screenshots-landing OUT=…`     | 3200x2000 and 1170x2532 dark stills plus the live-dashboard loop (webm/mp4/poster) for a project page.   |
+| `make screenshots-audit AUDIT=…`     | Audit evidence (phone, tablet, desktop, dark and light, with axe) into `docs/audit/assets/`.             |
+| `make visual-check ROUTES=/streams`  | Before/after of the routes a change touches against the merge base; `REPEAT=2` also checks the head is deterministic. |
+| `make visual-baseline`               | Regenerates the committed baselines in `visual/baselines/`.                                              |
 
-One-time setup for the browser: `npx playwright install chromium`. On a slow or heavily loaded
-host, raise `DEMO_HEALTH_TIMEOUT_MS` (default `90000`), the time each readiness probe may take. It also bounds the request-title warm-up, so the worst-case startup is about `2 x DEMO_HEALTH_TIMEOUT_MS + 3 minutes`; if you raise it above `120000`, raise `startTimeoutSec` in `docs/audit/capture.json` to match.
+`DEMO_NOW` (an ISO instant, set to the scenes' `clock` by `visual/scenes.json`) fixes the clock: the Next
+server (`scripts/demo/freeze-time.mjs`; its greeting is server-rendered) and the fake upstream both start at
+it, so "Good morning" and every age, queue and uptime read the same on any day. The upstream stays frozen for
+the stills and runs from `DEMO_NOW` for the loop (`POST /__clock/<mode>`, driven from `visual/host-hooks.sh`).
+
+One-time setup for the browser the demo signs in with: `npx playwright install chromium`. On a slow or heavily
+loaded host, raise `DEMO_HEALTH_TIMEOUT_MS` (default `90000`), the time each readiness probe may take. It also
+bounds the request-title warm-up, so the worst-case startup is about `2 x DEMO_HEALTH_TIMEOUT_MS + 3 minutes`;
+if you raise it above `240000`, raise `startTimeoutSec` in `visual/scenes.json` to match.
 `DEMO_WEB_PORT` (default `3930`) and `DEMO_UPSTREAM_PORT` (default `3931`) move the ports.
 
-**Visual audits.** `make demo` follows the audit skill's demo contract (one foreground command, scratch
-everything, loopback only, no manual login, a ready line, clean teardown on SIGINT/SIGTERM).
-`docs/audit/capture.json` lists the routes, viewports and a dark/light pair; the skill's
-`capture.mjs <YYYY-MM-portal-ui-ux>` starts the demo, waits for `DEMO_READY`, signs in with the stored session and
-captures every route. The demo writes that session to `$DEMO_STORAGE_STATE` when it is set (the config sets it to
-`docs/audit/assets/demo-storage-state.json`, which is gitignored) and removes it on stop. The audit needs the
-`playwright` dev dependency and its browser (`npx playwright install chromium`). Two caveats: the dashboard icons
-load from `cdn.jsdelivr.net` (the app's own choice), so an offline capture shows the fallback tiles, and `next dev`'s
-corner badge appears in the screenshots because the audit script cannot hide it.
+`make demo` follows the audit skill's demo contract (one foreground command, scratch everything, loopback only,
+no manual login, a ready line, clean teardown on SIGINT/SIGTERM). The demo writes the signed-in session to
+`.demo/storage-state.json` (gitignored; `$DEMO_STORAGE_STATE` moves it) and removes it on stop;
+`visual/host-hooks.sh` hands it to the capture. The dashboard icons load from `cdn.jsdelivr.net` (the app's
+own choice); `visual/hooks.mjs` answers that host with neutral tiles, so the capture needs no internet.
 
 **Isolation is enforced, not assumed** (`scripts/demo/env.mjs`, tested in
 `tests/unit/demo-env.test.ts`): the demo process gets a clean environment with nothing inherited
 except `PATH`/locale, all state lives in one temp directory that is deleted afterwards, Next.js is
 told to skip its `.env*` files (so a real `.env` is never read), both ports must be free, and the
 guard refuses to start if any database, path, secret or service URL points outside the scratch
-directory or off loopback. The browser is held to the same rule: any request that is not loopback
-fails the capture.
+directory or off loopback.
 
 ## Layout
 
