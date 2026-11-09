@@ -29,7 +29,7 @@ describe("proxy middleware — public asset exemptions (PWA)", () => {
     "/opengraph-image",
     "/twitter-image",
     "/pwa/splash/1290x2796",
-    "/pwa/screenshots/home-wide.png",
+    "/pwa/screenshots/home-dark-desktop.png",
   ])("%s is public when unauthenticated", (path) => {
     const res = run(path, null);
     expect(isPassThrough(res)).toBe(true);

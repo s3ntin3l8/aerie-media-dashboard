@@ -65,13 +65,23 @@ npm run test:coverage   # generates coverage/coverage-summary.json and coverage/
 
 ## Screenshots
 
-Images are never taken by hand. `make screenshots` (README set) and `make screenshots-landing OUT=<dir>`
-(landing-page stills and loop) run a scripted capture against an isolated throwaway instance; see
-"Demo and screenshots" in the README. If you add or change a view or an upstream client, extend
+Images are never taken by hand. `make screenshots` (README set and the web app manifest copies) and
+`make screenshots-landing OUT=<dir>` (landing-page stills and loop) render the scenes in `visual/scenes.json`
+against an isolated throwaway instance in the pinned [visual-kit](https://github.com/s3ntin3l8/visual-kit)
+image; see "Demo and screenshots" in the README. If you add or change a view or an upstream client, extend
 `scripts/demo/upstream.mjs` so its panel is populated in the demo; `tests/unit/demo-upstream.test.ts`
 runs the real clients against the fake and fails when the two drift apart.
-`make demo` is also what the visual-audit capture starts (`docs/audit/capture.json`); keep its `DEMO_READY` line and the
-session file it writes for `$DEMO_STORAGE_STATE` working when you change `scripts/demo/instance.mjs`.
+
+**Look at every UI change before calling it done.** Run `make visual-check ROUTES=<the routes you touched>`
+(Docker; routes are scene names or paths from `visual/scenes.json`): it renders the merge base and your working
+tree and writes `visual/.out/check/report/` (`index.html` side by side, `summary.md`). Read the changed shots and
+the deltas (axe, console errors, overflow, unnamed controls): a diff is intended, a regression, or flake (then fix
+the demo or mask it, never raise the threshold). The PR description gets a **Visual check** section: routes, what
+changed and why, axe delta. A new route or state needs a scene in `visual/scenes.json`. After changing the demo or a
+scene, run `make visual-check REPEAT=2`: it must report no determinism failure. The same check runs on UI PRs in
+CI (advisory); `/update-baselines` on a PR regenerates `visual/baselines/`, and a weekly job refreshes the README
+screenshots and the baselines. `make demo` is what visual-kit starts: keep its `DEMO_READY` line and the session
+file it writes for `$DEMO_STORAGE_STATE` working when you change `scripts/demo/instance.mjs`.
 
 ## Architecture notes
 

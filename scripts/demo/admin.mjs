@@ -24,13 +24,34 @@ export async function createDemoAdmin({ webUrl, login, storageStatePath, onSessi
     // The first visit waits on `next dev` compiling the route.
     context.setDefaultNavigationTimeout(120_000);
     const page = await context.newPage();
-    await page.goto(`${webUrl}/login`, { waitUntil: "networkidle" });
-    await page.fill('input[name="name"]', login.name);
-    await page.fill('input[name="email"]', login.email);
-    await page.fill('input[name="password"]', login.password);
-    await page.fill('input[name="confirm"]', login.password);
-    await page.click('button[type="submit"]');
-    await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 60_000 });
+    // A submit before the page has hydrated (a cold `next dev` compiles the route, and the first load can also
+    // reload itself) is a plain form post that lands on /login again and creates nothing, so a try that does not
+    // leave /login is repeated on a fresh load. Safe because the admin only exists once a try has left /login.
+    const attempts = 4;
+    for (let attempt = 1; ; attempt++) {
+      await page.goto(`${webUrl}/login`, { waitUntil: "networkidle" });
+      // The setup form has a confirm field; the plain login form does not. Without it, either a previous try
+      // created the admin and signed in with only its redirect missed (the context then holds the session, and
+      // that is the success this loop is after), or the database already had an admin (a fresh scratch one has none).
+      if ((await page.locator('input[name="confirm"]').count()) === 0) {
+        if ((await page.request.get(`${webUrl}/api/snapshot`, { maxRedirects: 0 })).ok()) break;
+        throw new Error(
+          "the first-run setup form is not shown and the browser is not signed in: the demo database already has an admin",
+        );
+      }
+      if (attempt > 1) console.warn(`[demo] sign-in attempt ${attempt} of ${attempts} (the form posted before the page hydrated)`);
+      await page.fill('input[name="name"]', login.name);
+      await page.fill('input[name="email"]', login.email);
+      await page.fill('input[name="password"]', login.password);
+      await page.fill('input[name="confirm"]', login.password);
+      await page.click('button[type="submit"]', { noWaitAfter: true });
+      try {
+        await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20_000 });
+        break;
+      } catch (err) {
+        if (attempt === attempts) throw err;
+      }
+    }
     const state = await context.storageState(storageStatePath ? { path: storageStatePath } : undefined);
     if (storageStatePath) onSessionWritten?.();
     if (storageStatePath) await chmod(storageStatePath, 0o600);

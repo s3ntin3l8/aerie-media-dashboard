@@ -32,6 +32,8 @@ npm run db:migrate  # drizzle-kit migrate
 npm run db:seed     # tsx scripts/seed.ts
 ```
 
+`make demo` boots an isolated, seeded instance (fake upstream, throwaway admin; `DEMO_NOW` fixes its clock); `make screenshots`, `make screenshots-landing OUT=<dir>`, `make screenshots-audit AUDIT=<slug>` and `make visual-check ROUTES=<routes>` render it through [visual-kit](https://github.com/s3ntin3l8/visual-kit) (Docker; scenes in `visual/scenes.json`). **Look at every UI change before calling it done**: run `make visual-check ROUTES=<the routes you touched>`, read the changed shots and the deltas (axe, console errors, overflow), and give the PR a **Visual check** section; after changing the demo or a scene, `make visual-check REPEAT=2` must report no determinism failure. Details: CONTRIBUTING.md "Screenshots".
+
 The quality gates are `lint`, `typecheck`, `test:coverage`, and `build`. Match those before considering work done. CI runs `test:coverage` (which generates `coverage/coverage-summary.json` for Codecov upload and threshold enforcement); pre-push runs plain `test` (faster, no instrumentation).
 
 **Test coverage is a PR gate, not optional.** Codecov enforces both `project` (overall must

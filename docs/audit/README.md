@@ -7,11 +7,12 @@ evidence is local (`docs/audit/assets/`, gitignored). Structure, naming and rule
 ## This repo
 
 - **Scope token:** `portal` (the authenticated product surface; `app/` is framework-generic).
-- **Capture:** `node <audit skill>/scripts/capture.mjs <slug>`. Config in `capture.json`: it
-  starts the isolated demo (`make demo`, fictional data, throwaway admin, loopback only), signs in
-  through the session the demo writes, and captures every route at phone, tablet and desktop, plus
-  axe results in `axe.json`. Needs `npx playwright install chromium`. If the demo hangs at sign-in
-  with hundreds of "Compiled" lines, delete `.next/` and retry (stale cache after an interrupted run).
+- **Capture:** `make screenshots-audit AUDIT=<slug>` (visual-kit, Docker). The scenes tagged `audit` in
+  `visual/scenes.json` run against the isolated demo (`make demo`, fictional data, throwaway admin, loopback
+  only, clock fixed by `DEMO_NOW`) at phone, tablet and desktop, dark and light, with axe results; the evidence
+  lands in `docs/audit/assets/<slug>/`. Needs `npx playwright install chromium` for the demo's sign-in. If the
+  demo hangs at sign-in with hundreds of "Compiled" lines, delete `.next/` and retry (stale cache after an
+  interrupted run).
 
 ## Index
 

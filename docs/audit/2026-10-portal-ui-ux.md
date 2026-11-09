@@ -19,7 +19,7 @@ the first three and 3 of the last (the palette, #275); after the follow-up PR, n
 
 | Layer | Method |
 |---|---|
-| Visual | `capture.mjs` from the audit skill against the isolated demo (`make demo`): 12 routes × 3 viewports = 36 PNGs, plus the ⌘K palette open and the unknown-URL 404. Reviewed by eye: Home (phone), Requests (phone), Status (light, phone), Admin (phone, desktop), Streams (tablet), Embed (tablet), Palette (phone), 404 (phone, desktop). The rest were checked through axe only. |
+| Visual | the audit skill's `capture.mjs` (since replaced by `make screenshots-audit`) against the isolated demo (`make demo`): 12 routes × 3 viewports = 36 PNGs, plus the ⌘K palette open and the unknown-URL 404. Reviewed by eye: Home (phone), Requests (phone), Status (light, phone), Admin (phone, desktop), Streams (tablet), Embed (tablet), Palette (phone), 404 (phone, desktop). The rest were checked through axe only. |
 | Automated | axe-core through `@axe-core/playwright` on every capture (`axe.json`), run before and after the fixes. |
 | Code | Read against WCAG 2.2 AA: `components/modals/ModalShell.tsx` (dialog semantics, Escape, focus), `components/portal/PortalProvider.tsx` (shortcuts), `components/primitives.tsx`, `components/panels.tsx`, `components/views/admin/AdminServices.tsx`, `components/status/metricsControls.tsx`, `styles/colors_and_type.css` (token contrast, both themes), `styles/components.css` (focus, motion). |
 | Computed | Contrast ratios from the real token values (both themes), now a unit test. |
@@ -73,7 +73,7 @@ No P0 was found.
 - `tests/components/admin-sort.test.tsx`, `tests/components/metrics-controls.test.tsx`: names of the toggles and selects, and the header colour that findings 1–3 broke.
 - `tests/unit/theme-contrast.test.ts`: computes WCAG contrast of every text accent token (`--near` is excluded: nothing renders text in it) on its own tint over each surface, both themes, and fails if a token goes missing. A token edit that drops under 4.5:1 fails CI.
 - `tests/unit/theme-contrast.test.ts` also asserts the focus ring colour (≥ 3:1 on every surface) and that the reduced-motion block and the shared `:focus-visible` rule exist.
-- `docs/audit/capture.json` now sets `"axe": true`, so re-running the capture reports axe results for every route.
+- The capture config set `"axe": true` (it is now the `audit` profile of `visual/scenes.json`, which always records axe), so re-running the capture reports axe results for every route.
 - Considered and not added: a CI axe job (the capture needs a full `next dev` boot and Chromium, ~3 minutes); a jsdom axe smoke test (too many rules are meaningless without layout).
 
 ---
@@ -85,7 +85,7 @@ land in `docs/audit/assets/2026-10-portal-ui-ux/`, which is gitignored:
 
 ```bash
 npx playwright install chromium
-node <audit skill>/scripts/capture.mjs 2026-10-portal-ui-ux
+make screenshots-audit AUDIT=2026-10-portal-ui-ux
 ```
 
 If the demo hangs at sign-in with hundreds of "Compiled" lines in its output, delete `.next/` and
