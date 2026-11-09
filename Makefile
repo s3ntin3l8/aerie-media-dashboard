@@ -58,3 +58,6 @@ endif
 
 visual-check: visual/.kit/run.sh ## Before/after of the routes a UI change touches (ROUTES=/streams,status) against BASE (default: merge base); REPEAT=N also recaptures the head N-1 times and fails if it is not deterministic
 	$(VISUAL_RUN) check $(if $(ROUTES),--routes "$(ROUTES)") $(if $(BASE),--base "$(BASE)") $(if $(FORCE),--force) $(if $(REPEAT_N),--repeat "$(REPEAT_N)")
+
+visual-baseline: visual/.kit/run.sh ## Regenerate the committed baselines (visual/baselines): the scenes flagged "baseline": true
+	$(VISUAL_RUN) baseline $(if $(FORCE),--force)
