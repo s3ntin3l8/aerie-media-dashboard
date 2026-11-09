@@ -593,6 +593,8 @@ const SERVICE_IDS = new Set(SERVICES.map((s) => s.id));
  * tests can pin time. `control` (a `createDemoClock()` from ./clock.mjs) lets a capture switch that clock
  * between frozen and live with `POST /__clock/<mode>`; the answer says whether the mode changed.
  * Resolves to `{ url, port, close() }`; `url` has no trailing slash.
+ *
+ * @param {{ port?: number, clock?: () => number, control?: { set(mode: string): boolean } | null }} [options]
  */
 export async function startUpstream({ port = 0, clock = Date.now, control = null } = {}) {
   const startedAt = clock();

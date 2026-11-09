@@ -42,7 +42,7 @@ function pending() {
   return reasons;
 }
 
-export async function beforeScene({ context, page, scene, variant, cfg, host }) {
+export async function beforeScene({ context, scene, variant, cfg, host }) {
   const origin = demoOrigin(cfg);
 
   // Not cached: the base and the head demo of a check have different secrets.
